@@ -237,19 +237,16 @@ Note: all directories must be mounted to `/projects` by default.
 
 ### NPX
 
+
+### Windows
+
+
+#### Local
+
 ```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/Users/username/Desktop",
-        "/path/to/other/allowed/dir"
-      ]
-    }
-  }
+"filesystem-extended": {
+    "command": "node",
+    "args": ["C:\\Projects\\mcp\\server\\system\\files\\mcp-filesystem-extended\\dist\\index.js", "C:\\Projects", "C:\\git", "C:\\git\\privadent\\privadent-synchronizer"]
 }
 ```
 
