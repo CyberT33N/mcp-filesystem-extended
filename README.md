@@ -40,7 +40,7 @@ The codebase follows a feature-based organization where each API operation has i
 ├── list_directory/                 # List directory contents
 ├── move_files/                     # Move or rename multiple files
 ├── patch_files/                    # Patch files using line numbers
-├── read_files/                     # Read multiple files
+├── batch_read_files/                     # Read multiple files
 ├── search_files/                   # Search for files by name
 ├── search_glob/                    # Search for files using glob patterns
 ├── search_regex/                   # Search file contents with regex
@@ -60,7 +60,7 @@ Each operation directory typically contains:
 - `file://system`: File system operations interface
 
 ### Tools
-- **read_files**
+- **batch_read_files**
   - Read multiple files simultaneously (works on a single file too)
   - Input: `paths` (string[])
   - Failed reads won't stop the entire operation

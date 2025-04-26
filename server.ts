@@ -9,7 +9,7 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 // Import all schemas
-import { ReadFilesArgsSchema } from "./read_files/schema.js";
+import { ReadFilesArgsSchema } from "./batch_read_files/schema.js";
 import { WriteNewFilesArgsSchema } from "./write_new_files/schema.js";
 import { AppendFilesArgsSchema } from "./append_files/schema.js";
 import { PatchFilesArgsSchema } from "./patch_files/schema.js";
@@ -30,7 +30,7 @@ import { ChecksumFilesVerifArgsSchema } from "./checksum_files_verif/schema.js";
 import { GetFileInfoArgsSchema } from "./file_info/schema.js";
 
 // Import all handlers
-import { handleReadFiles } from "./read_files/handler.js";
+import { handleReadFiles } from "./batch_read_files/handler.js";
 import { handleWriteNewFiles } from "./write_new_files/handler.js";
 import { handleAppendFiles } from "./append_files/handler.js";
 import { handlePatchFiles } from "./patch_files/handler.js";
@@ -80,7 +80,7 @@ export class FilesystemServer {
       return {
         tools: [
           {
-            name: "read_files",
+            name: "batch_read_files",
             description:
               "Read multiple files simultaneously. Works on a single file too. " +
               "Failed reads won't stop the entire operation. " +
@@ -281,10 +281,10 @@ export class FilesystemServer {
 
         switch (name) {
 
-          case "read_files": {
+          case "batch_read_files": {
             const parsed = ReadFilesArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for read_files: ${parsed.error}`);
+              throw new Error(`Invalid arguments for batch_read_files: ${parsed.error}`);
             }
             const result = await handleReadFiles(parsed.data.paths, this.allowedDirectories);
             return {
