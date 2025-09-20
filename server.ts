@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import "./utils/logger.js";
 
 // Import all schemas
 import { ReadFilesArgsSchema } from "./batch_read_files/schema.js";
@@ -28,6 +29,7 @@ import { CountLinesArgsSchema } from "./count_lines/schema.js";
 import { ChecksumFilesArgsSchema } from "./checksum_files/schema.js";
 import { ChecksumFilesVerifArgsSchema } from "./checksum_files_verif/schema.js";
 import { GetFileInfoArgsSchema } from "./file_info/schema.js";
+import { SetLevelRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 // Import all handlers
 import { handleReadFiles } from "./batch_read_files/handler.js";
@@ -53,9 +55,31 @@ import { handleGetFileInfo } from "./file_info/handler.js";
 const ToolInputSchema = ToolSchema.shape.inputSchema;
 type ToolInput = z.infer<typeof ToolInputSchema>;
 
+type LoggingLevel =
+  | "debug"
+  | "info"
+  | "notice"
+  | "warning"
+  | "error"
+  | "critical"
+  | "alert"
+  | "emergency";
+
+const LogLevelMap: Record<LoggingLevel, number> = {
+  emergency: 0,
+  alert: 1,
+  critical: 2,
+  error: 3,
+  warning: 4,
+  notice: 5,
+  info: 6,
+  debug: 7,
+};
+
 export class FilesystemServer {
   private server: Server;
   private allowedDirectories: string[];
+  private rootLogLevel: LoggingLevel = "info";
 
   constructor(allowedDirectories: string[]) {
     this.allowedDirectories = allowedDirectories;
@@ -68,11 +92,25 @@ export class FilesystemServer {
       {
         capabilities: {
           tools: {},
+          logging: {},
         },
       },
     );
     
     this.setupRequestHandlers();
+  }
+
+  private shouldLog(level: LoggingLevel): boolean {
+    return LogLevelMap[level] <= LogLevelMap[this.rootLogLevel];
+  }
+
+  private async log(level: LoggingLevel, logger: string, data: Record<string, unknown>) {
+    try {
+      if (!this.shouldLog(level)) return;
+      await this.server.sendLoggingMessage({ level, logger, data });
+    } catch {
+      // Never throw from logging path
+    }
   }
 
   private setupRequestHandlers() {
@@ -275,9 +313,22 @@ export class FilesystemServer {
       };
     });
 
+    // Handle MCP logging level changes (root logger)
+    this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+      const level = request.params.level as LoggingLevel;
+      if (level in LogLevelMap) {
+        this.rootLogLevel = level;
+        await this.log("debug", "logging", { message: `Root log level set to '${level}'` });
+      } else {
+        await this.log("warning", "logging", { message: `Invalid log level '${level}' requested` });
+      }
+      return {};
+    });
+
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
         const { name, arguments: args } = request.params;
+        await this.log("info", "tools", { event: "call", tool: name });
 
         switch (name) {
 
@@ -287,6 +338,7 @@ export class FilesystemServer {
               throw new Error(`Invalid arguments for batch_read_files: ${parsed.error}`);
             }
             const result = await handleReadFiles(parsed.data.paths, this.allowedDirectories);
+            await this.log("info", "tools", { event: "result", tool: name });
             return {
               content: [{ type: "text", text: result }],
             };
@@ -300,6 +352,7 @@ export class FilesystemServer {
             }
             
             const result = await handleWriteNewFiles(parsed.data.files, this.allowedDirectories);
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -314,6 +367,7 @@ export class FilesystemServer {
             }
             
             const result = await handleAppendFiles(parsed.data.files, this.allowedDirectories);
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -332,6 +386,7 @@ export class FilesystemServer {
               parsed.data.recursive,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -351,6 +406,7 @@ export class FilesystemServer {
               parsed.data.overwrite,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -368,6 +424,7 @@ export class FilesystemServer {
               parsed.data.file2,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -386,6 +443,7 @@ export class FilesystemServer {
               parsed.data.label1,
               parsed.data.label2
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -411,6 +469,7 @@ export class FilesystemServer {
               options,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -424,6 +483,7 @@ export class FilesystemServer {
               throw new Error(`Invalid arguments for create_directories: ${parsed.error}`);
             }
             const result = await handleCreateDirectories(parsed.data.paths, this.allowedDirectories);
+            await this.log("info", "tools", { event: "result", tool: name });
             return {
               content: [{ type: "text", text: result }],
             };
@@ -435,6 +495,7 @@ export class FilesystemServer {
               throw new Error(`Invalid arguments for list_directory: ${parsed.error}`);
             }
             const result = await handleListDirectory(parsed.data.path, this.allowedDirectories);
+            await this.log("info", "tools", { event: "result", tool: name });
             return {
               content: [{ type: "text", text: result }],
             };
@@ -451,6 +512,7 @@ export class FilesystemServer {
               parsed.data.excludePatterns,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{
@@ -472,6 +534,7 @@ export class FilesystemServer {
               parsed.data.overwrite,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -490,6 +553,7 @@ export class FilesystemServer {
               parsed.data.excludePatterns,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -511,6 +575,7 @@ export class FilesystemServer {
               parsed.data.caseSensitive,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -530,6 +595,7 @@ export class FilesystemServer {
               parsed.data.maxResults,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -551,6 +617,7 @@ export class FilesystemServer {
               parsed.data.ignoreEmptyLines,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -570,6 +637,7 @@ export class FilesystemServer {
               parsed.data.algorithm,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -587,6 +655,7 @@ export class FilesystemServer {
               parsed.data.algorithm,
               this.allowedDirectories
             );
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -600,6 +669,7 @@ export class FilesystemServer {
             }
             
             const result = await handleGetFileInfo(parsed.data.path, this.allowedDirectories);
+            await this.log("info", "tools", { event: "result", tool: name });
             
             return {
               content: [{ type: "text", text: result }],
@@ -620,6 +690,7 @@ export class FilesystemServer {
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        await this.log("error", "tools", { event: "error", error: errorMessage });
         return {
           content: [{ type: "text", text: `Error: ${errorMessage}` }],
           isError: true,
@@ -633,5 +704,6 @@ export class FilesystemServer {
     await this.server.connect(transport);
     console.error("Secure MCP Filesystem Server running on stdio");
     console.error("Allowed directories:", this.allowedDirectories);
+    await this.log("info", "main", { message: "Server connected via stdio" });
   }
 }

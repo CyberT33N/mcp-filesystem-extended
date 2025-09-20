@@ -1,5 +1,8 @@
 import fs from "fs/promises";
-import { validatePath } from "../helpers/path.js";
+import { validatePathForCreation } from "../helpers/path.js";
+import { createModuleLogger } from "../utils/logger.js";
+
+const log = createModuleLogger("create_directories");
 
 export async function handleCreateDirectories(
   paths: string[],
@@ -8,18 +11,26 @@ export async function handleCreateDirectories(
   const results: string[] = [];
   const errors: string[] = [];
 
+  log.debug({ paths, allowedDirectories }, "handleCreateDirectories called");
+
   await Promise.all(
     paths.map(async (dirPath) => {
+      const childLog = log.child({ dirPath });
       try {
-        // Validate path is within allowed directories
-        const validPath = await validatePath(dirPath, allowedDirectories);
+        childLog.debug("validating path for creation");
+        // Validate path is within allowed directories and safe for creation
+        const validPath = await validatePathForCreation(dirPath, allowedDirectories);
+        childLog.debug({ validPath }, "validated path");
         
         // Create directory (and parent directories if needed)
+        childLog.debug("calling fs.mkdir with recursive:true");
         await fs.mkdir(validPath, { recursive: true });
+        childLog.info({ created: validPath }, "directory created");
         
         results.push(`Successfully created directory: ${dirPath}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        childLog.error({ err: error }, "failed to create directory");
         errors.push(`Failed to create directory ${dirPath}: ${errorMessage}`);
       }
     })
@@ -37,5 +48,6 @@ export async function handleCreateDirectories(
     output += "Errors:\n" + errors.join("\n");
   }
   
+  log.debug({ successCount, errorCount }, "handleCreateDirectories completed");
   return output;
 }
