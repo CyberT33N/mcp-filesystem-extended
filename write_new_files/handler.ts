@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { validatePath } from "../helpers/path.js";
+import { validatePathForCreation } from "../helpers/path.js";
 
 export async function handleWriteNewFiles(
   files: Array<{path: string, content: string}>, 
@@ -12,7 +12,8 @@ export async function handleWriteNewFiles(
   await Promise.all(
     files.map(async (file) => {
       try {
-        const validPath = await validatePath(file.path, allowedDirectories);
+        // Validate path for creation to allow writing into not-yet-existing directories
+        const validPath = await validatePathForCreation(file.path, allowedDirectories);
         
         // Check if file already exists
         try {

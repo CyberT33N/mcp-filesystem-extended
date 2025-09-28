@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { validatePath } from "../helpers/path.js";
+import { validatePath, validatePathForCreation } from "../helpers/path.js";
 import { createModuleLogger } from "../utils/logger.js";
 
 const log = createModuleLogger("move_files");
@@ -22,7 +22,8 @@ export async function handleMoveFiles(
         childLog.debug("validating paths");
         // Validate both paths are within allowed directories
         const validSource = await validatePath(item.source, allowedDirectories);
-        const validDestination = await validatePath(item.destination, allowedDirectories);
+        // Use creation-aware validation for destination to allow creating missing parent directories
+        const validDestination = await validatePathForCreation(item.destination, allowedDirectories);
         childLog.debug({ validSource, validDestination }, "paths validated");
         
         // Check if source exists
