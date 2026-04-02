@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const CountLinesArgsSchema = z.object({
-  path: z.string().describe("Path to the file or directory to count lines"),
+  paths: z.array(z.string()).min(1).describe("Paths to files or directories to count. Pass one path for a single count scope or multiple paths for batch line counting."),
   recursive: z.boolean().optional().default(false).describe("Whether to recursively count lines in directories"),
   pattern: z.string().optional().describe("Regex pattern to match lines (only count matching lines)"),
   filePattern: z.string().optional().default("**").describe("Glob pattern to match files when counting recursively"),

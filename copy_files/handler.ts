@@ -1,52 +1,92 @@
 import fs from "fs/promises";
-import {copyDir} from "./helpers.js";
-import {validatePath} from "../helpers/path.js";
+import {
+  assertCopyOperationsAreSafeForParallelExecution,
+  copyDir,
+  type CopyFileOperation,
+  type PreparedCopyFileOperation,
+} from "./helpers.js";
+import { validatePath } from "../helpers/path.js";
+import { formatBatchTextOperationResults } from "../helpers/batch.js";
 
-export async function handleCopyFile(
-  sourcePath: string,
-  destinationPath: string,
-  recursive: boolean,
-  overwrite: boolean,
+async function prepareCopyOperation(
+  operation: CopyFileOperation,
+  allowedDirectories: string[]
+): Promise<PreparedCopyFileOperation> {
+  const validSourcePath = await validatePath(operation.source, allowedDirectories);
+  const validDestinationPath = await validatePath(operation.destination, allowedDirectories);
+
+  return {
+    ...operation,
+    validSourcePath,
+    validDestinationPath,
+  };
+}
+
+async function copySingleOperation(
+  operation: PreparedCopyFileOperation,
   allowedDirectories: string[]
 ): Promise<string> {
-  const validSourcePath = await validatePath(sourcePath, allowedDirectories);
-  const validDestPath = await validatePath(destinationPath, allowedDirectories);
-  
   try {
-    // Check if source exists
-    const sourceStats = await fs.stat(validSourcePath);
-    
-    // Check if destination already exists
+    const sourceStats = await fs.stat(operation.validSourcePath);
+
     try {
-      await fs.access(validDestPath);
-      if (!overwrite) {
-        throw new Error(`Destination already exists: ${destinationPath}. Use overwrite=true to replace it.`);
+      await fs.access(operation.validDestinationPath);
+      if (!operation.overwrite) {
+        throw new Error(
+          `Destination already exists: ${operation.destination}. Use overwrite=true to replace it.`
+        );
       }
     } catch (error) {
-      // This is expected for new destinations
-      if (!(error instanceof Error) || !error.message.includes('ENOENT')) {
-        throw error; // If error is something else, rethrow it
+      if (!(error instanceof Error) || !error.message.includes("ENOENT")) {
+        throw error;
       }
     }
-    
+
     if (sourceStats.isDirectory()) {
-      if (!recursive) {
+      if (!operation.recursive) {
         throw new Error(`Source is a directory. Use recursive=true to copy directories.`);
       }
-      
-      // Create the destination directory if it doesn't exist
-      await fs.mkdir(validDestPath, { recursive: true });
-      
-      // Copy directory recursively
-      await copyDir(validSourcePath, validDestPath, allowedDirectories);
-      return `Successfully copied directory ${sourcePath} to ${destinationPath}`;
-    } else {
-      // It's a file, copy it directly
-      await fs.copyFile(validSourcePath, validDestPath);
-      return `Successfully copied file ${sourcePath} to ${destinationPath}`;
+
+      await fs.mkdir(operation.validDestinationPath, { recursive: true });
+      await copyDir(operation.validSourcePath, operation.validDestinationPath, allowedDirectories);
+      return `Successfully copied directory ${operation.source} to ${operation.destination}`;
     }
+
+    await fs.copyFile(operation.validSourcePath, operation.validDestinationPath);
+    return `Successfully copied file ${operation.source} to ${operation.destination}`;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Error copying ${sourcePath} to ${destinationPath}: ${errorMessage}`);
+    throw new Error(`Error copying ${operation.source} to ${operation.destination}: ${errorMessage}`);
   }
+}
+
+export async function handleCopyFile(
+  operations: CopyFileOperation[],
+  allowedDirectories: string[]
+): Promise<string> {
+  const preparedOperations = await Promise.all(
+    operations.map((operation) => prepareCopyOperation(operation, allowedDirectories))
+  );
+
+  await assertCopyOperationsAreSafeForParallelExecution(preparedOperations);
+
+  const results = await Promise.all(
+    preparedOperations.map(async (operation) => {
+      try {
+        const output = await copySingleOperation(operation, allowedDirectories);
+        return {
+          label: `${operation.source} -> ${operation.destination}`,
+          output,
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return {
+          label: `${operation.source} -> ${operation.destination}`,
+          error: errorMessage,
+        };
+      }
+    })
+  );
+
+  return formatBatchTextOperationResults("copy", results);
 }

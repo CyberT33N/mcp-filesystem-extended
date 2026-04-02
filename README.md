@@ -6,13 +6,13 @@ Node.js server implementing Model Context Protocol (MCP) for filesystem operatio
 
 - Read/create/append multiple files
 - Create/list/delete directories and files
-- Copy/move files and directories
+- Copy/move files and directories, including batch copy pairs
 - Search files by name, glob pattern, or content regex
 - Patch files using line numbers
 - File and content diffing
-- Count lines in files
+- Count lines across one or more file or directory paths
 - Generate and verify file checksums
-- Get file metadata and directory trees
+- Get file metadata and directory trees for single or batch path requests
 
 **Note**: The server will only allow operations within directories specified via `args`.
 
@@ -25,25 +25,25 @@ The codebase follows a feature-based organization where each API operation has i
 ├── append_files/                   # Append to multiple files
 ├── checksum_files/                 # Generate checksums for multiple files
 ├── checksum_files_verif/           # Verify checksums for multiple files
-├── content_diff/                   # Compare two text strings
+├── content_diff/                   # Compare one or more text pairs
 ├── copy_files/                     # Copy files and directories
-├── count_lines/                    # Count lines in files
+├── count_lines/                    # Count lines across one or more paths
 ├── create_directories/             # Create multiple directories at once
 ├── delete_files/                   # Delete multiple files at once
-├── directory_tree/                 # Get recursive directory structure
-├── file_diff/                      # Compare differences between files
-├── file_info/                      # Get file metadata
+├── directory_tree/                 # Get recursive directory trees for one or more roots
+├── file_diff/                      # Compare differences between one or more file pairs
+├── file_info/                      # Get file metadata for one or more paths
 ├── helpers/                        # Shared utilities
 │   ├── checksum.ts                 # Checksum generation utilities
 │   ├── diff.ts                     # Diff generation utilities
 │   └── path.ts                     # Path validation and security
-├── list_directory/                 # List directory contents
+├── list_directory/                 # List directory contents for one or more directories
 ├── move_files/                     # Move or rename multiple files
 ├── patch_files/                    # Patch files using line numbers
 ├── batch_read_files/                     # Read multiple files
-├── search_files/                   # Search for files by name
-├── search_glob/                    # Search for files using glob patterns
-├── search_regex/                   # Search file contents with regex
+├── search_files/                   # Search for files by name across one or more roots
+├── search_glob/                    # Search for files using glob patterns across one or more roots
+├── search_regex/                   # Search file contents with regex across one or more roots
 ├── write_new_files/                # Create new files at once
 └── server.ts                       # Main server implementation
 ```
@@ -68,26 +68,30 @@ Each operation directory typically contains:
 
 - **list_directory**
   - List directory contents with [FILE] or [DIR] prefixes
-  - Input: `path` (string)
+  - Input: `paths` (string[])
+  - Pass one path for a single listing or multiple paths for batch directory listings on the same endpoint
 
 - **directory_tree**
   - Get a recursive tree view of files and directories as a JSON structure
   - Inputs:
-    - `path` (string): Root directory path
+    - `paths` (string[]): Root directory paths
     - `excludePatterns` (string[]): Patterns to exclude from tree (glob format supported)
+  - Pass one path for a single tree or multiple paths for batch tree generation on the same endpoint
   - Returns JSON with name, type, and children properties
 - **search_files**
   - Recursively search for files/directories
   - Inputs:
-    - `path` (string): Starting directory
+    - `paths` (string[]): Starting directories
     - `pattern` (string): Search pattern
     - `excludePatterns` (string[]): Exclude any patterns. Glob formats are supported.
+  - Pass one path for a single search scope or multiple paths for batch root-path searches on the same endpoint
   - Case-insensitive matching
   - Returns full paths to matches
 
 - **file_info**
   - Get detailed file/directory metadata
-  - Input: `path` (string)
+  - Input: `paths` (string[])
+  - Pass one path for a single metadata lookup or multiple paths for batch metadata retrieval on the same endpoint
   - Returns:
     - Size
     - Creation time
@@ -150,41 +154,46 @@ Each operation directory typically contains:
 - **search_regex**
   - Search file contents using regular expressions
   - Inputs:
-    - `path` (string): Root directory to search in
+    - `paths` (string[]): Root directories to search in
     - `pattern` (string): Regular expression pattern
     - `filePatterns` (string[]): File patterns to include (e.g. '*.js', '*.ts')
     - `excludePatterns` (string[]): Patterns to exclude
     - `maxResults` (number): Maximum results to return (default: 100)
     - `caseSensitive` (boolean): Whether search is case-sensitive (default: false)
+  - Pass one path for a single regex search scope or multiple paths for batch regex searches on the same endpoint
   - Returns matching lines with line numbers and context
 
 - **search_glob**
   - Find files using glob patterns
   - Inputs:
-    - `path` (string): Root directory to search in
+    - `paths` (string[]): Root directories to search in
     - `pattern` (string): Glob pattern (e.g. '**/*.js', 'src/**/*.{ts,tsx}')
     - `excludePatterns` (string[]): Glob patterns to exclude
     - `maxResults` (number): Maximum results to return (default: 500)
+  - Pass one path for a single glob search scope or multiple paths for batch glob searches on the same endpoint
   - Returns full paths to matching files
 
 - **content_diff**
   - Compare two text strings and show differences
   - Inputs:
-    - `content1` (string): First content string
-    - `content2` (string): Second content string
-    - `label1` (string): Label for first content (default: "original")
-    - `label2` (string): Label for second content (default: "modified")
+    - `items` (array): Content-diff pairs
+      - `content1` (string): First content string
+      - `content2` (string): Second content string
+      - `label1` (string): Label for first content (default: "original")
+      - `label2` (string): Label for second content (default: "modified")
+  - Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint
   - Returns unified diff showing changes
 
 - **count_lines**
   - Count lines in files with optional pattern matching
   - Inputs:
-    - `path` (string): File or directory path
+    - `paths` (string[]): File or directory paths
     - `recursive` (boolean): Whether to count lines in all files in directory (default: false)
     - `pattern` (string): Optional regex pattern to match lines
     - `filePattern` (string): Glob pattern to match files when recursive (default: "**")
     - `excludePatterns` (string[]): Glob patterns to exclude
     - `ignoreEmptyLines` (boolean): Whether to ignore empty lines (default: false)
+  - Pass one path for a single count scope or multiple paths for batch line counting on the same endpoint
   - Returns counts by file and totals
 
 - **checksum_files**

@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { validatePath } from "../helpers/path.js";
 import { minimatch } from "minimatch";
+import { formatBatchTextOperationResults } from "../helpers/batch.js";
 
 interface FileLineCount {
   file: string;
@@ -10,7 +11,7 @@ interface FileLineCount {
 }
 
 export async function handleCountLines(
-  filePath: string,
+  filePaths: string[],
   recursive: boolean,
   pattern: string | undefined,
   filePattern: string,
@@ -18,80 +19,96 @@ export async function handleCountLines(
   ignoreEmptyLines: boolean,
   allowedDirectories: string[]
 ): Promise<string> {
-  // Validate the path
-  const validPath = await validatePath(filePath, allowedDirectories);
-  
-  // Create regex for line matching if pattern is provided
-  let regex: RegExp | undefined;
-  if (pattern) {
-    try {
-      regex = new RegExp(pattern);
-    } catch (error) {
-      throw new Error(`Invalid regular expression: ${pattern}`);
+  async function getFormattedCountLinesResult(filePath: string): Promise<string> {
+    const validPath = await validatePath(filePath, allowedDirectories);
+
+    let regex: RegExp | undefined;
+    if (pattern) {
+      try {
+        regex = new RegExp(pattern);
+      } catch (error) {
+        throw new Error(`Invalid regular expression: ${pattern}`);
+      }
     }
-  }
-  
-  // Get file stats to determine if it's a file or directory
-  const stats = await fs.stat(validPath);
-  
-  let files: FileLineCount[] = [];
-  
-  if (stats.isFile()) {
-    // Count lines in a single file
-    const count = await countLinesInFile(validPath, regex, ignoreEmptyLines);
-    files.push(count);
-  } else if (stats.isDirectory() && recursive) {
-    // Recursively count lines in a directory
-    files = await countLinesInDirectory(
-      validPath, 
-      filePattern,
-      excludePatterns,
-      regex,
-      ignoreEmptyLines,
-      allowedDirectories
-    );
-  } else if (stats.isDirectory() && !recursive) {
-    throw new Error(`Path is a directory. Use recursive=true to count lines in all files.`);
-  } else {
-    throw new Error(`Path is neither a file nor a directory.`);
-  }
-  
-  // Format results
-  let output = '';
-  
-  if (files.length === 0) {
-    output = `No files found matching the criteria.`;
-  } else {
+
+    const stats = await fs.stat(validPath);
+
+    let files: FileLineCount[] = [];
+
+    if (stats.isFile()) {
+      const count = await countLinesInFile(validPath, regex, ignoreEmptyLines);
+      files.push(count);
+    } else if (stats.isDirectory() && recursive) {
+      files = await countLinesInDirectory(
+        validPath,
+        filePattern,
+        excludePatterns,
+        regex,
+        ignoreEmptyLines,
+        allowedDirectories
+      );
+    } else if (stats.isDirectory() && !recursive) {
+      throw new Error(`Path is a directory. Use recursive=true to count lines in all files.`);
+    } else {
+      throw new Error(`Path is neither a file nor a directory.`);
+    }
+
+    if (files.length === 0) {
+      return `No files found matching the criteria.`;
+    }
+
     let totalLines = 0;
     let totalMatchingLines = 0;
-    
-    output = "Line counts:\n\n";
-    
-    // Sort by line count (descending)
-    files.sort((a, b) => b.count - a.count);
-    
+
+    let output = "Line counts:\n\n";
+    files.sort((leftFile, rightFile) => rightFile.count - leftFile.count);
+
     for (const file of files) {
       totalLines += file.count;
       if (file.matchingCount !== undefined) {
         totalMatchingLines += file.matchingCount;
       }
-      
+
       if (pattern) {
         output += `${file.file}: ${file.count} lines total, ${file.matchingCount} matching lines\n`;
       } else {
         output += `${file.file}: ${file.count} lines\n`;
       }
     }
-    
+
     output += "\n";
     output += `Total: ${files.length} files, ${totalLines} lines`;
-    
+
     if (pattern) {
       output += `, ${totalMatchingLines} matching lines`;
     }
+
+    return output;
   }
-  
-  return output;
+
+  if (filePaths.length === 1) {
+    return getFormattedCountLinesResult(filePaths[0]);
+  }
+
+  const results = await Promise.all(
+    filePaths.map(async (filePath) => {
+      try {
+        const output = await getFormattedCountLinesResult(filePath);
+        return {
+          label: filePath,
+          output,
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return {
+          label: filePath,
+          error: errorMessage,
+        };
+      }
+    })
+  );
+
+  return formatBatchTextOperationResults("count lines", results);
 }
 
 async function countLinesInFile(

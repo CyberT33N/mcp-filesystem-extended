@@ -160,27 +160,28 @@ export class FilesystemServer {
           {
             name: "copy_file",
             description:
-              "Copy files or directories. " +
-              "Set recursive flag to true to copy directories with contents. " +
-              "Set overwrite flag to true to replace existing destinations. " +
+              "Copy files or directories through one or more copy operations. Works with a single item too. " +
+              "Pass one item for a single copy or multiple items for batch copying on the same endpoint. " +
+              "Recursive and overwrite behavior is configured per operation item. " +
               "Both source and destination must be within allowed directories.",
             inputSchema: zodToJsonSchema(CopyFileArgsSchema) as ToolInput,
           },
           {
             name: "file_diff",
             description:
-              "Compare contents of two files and show differences. " +
-              "Returns a unified diff showing all changes between files. " +
+              "Compare contents of one or more file pairs and show differences. Works with a single pair too. " +
+              "Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint. " +
+              "Returns a unified diff for each requested pair. " +
               "Only works within allowed directories.",
             inputSchema: zodToJsonSchema(FileDiffArgsSchema) as ToolInput,
           },
           {
             name: "content_diff",
             description:
-              "Compare two text strings and show differences. " +
-              "Returns a unified diff showing all changes between the contents. " +
+              "Compare one or more text-content pairs and show differences. Works with a single pair too. " +
+              "Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint. " +
               "Useful for comparing snippets without saving them to disk. " +
-              "Custom labels can be provided for each content.",
+              "Custom labels can be provided per content pair.",
             inputSchema: zodToJsonSchema(ContentDiffArgsSchema) as ToolInput,
           },
           {
@@ -207,17 +208,17 @@ export class FilesystemServer {
           {
             name: "list_directory",
             description:
-              "List directory contents with [FILE] or [DIR] prefixes. " +
-              "Shows all files and directories in the specified path. " +
+              "List directory contents with [FILE] or [DIR] prefixes for one or more directories. Works with a single path too. " +
+              "Pass one path for a single listing or multiple paths for batch directory listings on the same endpoint. " +
               "Only works within allowed directories.",
             inputSchema: zodToJsonSchema(ListDirectoryArgsSchema) as ToolInput,
           },
           {
             name: "directory_tree",
             description:
-                "Get a recursive tree view of files and directories as a JSON structure. " +
-                "Returns JSON with name, type, and children properties. " +
-                "Supports excluding files/directories using glob patterns. " +
+                "Get a recursive tree view of one or more directory roots as JSON. Works with a single path too. " +
+                "Pass one path for a single tree or multiple paths for batch tree generation on the same endpoint. " +
+                "Returns JSON with name, type, and children properties, and supports excluding files/directories using glob patterns. " +
                 "Only works within allowed directories.",
             inputSchema: zodToJsonSchema(DirectoryTreeArgsSchema) as ToolInput,
           },
@@ -234,40 +235,34 @@ export class FilesystemServer {
           {
             name: "search_files",
             description:
-              "Recursively search for files/directories. " +
-              "Case-insensitive matching. " +
-              "Supports exclude patterns with glob format. " +
-              "Returns full paths to matches. " +
+              "Recursively search one or more root paths for files/directories. Works with a single root path too. " +
+              "Case-insensitive matching. Supports exclude patterns with glob format. " +
+              "Returns full paths to matches for each requested root path. " +
               "Only searches within allowed directories.",
             inputSchema: zodToJsonSchema(SearchFilesArgsSchema) as ToolInput,
           },
           {
             name: "search_regex",
             description:
-              "Search file contents using regular expressions. " +
-              "Recursively searches all files in specified directory. " +
-              "Supports filtering files by patterns. " +
-              "Returns matching lines with line numbers and context. " +
+              "Search file contents with regular expressions across one or more root paths. Works with a single root path too. " +
+              "Recursively searches all files in each specified root path, supports filtering files by patterns, and returns matching lines with line numbers and context. " +
               "Only searches within allowed directories.",
             inputSchema: zodToJsonSchema(SearchRegexArgsSchema) as ToolInput,
           },
           {
             name: "search_glob",
             description:
-              "Find files using glob patterns. " +
-              "Supports powerful patterns like '**/*.js' or 'src/**/*.{ts,tsx}'. " +
-              "Excludes can be specified to filter results. " +
-              "Returns full paths to matching files. " +
+              "Find files using glob patterns across one or more root paths. Works with a single root path too. " +
+              "Supports powerful patterns like '**/*.js' or 'src/**/*.{ts,tsx}', allows exclude filters, and returns full paths to matching files for each requested root path. " +
               "Only searches within allowed directories.",
             inputSchema: zodToJsonSchema(SearchGlobArgsSchema) as ToolInput,
           },
           {
             name: "count_lines",
             description:
-              "Count lines in files with optional pattern matching. " +
-              "Can recursively count lines in multiple files. " +
-              "Filter lines with regex patterns or skip empty lines. " +
-              "Returns counts by file and totals. " +
+              "Count lines for one or more file or directory paths. Works with a single path too. " +
+              "Can recursively count lines in multiple files, filter lines with regex patterns, and skip empty lines. " +
+              "Returns counts by file and totals for each requested path scope. " +
               "Only works within allowed directories.",
             inputSchema: zodToJsonSchema(CountLinesArgsSchema) as ToolInput,
           },
@@ -292,8 +287,8 @@ export class FilesystemServer {
           {
             name: "get_file_info",
             description:
-              "Get detailed file/directory metadata. " +
-              "Returns size, creation time, modified time, access time, type, and permissions. " +
+              "Get detailed file or directory metadata for one or more paths. Works with a single path too. " +
+              "Returns size, creation time, modified time, access time, type, and permissions for each requested path. " +
               "Only works within allowed directories.",
             inputSchema: zodToJsonSchema(GetFileInfoArgsSchema) as ToolInput,
           },
@@ -400,10 +395,7 @@ export class FilesystemServer {
             }
             
             const result = await handleCopyFile(
-              parsed.data.source,
-              parsed.data.destination,
-              parsed.data.recursive,
-              parsed.data.overwrite,
+              parsed.data.items,
               this.allowedDirectories
             );
             await this.log("info", "tools", { event: "result", tool: name });
@@ -420,8 +412,7 @@ export class FilesystemServer {
             }
             
             const result = await handleFileDiff(
-              parsed.data.file1,
-              parsed.data.file2,
+              parsed.data.items,
               this.allowedDirectories
             );
             await this.log("info", "tools", { event: "result", tool: name });
@@ -437,12 +428,7 @@ export class FilesystemServer {
               throw new Error(`Invalid arguments for content_diff: ${parsed.error}`);
             }
             
-            const result = await handleContentDiff(
-              parsed.data.content1,
-              parsed.data.content2,
-              parsed.data.label1,
-              parsed.data.label2
-            );
+            const result = await handleContentDiff(parsed.data.items);
             await this.log("info", "tools", { event: "result", tool: name });
             
             return {
@@ -494,7 +480,7 @@ export class FilesystemServer {
             if (!parsed.success) {
               throw new Error(`Invalid arguments for list_directory: ${parsed.error}`);
             }
-            const result = await handleListDirectory(parsed.data.path, this.allowedDirectories);
+            const result = await handleListDirectory(parsed.data.paths, this.allowedDirectories);
             await this.log("info", "tools", { event: "result", tool: name });
             return {
               content: [{ type: "text", text: result }],
@@ -508,7 +494,7 @@ export class FilesystemServer {
             }
 
             const result = await handleDirectoryTree(
-              parsed.data.path, 
+              parsed.data.paths,
               parsed.data.excludePatterns,
               this.allowedDirectories
             );
@@ -548,7 +534,7 @@ export class FilesystemServer {
             }
             
             const result = await handleSearchFiles(
-              parsed.data.path,
+              parsed.data.paths,
               parsed.data.pattern,
               parsed.data.excludePatterns,
               this.allowedDirectories
@@ -567,7 +553,7 @@ export class FilesystemServer {
             }
             
             const result = await handleSearchRegex(
-              parsed.data.path,
+              parsed.data.paths,
               parsed.data.pattern,
               parsed.data.filePatterns,
               parsed.data.excludePatterns,
@@ -589,7 +575,7 @@ export class FilesystemServer {
             }
             
             const result = await handleSearchGlob(
-              parsed.data.path,
+              parsed.data.paths,
               parsed.data.pattern,
               parsed.data.excludePatterns,
               parsed.data.maxResults,
@@ -609,7 +595,7 @@ export class FilesystemServer {
             }
             
             const result = await handleCountLines(
-              parsed.data.path,
+              parsed.data.paths,
               parsed.data.recursive,
               parsed.data.pattern,
               parsed.data.filePattern,
@@ -668,7 +654,7 @@ export class FilesystemServer {
               throw new Error(`Invalid arguments for get_file_info: ${parsed.error}`);
             }
             
-            const result = await handleGetFileInfo(parsed.data.path, this.allowedDirectories);
+            const result = await handleGetFileInfo(parsed.data.paths, this.allowedDirectories);
             await this.log("info", "tools", { event: "result", tool: name });
             
             return {

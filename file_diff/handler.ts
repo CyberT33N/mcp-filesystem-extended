@@ -1,38 +1,62 @@
 import fs from "fs/promises";
 import { validatePath } from "../helpers/path.js";
 import { createUnifiedDiff } from "../helpers/diff.js";
+import { formatBatchTextOperationResults } from "../helpers/batch.js";
 
-export async function handleFileDiff(
-  file1Path: string,
-  file2Path: string,
+interface FileDiffOperation {
+  file1: string;
+  file2: string;
+}
+
+async function getFormattedFileDiff(
+  operation: FileDiffOperation,
   allowedDirectories: string[]
 ): Promise<string> {
-  const validFile1Path = await validatePath(file1Path, allowedDirectories);
-  const validFile2Path = await validatePath(file2Path, allowedDirectories);
-  
-  try {
-    // Read both files
-    const file1Content = await fs.readFile(validFile1Path, 'utf-8');
-    const file2Content = await fs.readFile(validFile2Path, 'utf-8');
-    
-    // Create a unified diff
-    const diff = createUnifiedDiff(file1Content, file2Content, file1Path, file2Path);
-    
-    // Format diff with appropriate number of backticks
-    let numBackticks = 3;
-    while (diff.includes('`'.repeat(numBackticks))) {
-      numBackticks++;
-    }
-    
-    const formattedDiff = `${'`'.repeat(numBackticks)}diff\n${diff}${'`'.repeat(numBackticks)}\n\n`;
-    
-    if (diff.trim() === '') {
-      return `Files are identical.`;
-    }
-    
-    return formattedDiff;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Error comparing files: ${errorMessage}`);
+  const validFile1Path = await validatePath(operation.file1, allowedDirectories);
+  const validFile2Path = await validatePath(operation.file2, allowedDirectories);
+
+  const file1Content = await fs.readFile(validFile1Path, "utf-8");
+  const file2Content = await fs.readFile(validFile2Path, "utf-8");
+
+  const diff = createUnifiedDiff(file1Content, file2Content, operation.file1, operation.file2);
+
+  if (diff.trim() === "") {
+    return "Files are identical.";
   }
+
+  let numBackticks = 3;
+  while (diff.includes("`".repeat(numBackticks))) {
+    numBackticks++;
+  }
+
+  return `${"`".repeat(numBackticks)}diff\n${diff}${"`".repeat(numBackticks)}`;
+}
+
+export async function handleFileDiff(
+  operations: FileDiffOperation[],
+  allowedDirectories: string[]
+): Promise<string> {
+  if (operations.length === 1) {
+    return getFormattedFileDiff(operations[0], allowedDirectories);
+  }
+
+  const results = await Promise.all(
+    operations.map(async (operation) => {
+      try {
+        const output = await getFormattedFileDiff(operation, allowedDirectories);
+        return {
+          label: `${operation.file1} ↔ ${operation.file2}`,
+          output,
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return {
+          label: `${operation.file1} ↔ ${operation.file2}`,
+          error: `Error comparing files: ${errorMessage}`,
+        };
+      }
+    })
+  );
+
+  return formatBatchTextOperationResults("file diff", results);
 }
