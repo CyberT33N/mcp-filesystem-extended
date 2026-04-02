@@ -158,7 +158,7 @@ export class FilesystemServer {
             inputSchema: zodToJsonSchema(DeleteFilesArgsSchema) as ToolInput,
           },
           {
-            name: "copy_file",
+            name: "copy_files",
             description:
               "Copy files or directories through one or more copy operations. Works with a single item too. " +
               "Pass one item for a single copy or multiple items for batch copying on the same endpoint. " +
@@ -167,7 +167,7 @@ export class FilesystemServer {
             inputSchema: zodToJsonSchema(CopyFileArgsSchema) as ToolInput,
           },
           {
-            name: "file_diff",
+            name: "file_diffs",
             description:
               "Compare contents of one or more file pairs and show differences. Works with a single pair too. " +
               "Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint. " +
@@ -176,7 +176,7 @@ export class FilesystemServer {
             inputSchema: zodToJsonSchema(FileDiffArgsSchema) as ToolInput,
           },
           {
-            name: "content_diff",
+            name: "content_diffs",
             description:
               "Compare one or more text-content pairs and show differences. Works with a single pair too. " +
               "Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint. " +
@@ -206,7 +206,7 @@ export class FilesystemServer {
             inputSchema: zodToJsonSchema(CreateDirectoriesArgsSchema) as ToolInput,
           },
           {
-            name: "list_directory",
+            name: "list_directories",
             description:
               "List directory contents with [FILE] or [DIR] prefixes for one or more directories. Works with a single path too. " +
               "Pass one path for a single listing or multiple paths for batch directory listings on the same endpoint. " +
@@ -214,7 +214,7 @@ export class FilesystemServer {
             inputSchema: zodToJsonSchema(ListDirectoryArgsSchema) as ToolInput,
           },
           {
-            name: "directory_tree",
+            name: "directory_trees",
             description:
                 "Get a recursive tree view of one or more directory roots as JSON. Works with a single path too. " +
                 "Pass one path for a single tree or multiple paths for batch tree generation on the same endpoint. " +
@@ -242,7 +242,7 @@ export class FilesystemServer {
             inputSchema: zodToJsonSchema(SearchFilesArgsSchema) as ToolInput,
           },
           {
-            name: "search_regex",
+            name: "search_regexes",
             description:
               "Search file contents with regular expressions across one or more root paths. Works with a single root path too. " +
               "Recursively searches all files in each specified root path, supports filtering files by patterns, and returns matching lines with line numbers and context. " +
@@ -250,7 +250,7 @@ export class FilesystemServer {
             inputSchema: zodToJsonSchema(SearchRegexArgsSchema) as ToolInput,
           },
           {
-            name: "search_glob",
+            name: "search_globs",
             description:
               "Find files using glob patterns across one or more root paths. Works with a single root path too. " +
               "Supports powerful patterns like '**/*.js' or 'src/**/*.{ts,tsx}', allows exclude filters, and returns full paths to matching files for each requested root path. " +
@@ -388,10 +388,10 @@ export class FilesystemServer {
             };
           }
           
-          case "copy_file": {
+          case "copy_files": {
             const parsed = CopyFileArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for copy_file: ${parsed.error}`);
+              throw new Error(`Invalid arguments for copy_files: ${parsed.error}`);
             }
             
             const result = await handleCopyFile(
@@ -405,10 +405,10 @@ export class FilesystemServer {
             };
           }
           
-          case "file_diff": {
+          case "file_diffs": {
             const parsed = FileDiffArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for file_diff: ${parsed.error}`);
+              throw new Error(`Invalid arguments for file_diffs: ${parsed.error}`);
             }
             
             const result = await handleFileDiff(
@@ -422,10 +422,10 @@ export class FilesystemServer {
             };
           }
           
-          case "content_diff": {
+          case "content_diffs": {
             const parsed = ContentDiffArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for content_diff: ${parsed.error}`);
+              throw new Error(`Invalid arguments for content_diffs: ${parsed.error}`);
             }
             
             const result = await handleContentDiff(parsed.data.items);
@@ -475,10 +475,10 @@ export class FilesystemServer {
             };
           }
 
-          case "list_directory": {
+          case "list_directories": {
             const parsed = ListDirectoryArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for list_directory: ${parsed.error}`);
+              throw new Error(`Invalid arguments for list_directories: ${parsed.error}`);
             }
             const result = await handleListDirectory(parsed.data.paths, this.allowedDirectories);
             await this.log("info", "tools", { event: "result", tool: name });
@@ -487,10 +487,10 @@ export class FilesystemServer {
             };
           }
 
-          case "directory_tree": {
+          case "directory_trees": {
             const parsed = DirectoryTreeArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for directory_tree: ${parsed.error}`);
+              throw new Error(`Invalid arguments for directory_trees: ${parsed.error}`);
             }
 
             const result = await handleDirectoryTree(
@@ -546,10 +546,10 @@ export class FilesystemServer {
             };
           }
           
-          case "search_regex": {
+          case "search_regexes": {
             const parsed = SearchRegexArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for search_regex: ${parsed.error}`);
+              throw new Error(`Invalid arguments for search_regexes: ${parsed.error}`);
             }
             
             const result = await handleSearchRegex(
@@ -568,10 +568,10 @@ export class FilesystemServer {
             };
           }
           
-          case "search_glob": {
+          case "search_globs": {
             const parsed = SearchGlobArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for search_glob: ${parsed.error}`);
+              throw new Error(`Invalid arguments for search_globs: ${parsed.error}`);
             }
             
             const result = await handleSearchGlob(
