@@ -25,25 +25,25 @@ The codebase follows a feature-based organization where each API operation has i
 ├── append_files/                   # Append to multiple files
 ├── checksum_files/                 # Generate checksums for multiple files
 ├── checksum_files_verif/           # Verify checksums for multiple files
-├── content_diff/                   # Compare one or more text pairs
+├── content_diffs/                  # Compare one or more text pairs
 ├── copy_files/                     # Copy files and directories
 ├── count_lines/                    # Count lines across one or more paths
 ├── create_directories/             # Create multiple directories at once
 ├── delete_files/                   # Delete multiple files at once
-├── directory_tree/                 # Get recursive directory trees for one or more roots
-├── file_diff/                      # Compare differences between one or more file pairs
-├── file_info/                      # Get file metadata for one or more paths
+├── directory_trees/                # Get recursive directory trees for one or more roots
+├── file_diffs/                     # Compare differences between one or more file pairs
+├── file_infos/                     # Get file metadata for one or more paths
 ├── helpers/                        # Shared utilities
 │   ├── checksum.ts                 # Checksum generation utilities
 │   ├── diff.ts                     # Diff generation utilities
 │   └── path.ts                     # Path validation and security
-├── list_directory/                 # List directory contents for one or more directories
+├── list_directories/               # List directory contents for one or more directories
 ├── move_files/                     # Move or rename multiple files
 ├── patch_files/                    # Patch files using line numbers
 ├── batch_read_files/                     # Read multiple files
 ├── search_files/                   # Search for files by name across one or more roots
-├── search_glob/                    # Search for files using glob patterns across one or more roots
-├── search_regex/                   # Search file contents with regex across one or more roots
+├── search_globs/                   # Search for files using glob patterns across one or more roots
+├── search_regexes/                 # Search file contents with regex across one or more roots
 ├── write_new_files/                # Create new files at once
 └── server.ts                       # Main server implementation
 ```
