@@ -3,9 +3,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  type Tool,
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import "./utils/logger.js";
 
@@ -53,7 +53,7 @@ import { handleChecksumFilesVerif } from "./checksum_files_verif/handler.js";
 import { handleGetFileInfo } from "./file_infos/handler.js";
 
 const ToolInputSchema = ToolSchema.shape.inputSchema;
-type ToolInput = z.infer<typeof ToolInputSchema>;
+type ToolInput = Tool["inputSchema"];
 
 type LoggingLevel =
   | "debug"
