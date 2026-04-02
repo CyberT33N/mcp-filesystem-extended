@@ -285,7 +285,7 @@ export class FilesystemServer {
             inputSchema: zodToJsonSchema(ChecksumFilesVerifArgsSchema) as ToolInput,
           },
           {
-            name: "get_file_info",
+            name: "get_file_infos",
             description:
               "Get detailed file or directory metadata for one or more paths. Works with a single path too. " +
               "Returns size, creation time, modified time, access time, type, and permissions for each requested path. " +
@@ -648,10 +648,10 @@ export class FilesystemServer {
             };
           }
           
-          case "get_file_info": {
+          case "get_file_infos": {
             const parsed = GetFileInfoArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for get_file_info: ${parsed.error}`);
+              throw new Error(`Invalid arguments for get_file_infos: ${parsed.error}`);
             }
             
             const result = await handleGetFileInfo(parsed.data.paths, this.allowedDirectories);
