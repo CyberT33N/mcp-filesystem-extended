@@ -291,9 +291,11 @@
      * Path aliases (project requirement; do not change).
      */
     "paths": {
+      "@application/*": ["src/application/*"],
       "@cache": ["src/cache/index.ts"],
       "@cache/*": ["src/cache/*"],
       "@configs/*": ["src/configs/*"],
+      "@domain/*": ["src/domain/*"],
       "@infrastructure/*": ["src/infrastructure/*"],
       "@loaders/*": ["src/loaders/*"],
       "@mocks/*": ["__mocks__/*"],
