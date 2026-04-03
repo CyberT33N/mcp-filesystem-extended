@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@toon-format/toon": "^2.1.0",
     "diff": "^5.1.0",
     "glob": "^10.3.10",
     "minimatch": "^10.0.1",

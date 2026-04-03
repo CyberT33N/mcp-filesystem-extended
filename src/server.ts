@@ -20,8 +20,7 @@ import { DeleteFilesArgsSchema } from "./delete_files/schema.js";
 import { CopyFileArgsSchema } from "./copy_files/schema.js";
 import { MoveFilesArgsSchema } from "./move_files/schema.js";
 import { CreateDirectoriesArgsSchema } from "./create_directories/schema.js";
-import { ListDirectoryArgsSchema } from "./list_directories/schema.js";
-import { DirectoryTreeArgsSchema } from "./directory_trees/schema.js";
+import { ListDirectoryEntriesArgsSchema } from "./list-directory-entries/schema.js";
 import { SearchFilesArgsSchema } from "./search_files/schema.js";
 import { SearchRegexArgsSchema } from "./search_regexes/schema.js";
 import { SearchGlobArgsSchema } from "./search_globs/schema.js";
@@ -42,8 +41,7 @@ import { handleDeleteFiles } from "./delete_files/handler.js";
 import { handleCopyFile } from "./copy_files/handler.js";
 import { handleMoveFiles } from "./move_files/handler.js";
 import { handleCreateDirectories } from "./create_directories/handler.js";
-import { handleListDirectory } from "./list_directories/handler.js";
-import { handleDirectoryTree } from "./directory_trees/handler.js";
+import { handleListDirectoryEntries } from "./list-directory-entries/handler.js";
 import { handleSearchFiles } from "./search_files/handler.js";
 import { handleSearchRegex } from "./search_regexes/handler.js";
 import { handleSearchGlob } from "./search_globs/handler.js";
@@ -206,21 +204,15 @@ export class FilesystemServer {
             inputSchema: zodToJsonSchema(CreateDirectoriesArgsSchema) as ToolInput,
           },
           {
-            name: "list_directories",
+            name: "list_directory_entries",
             description:
-              "List directory contents with [FILE] or [DIR] prefixes for one or more directories. Works with a single path too. " +
-              "Pass one path for a single listing or multiple paths for batch directory listings on the same endpoint. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(ListDirectoryArgsSchema) as ToolInput,
-          },
-          {
-            name: "directory_trees",
-            description:
-                "Get a recursive tree view of one or more directory roots as JSON. Works with a single path too. " +
-                "Pass one path for a single tree or multiple paths for batch tree generation on the same endpoint. " +
-                "Returns JSON with name, type, and children properties, and supports excluding files/directories using glob patterns. " +
-                "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(DirectoryTreeArgsSchema) as ToolInput,
+              "List files and directories for one or more directory roots as TOON-encoded structured entries. Works with a single path too. " +
+              "Pass one path for a single listing root or multiple paths for batch listing roots on the same endpoint. " +
+              "Recursive traversal is enabled by default and returns nested files and directories. " +
+              "Set recursive to false to return only same-level files and directories for each requested root. " +
+              "The required type field is always included. Set includeMetadata to true to include additional metadata from the canonical file_infos surface. " +
+              "Supports exclude patterns with glob format. Only works within allowed directories.",
+            inputSchema: zodToJsonSchema(ListDirectoryEntriesArgsSchema) as ToolInput,
           },
           {
             name: "move_files",
@@ -475,36 +467,23 @@ export class FilesystemServer {
             };
           }
 
-          case "list_directories": {
-            const parsed = ListDirectoryArgsSchema.safeParse(args);
+          case "list_directory_entries": {
+            const parsed = ListDirectoryEntriesArgsSchema.safeParse(args);
             if (!parsed.success) {
-              throw new Error(`Invalid arguments for list_directories: ${parsed.error}`);
-            }
-            const result = await handleListDirectory(parsed.data.paths, this.allowedDirectories);
-            await this.log("info", "tools", { event: "result", tool: name });
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-
-          case "directory_trees": {
-            const parsed = DirectoryTreeArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for directory_trees: ${parsed.error}`);
+              throw new Error(`Invalid arguments for list_directory_entries: ${parsed.error}`);
             }
 
-            const result = await handleDirectoryTree(
+            const result = await handleListDirectoryEntries(
               parsed.data.paths,
+              parsed.data.recursive,
+              parsed.data.includeMetadata,
               parsed.data.excludePatterns,
               this.allowedDirectories
             );
             await this.log("info", "tools", { event: "result", tool: name });
-            
+
             return {
-              content: [{
-                type: "text",
-                text: result
-              }],
+              content: [{ type: "text", text: result }],
             };
           }
 
