@@ -72,7 +72,6 @@
     "sort-on": "catalog:",
     "ts-essentials": "catalog:",
     "type-fest": "catalog:",
-    "typescript-eslint": "link:__TSESLINT_TYPESCRIPT_ESLINT__",
     "zod": "catalog:",
     "zod-to-json-schema": "catalog:"
   },
@@ -91,6 +90,7 @@
     "@types/node": "catalog:",
     "@types/semver": "catalog:",
     "@typescript-eslint/parser": "link:__TSESLINT_PARSER__",
+    "@typescript-eslint/utils": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/eslint-plugin": "catalog:",
     "error-manager-helper": "catalog:",
@@ -138,6 +138,7 @@
     "tsup": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
     "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:"
   },
