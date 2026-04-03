@@ -1,12 +1,10 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  type Tool,
-  ToolSchema,
+  SetLevelRequestSchema,
+  type CallToolResult,
+  type LoggingMessageNotification,
 } from "@modelcontextprotocol/sdk/types.js";
-import { zodToJsonSchema } from "zod-to-json-schema";
 
 // Import all schemas
 import { ReadFilesArgsSchema } from "./batch_read_files/schema.js";
@@ -27,7 +25,6 @@ import { CountLinesArgsSchema } from "./count_lines/schema.js";
 import { ChecksumFilesArgsSchema } from "./checksum_files/schema.js";
 import { ChecksumFilesVerifArgsSchema } from "./checksum_files_verif/schema.js";
 import { GetFileInfoArgsSchema } from "./file_infos/schema.js";
-import { SetLevelRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 // Import all handlers
 import { handleReadFiles } from "./batch_read_files/handler.js";
@@ -48,19 +45,7 @@ import { handleCountLines } from "./count_lines/handler.js";
 import { handleChecksumFiles } from "./checksum_files/handler.js";
 import { handleChecksumFilesVerif } from "./checksum_files_verif/handler.js";
 import { handleGetFileInfo } from "./file_infos/handler.js";
-
-const ToolInputSchema = ToolSchema.shape.inputSchema;
-type ToolInput = Tool["inputSchema"];
-
-type LoggingLevel =
-  | "debug"
-  | "info"
-  | "notice"
-  | "warning"
-  | "error"
-  | "critical"
-  | "alert"
-  | "emergency";
+type LoggingLevel = LoggingMessageNotification["params"]["level"];
 
 const LogLevelMap: Record<LoggingLevel, number> = {
   emergency: 0,
@@ -74,27 +59,27 @@ const LogLevelMap: Record<LoggingLevel, number> = {
 };
 
 export class FilesystemServer {
-  private server: Server;
-  private allowedDirectories: string[];
+  private readonly server: McpServer;
+  private readonly allowedDirectories: string[];
   private rootLogLevel: LoggingLevel = "info";
 
   constructor(allowedDirectories: string[]) {
     this.allowedDirectories = allowedDirectories;
-    
-    this.server = new Server(
+
+    this.server = new McpServer(
       {
-        name: "secure-filesystem-server",
-        version: "0.2.0",
+        name: "mcp-filesystem-extended",
+        version: "0.6.2",
       },
       {
         capabilities: {
-          tools: {},
           logging: {},
         },
       },
     );
-    
+
     this.setupRequestHandlers();
+    this.registerTools();
   }
 
   private shouldLog(level: LoggingLevel): boolean {
@@ -111,562 +96,420 @@ export class FilesystemServer {
   }
 
   private setupRequestHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: [
-          {
-            name: "batch_read_files",
-            description:
-              "Read multiple files simultaneously. Works on a single file too. " +
-              "Failed reads won't stop the entire operation. " +
-              "Each line is prefixed with its line number (format: \"1: line content\"). " +
-              "Each file's content is returned with its path as a reference. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(ReadFilesArgsSchema) as ToolInput,
-          },
-          {
-            name: "write_new_files",
-            description:
-              "Create multiple new files in a single operation. Works on a single file too. " +
-              "Fails if any file already exists. Use patch_files to modify existing files. " +
-              "Handles text content with UTF-8 encoding. " +
-              "Partial failures won't stop the entire operation. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(WriteNewFilesArgsSchema) as ToolInput,
-          },
-          {
-            name: "append_files",
-            description:
-              "Append content to multiple existing files without overwriting. Works on a single file too. " +
-              "Creates files if they don't exist. " +
-              "Handles text content with UTF-8 encoding. " +
-              "Partial failures won't stop the entire operation. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(AppendFilesArgsSchema) as ToolInput,
-          },
-          {
-            name: "delete_files",
-            description:
-              "Delete multiple files or directories in a single operation. Works on a single file too. " +
-              "Set recursive flag to true to delete directories with contents. " +
-              "Partial failures won't stop the entire operation. " +
-              "Use with caution as operation is permanent. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(DeleteFilesArgsSchema) as ToolInput,
-          },
-          {
-            name: "copy_files",
-            description:
-              "Copy files or directories through one or more copy operations. Works with a single item too. " +
-              "Pass one item for a single copy or multiple items for batch copying on the same endpoint. " +
-              "Recursive and overwrite behavior is configured per operation item. " +
-              "Both source and destination must be within allowed directories.",
-            inputSchema: zodToJsonSchema(CopyFileArgsSchema) as ToolInput,
-          },
-          {
-            name: "file_diffs",
-            description:
-              "Compare contents of one or more file pairs and show differences. Works with a single pair too. " +
-              "Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint. " +
-              "Returns a unified diff for each requested pair. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(FileDiffArgsSchema) as ToolInput,
-          },
-          {
-            name: "content_diffs",
-            description:
-              "Compare one or more text-content pairs and show differences. Works with a single pair too. " +
-              "Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint. " +
-              "Useful for comparing snippets without saving them to disk. " +
-              "Custom labels can be provided per content pair.",
-            inputSchema: zodToJsonSchema(ContentDiffArgsSchema) as ToolInput,
-          },
-          {
-            name: "patch_files",
-            description:
-              "Patch multiple files simultaneously using line numbers. Works on a single file too. " +
-              "Specify line ranges to replace without needing to provide the old text. " +
-              "Can handle different patches for each file. " +
-              "Shows git-style diffs for all changes. " +
-              "Partial failures won't stop the entire operation. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(PatchFilesArgsSchema) as ToolInput,
-          },
-          {
-            name: "create_directories",
-            description:
-              "Create multiple directory paths in one operation. Works on a single directory too. " +
-              "Creates parent directories if needed. " +
-              "Succeeds silently if directories exist. " +
-              "Partial failures won't stop the entire operation. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(CreateDirectoriesArgsSchema) as ToolInput,
-          },
-          {
-            name: "list_directory_entries",
-            description:
-              "List files and directories for one or more directory roots as TOON-encoded structured entries. Works with a single path too. " +
-              "Pass one path for a single listing root or multiple paths for batch listing roots on the same endpoint. " +
-              "Recursive traversal is enabled by default and returns nested files and directories. " +
-              "Set recursive to false to return only same-level files and directories for each requested root. " +
-              "The required type field is always included. Set includeMetadata to true to include additional metadata from the canonical file_infos surface. " +
-              "Supports exclude patterns with glob format. Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(ListDirectoryEntriesArgsSchema) as ToolInput,
-          },
-          {
-            name: "move_files",
-            description:
-              "Move or rename multiple files and directories in a single operation. Works on a single file too. " +
-              "By default fails if any destination exists, use overwrite flag to force. " +
-              "Creates parent directories of destinations if needed. " +
-              "Partial failures won't stop the entire operation. " +
-              "All sources and destinations must be within allowed directories.",
-            inputSchema: zodToJsonSchema(MoveFilesArgsSchema) as ToolInput,
-          },
-          {
-            name: "search_files",
-            description:
-              "Recursively search one or more root paths for files/directories. Works with a single root path too. " +
-              "Case-insensitive matching. Supports exclude patterns with glob format. " +
-              "Returns full paths to matches for each requested root path. " +
-              "Only searches within allowed directories.",
-            inputSchema: zodToJsonSchema(SearchFilesArgsSchema) as ToolInput,
-          },
-          {
-            name: "search_regexes",
-            description:
-              "Search file contents with regular expressions across one or more root paths. Works with a single root path too. " +
-              "Recursively searches all files in each specified root path, supports filtering files by patterns, and returns matching lines with line numbers and context. " +
-              "Only searches within allowed directories.",
-            inputSchema: zodToJsonSchema(SearchRegexArgsSchema) as ToolInput,
-          },
-          {
-            name: "search_globs",
-            description:
-              "Find files using glob patterns across one or more root paths. Works with a single root path too. " +
-              "Supports powerful patterns like '**/*.js' or 'src/**/*.{ts,tsx}', allows exclude filters, and returns full paths to matching files for each requested root path. " +
-              "Only searches within allowed directories.",
-            inputSchema: zodToJsonSchema(SearchGlobArgsSchema) as ToolInput,
-          },
-          {
-            name: "count_lines",
-            description:
-              "Count lines for one or more file or directory paths. Works with a single path too. " +
-              "Can recursively count lines in multiple files, filter lines with regex patterns, and skip empty lines. " +
-              "Returns counts by file and totals for each requested path scope. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(CountLinesArgsSchema) as ToolInput,
-          },
-          {
-            name: "checksum_files",
-            description:
-              "Generate checksums for multiple files. Works on a single file too. " +
-              "Supports md5, sha1, sha256, and sha512 algorithms. " +
-              "Returns hashes for all files in a consistent format. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(ChecksumFilesArgsSchema) as ToolInput,
-          },
-          {
-            name: "checksum_files_verif",
-            description:
-              "Verify multiple files against expected checksums. Works on a single file too. " +
-              "Supports md5, sha1, sha256, and sha512 algorithms. " +
-              "Returns verification results for all files. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(ChecksumFilesVerifArgsSchema) as ToolInput,
-          },
-          {
-            name: "get_file_infos",
-            description:
-              "Get detailed file or directory metadata for one or more paths. Works with a single path too. " +
-              "Returns size, creation time, modified time, access time, type, and permissions for each requested path. " +
-              "Only works within allowed directories.",
-            inputSchema: zodToJsonSchema(GetFileInfoArgsSchema) as ToolInput,
-          },
-          {
-            name: "list_allowed_directories",
-            description:
-              "List all directories the server is allowed to access. " +
-              "No input required. " +
-              "Returns directories that this server can read/write from.",
-            inputSchema: {
-              type: "object",
-              properties: {},
-              required: [],
-            },
-          },
-        ],
-      };
-    });
-
-    // Handle MCP logging level changes (root logger)
-    this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
-      const level = request.params.level as LoggingLevel;
-      if (level in LogLevelMap) {
-        this.rootLogLevel = level;
-        await this.log("debug", "logging", { message: `Root log level set to '${level}'` });
-      } else {
-        await this.log("warning", "logging", { message: `Invalid log level '${level}' requested` });
-      }
+    this.server.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+      this.rootLogLevel = request.params.level;
+      await this.log("debug", "logging", {
+        message: `Root log level set to '${request.params.level}'`,
+      });
       return {};
     });
+  }
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      try {
-        const { name, arguments: args } = request.params;
-        await this.log("info", "tools", { event: "call", tool: name });
+  private registerTools() {
+    this.server.registerTool(
+      "batch_read_files",
+      {
+        description:
+          "Read multiple files simultaneously. Works on a single file too. " +
+          'Failed reads will not stop the entire operation. Each line is prefixed with its line number (format: "1: line content"). ' +
+          "Each file's content is returned with its path as a reference. " +
+          "Only works within allowed directories.",
+        inputSchema: ReadFilesArgsSchema,
+      },
+      async ({ paths }) =>
+        this.executeTool("batch_read_files", () =>
+          handleReadFiles(paths, this.allowedDirectories),
+        ),
+    );
 
-        switch (name) {
+    this.server.registerTool(
+      "write_new_files",
+      {
+        description:
+          "Create multiple new files in a single operation. Works on a single file too. " +
+          "Fails if any file already exists. Use patch_files to modify existing files. " +
+          "Handles text content with UTF-8 encoding. " +
+          "Partial failures will not stop the entire operation. " +
+          "Only works within allowed directories.",
+        inputSchema: WriteNewFilesArgsSchema,
+      },
+      async ({ files }) =>
+        this.executeTool("write_new_files", () =>
+          handleWriteNewFiles(files, this.allowedDirectories),
+        ),
+    );
 
-          case "batch_read_files": {
-            const parsed = ReadFilesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for batch_read_files: ${parsed.error}`);
-            }
-            const result = await handleReadFiles(parsed.data.paths, this.allowedDirectories);
-            await this.log("info", "tools", { event: "result", tool: name });
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
+    this.server.registerTool(
+      "append_files",
+      {
+        description:
+          "Append content to multiple existing files without overwriting. Works on a single file too. " +
+          "Creates files if they do not exist. " +
+          "Handles text content with UTF-8 encoding. " +
+          "Partial failures will not stop the entire operation. " +
+          "Only works within allowed directories.",
+        inputSchema: AppendFilesArgsSchema,
+      },
+      async ({ files }) =>
+        this.executeTool("append_files", () =>
+          handleAppendFiles(files, this.allowedDirectories),
+        ),
+    );
 
-          
-          case "write_new_files": {
-            const parsed = WriteNewFilesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for write_new_files: ${parsed.error}`);
-            }
-            
-            const result = await handleWriteNewFiles(parsed.data.files, this.allowedDirectories);
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          
-          case "append_files": {
-            const parsed = AppendFilesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for append_files: ${parsed.error}`);
-            }
-            
-            const result = await handleAppendFiles(parsed.data.files, this.allowedDirectories);
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          
-          case "delete_files": {
-            const parsed = DeleteFilesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for delete_files: ${parsed.error}`);
-            }
-            
-            const result = await handleDeleteFiles(
-              parsed.data.paths,
-              parsed.data.recursive,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          case "copy_files": {
-            const parsed = CopyFileArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for copy_files: ${parsed.error}`);
-            }
-            
-            const result = await handleCopyFile(
-              parsed.data.items,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          case "file_diffs": {
-            const parsed = FileDiffArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for file_diffs: ${parsed.error}`);
-            }
-            
-            const result = await handleFileDiff(
-              parsed.data.items,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          case "content_diffs": {
-            const parsed = ContentDiffArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for content_diffs: ${parsed.error}`);
-            }
-            
-            const result = await handleContentDiff(parsed.data.items);
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
+    this.server.registerTool(
+      "delete_files",
+      {
+        description:
+          "Delete multiple files or directories in a single operation. Works on a single file too. " +
+          "Set recursive flag to true to delete directories with contents. " +
+          "Partial failures will not stop the entire operation. " +
+          "Use with caution as operation is permanent. " +
+          "Only works within allowed directories.",
+        inputSchema: DeleteFilesArgsSchema,
+      },
+      async ({ paths, recursive }) =>
+        this.executeTool("delete_files", () =>
+          handleDeleteFiles(paths, recursive, this.allowedDirectories),
+        ),
+    );
 
-          
-          
-          case "patch_files": {
-            const parsed = PatchFilesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for patch_files: ${parsed.error}`);
-            }
-            
-            // Extract options from the request
-            const options = {
-              preserveIndentation: parsed.data.options?.preserveIndentation ?? true
-            };
-            
-            const result = await handlePatchFiles(
-              parsed.data.files,
-              parsed.data.dryRun,
-              options,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
+    this.server.registerTool(
+      "copy_files",
+      {
+        description:
+          "Copy files or directories through one or more copy operations. Works with a single item too. " +
+          "Pass one item for a single copy or multiple items for batch copying on the same endpoint. " +
+          "Recursive and overwrite behavior is configured per operation item. " +
+          "Both source and destination must be within allowed directories.",
+        inputSchema: CopyFileArgsSchema,
+      },
+      async ({ items }) =>
+        this.executeTool("copy_files", () =>
+          handleCopyFile(items, this.allowedDirectories),
+        ),
+    );
 
-          
-          case "create_directories": {
-            const parsed = CreateDirectoriesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for create_directories: ${parsed.error}`);
-            }
-            const result = await handleCreateDirectories(parsed.data.paths, this.allowedDirectories);
-            await this.log("info", "tools", { event: "result", tool: name });
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
+    this.server.registerTool(
+      "file_diffs",
+      {
+        description:
+          "Compare contents of one or more file pairs and show differences. Works with a single pair too. " +
+          "Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint. " +
+          "Returns a unified diff for each requested pair. " +
+          "Only works within allowed directories.",
+        inputSchema: FileDiffArgsSchema,
+      },
+      async ({ items }) =>
+        this.executeTool("file_diffs", () =>
+          handleFileDiff(items, this.allowedDirectories),
+        ),
+    );
 
-          case "list_directory_entries": {
-            const parsed = ListDirectoryEntriesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for list_directory_entries: ${parsed.error}`);
-            }
+    this.server.registerTool(
+      "content_diffs",
+      {
+        description:
+          "Compare one or more text-content pairs and show differences. Works with a single pair too. " +
+          "Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint. " +
+          "Useful for comparing snippets without saving them to disk. " +
+          "Custom labels can be provided per content pair.",
+        inputSchema: ContentDiffArgsSchema,
+      },
+      async ({ items }) =>
+        this.executeTool("content_diffs", () => handleContentDiff(items)),
+    );
 
-            const result = await handleListDirectoryEntries(
-              parsed.data.paths,
-              parsed.data.recursive,
-              parsed.data.includeMetadata,
-              parsed.data.excludePatterns,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
+    this.server.registerTool(
+      "patch_files",
+      {
+        description:
+          "Patch multiple files simultaneously using line numbers. Works on a single file too. " +
+          "Specify line ranges to replace without needing to provide the old text. " +
+          "Can handle different patches for each file. " +
+          "Shows git-style diffs for all changes. " +
+          "Partial failures will not stop the entire operation. " +
+          "Only works within allowed directories.",
+        inputSchema: PatchFilesArgsSchema,
+      },
+      async ({ files, dryRun, options }) =>
+        this.executeTool("patch_files", () =>
+          handlePatchFiles(
+            files,
+            dryRun,
+            { preserveIndentation: options?.preserveIndentation ?? true },
+            this.allowedDirectories,
+          ),
+        ),
+    );
 
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
+    this.server.registerTool(
+      "create_directories",
+      {
+        description:
+          "Create multiple directory paths in one operation. Works on a single directory too. " +
+          "Creates parent directories if needed. " +
+          "Succeeds silently if directories exist. " +
+          "Partial failures will not stop the entire operation. " +
+          "Only works within allowed directories.",
+        inputSchema: CreateDirectoriesArgsSchema,
+      },
+      async ({ paths }) =>
+        this.executeTool("create_directories", () =>
+          handleCreateDirectories(paths, this.allowedDirectories),
+        ),
+    );
 
+    this.server.registerTool(
+      "list_directory_entries",
+      {
+        description:
+          "List files and directories for one or more directory roots as TOON-encoded structured entries. Works with a single path too. " +
+          "Pass one path for a single listing root or multiple paths for batch listing roots on the same endpoint. " +
+          "Recursive traversal is enabled by default and returns nested files and directories. " +
+          "Set recursive to false to return only same-level files and directories for each requested root. " +
+          "The required type field is always included. Set includeMetadata to true to include additional metadata from the canonical file_infos surface. " +
+          "Supports exclude patterns with glob format. Only works within allowed directories.",
+        inputSchema: ListDirectoryEntriesArgsSchema,
+      },
+      async ({
+        paths,
+        recursive,
+        includeMetadata,
+        excludePatterns,
+      }) =>
+        this.executeTool("list_directory_entries", () =>
+          handleListDirectoryEntries(
+            paths,
+            recursive,
+            includeMetadata,
+            excludePatterns,
+            this.allowedDirectories,
+          ),
+        ),
+    );
 
-          case "move_files": {
-            const parsed = MoveFilesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for move_files: ${parsed.error}`);
-            }
-            
-            const result = await handleMoveFiles(
-              parsed.data.items,
-              parsed.data.overwrite,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
+    this.server.registerTool(
+      "move_files",
+      {
+        description:
+          "Move or rename multiple files and directories in a single operation. Works on a single file too. " +
+          "By default fails if any destination exists, use overwrite flag to force. " +
+          "Creates parent directories of destinations if needed. " +
+          "Partial failures will not stop the entire operation. " +
+          "All sources and destinations must be within allowed directories.",
+        inputSchema: MoveFilesArgsSchema,
+      },
+      async ({ items, overwrite }) =>
+        this.executeTool("move_files", () =>
+          handleMoveFiles(items, overwrite, this.allowedDirectories),
+        ),
+    );
 
-          case "search_files": {
-            const parsed = SearchFilesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for search_files: ${parsed.error}`);
-            }
-            
-            const result = await handleSearchFiles(
-              parsed.data.paths,
-              parsed.data.pattern,
-              parsed.data.excludePatterns,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          case "search_regexes": {
-            const parsed = SearchRegexArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for search_regexes: ${parsed.error}`);
-            }
-            
-            const result = await handleSearchRegex(
-              parsed.data.paths,
-              parsed.data.pattern,
-              parsed.data.filePatterns,
-              parsed.data.excludePatterns,
-              parsed.data.maxResults,
-              parsed.data.caseSensitive,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          case "search_globs": {
-            const parsed = SearchGlobArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for search_globs: ${parsed.error}`);
-            }
-            
-            const result = await handleSearchGlob(
-              parsed.data.paths,
-              parsed.data.pattern,
-              parsed.data.excludePatterns,
-              parsed.data.maxResults,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
+    this.server.registerTool(
+      "search_files",
+      {
+        description:
+          "Recursively search one or more root paths for files/directories. Works with a single root path too. " +
+          "Case-insensitive matching. Supports exclude patterns with glob format. " +
+          "Returns full paths to matches for each requested root path. " +
+          "Only searches within allowed directories.",
+        inputSchema: SearchFilesArgsSchema,
+      },
+      async ({ paths, pattern, excludePatterns }) =>
+        this.executeTool("search_files", () =>
+          handleSearchFiles(
+            paths,
+            pattern,
+            excludePatterns,
+            this.allowedDirectories,
+          ),
+        ),
+    );
 
-          case "count_lines": {
-            const parsed = CountLinesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for count_lines: ${parsed.error}`);
-            }
-            
-            const result = await handleCountLines(
-              parsed.data.paths,
-              parsed.data.recursive,
-              parsed.data.pattern,
-              parsed.data.filePattern,
-              parsed.data.excludePatterns,
-              parsed.data.ignoreEmptyLines,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          
-          
-          case "checksum_files": {
-            const parsed = ChecksumFilesArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for checksum_files: ${parsed.error}`);
-            }
-            
-            const result = await handleChecksumFiles(
-              parsed.data.paths,
-              parsed.data.algorithm,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          case "checksum_files_verif": {
-            const parsed = ChecksumFilesVerifArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for checksum_files_verif: ${parsed.error}`);
-            }
-            
-            const result = await handleChecksumFilesVerif(
-              parsed.data.files,
-              parsed.data.algorithm,
-              this.allowedDirectories
-            );
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
-          
-          case "get_file_infos": {
-            const parsed = GetFileInfoArgsSchema.safeParse(args);
-            if (!parsed.success) {
-              throw new Error(`Invalid arguments for get_file_infos: ${parsed.error}`);
-            }
-            
-            const result = await handleGetFileInfo(parsed.data.paths, this.allowedDirectories);
-            await this.log("info", "tools", { event: "result", tool: name });
-            
-            return {
-              content: [{ type: "text", text: result }],
-            };
-          }
+    this.server.registerTool(
+      "search_regexes",
+      {
+        description:
+          "Search file contents with regular expressions across one or more root paths. Works with a single root path too. " +
+          "Recursively searches all files in each specified root path, supports filtering files by patterns, and returns matching lines with line numbers and context. " +
+          "Only searches within allowed directories.",
+        inputSchema: SearchRegexArgsSchema,
+      },
+      async ({
+        paths,
+        pattern,
+        filePatterns,
+        excludePatterns,
+        maxResults,
+        caseSensitive,
+      }) =>
+        this.executeTool("search_regexes", () =>
+          handleSearchRegex(
+            paths,
+            pattern,
+            filePatterns,
+            excludePatterns,
+            maxResults,
+            caseSensitive,
+            this.allowedDirectories,
+          ),
+        ),
+    );
 
-          case "list_allowed_directories": {
-            return {
-              content: [{
-                type: "text",
-                text: `Allowed directories:\n${this.allowedDirectories.join('\n')}`
-              }],
-            };
-          }
+    this.server.registerTool(
+      "search_globs",
+      {
+        description:
+          "Find files using glob patterns across one or more root paths. Works with a single root path too. " +
+          "Supports powerful patterns like '**/*.js' or 'src/**/*.{ts,tsx}', allows exclude filters, and returns full paths to matching files for each requested root path. " +
+          "Only searches within allowed directories.",
+        inputSchema: SearchGlobArgsSchema,
+      },
+      async ({ paths, pattern, excludePatterns, maxResults }) =>
+        this.executeTool("search_globs", () =>
+          handleSearchGlob(
+            paths,
+            pattern,
+            excludePatterns,
+            maxResults,
+            this.allowedDirectories,
+          ),
+        ),
+    );
 
-          default:
-            throw new Error(`Unknown tool: ${name}`);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        await this.log("error", "tools", { event: "error", error: errorMessage });
-        return {
-          content: [{ type: "text", text: `Error: ${errorMessage}` }],
-          isError: true,
-        };
-      }
-    });
+    this.server.registerTool(
+      "count_lines",
+      {
+        description:
+          "Count lines for one or more file or directory paths. Works with a single path too. " +
+          "Can recursively count lines in multiple files, filter lines with regex patterns, and skip empty lines. " +
+          "Returns counts by file and totals for each requested path scope. " +
+          "Only works within allowed directories.",
+        inputSchema: CountLinesArgsSchema,
+      },
+      async ({
+        paths,
+        recursive,
+        pattern,
+        filePattern,
+        excludePatterns,
+        ignoreEmptyLines,
+      }) =>
+        this.executeTool("count_lines", () =>
+          handleCountLines(
+            paths,
+            recursive,
+            pattern,
+            filePattern,
+            excludePatterns,
+            ignoreEmptyLines,
+            this.allowedDirectories,
+          ),
+        ),
+    );
+
+    this.server.registerTool(
+      "checksum_files",
+      {
+        description:
+          "Generate checksums for multiple files. Works on a single file too. " +
+          "Supports md5, sha1, sha256, and sha512 algorithms. " +
+          "Returns hashes for all files in a consistent format. " +
+          "Only works within allowed directories.",
+        inputSchema: ChecksumFilesArgsSchema,
+      },
+      async ({ paths, algorithm }) =>
+        this.executeTool("checksum_files", () =>
+          handleChecksumFiles(paths, algorithm, this.allowedDirectories),
+        ),
+    );
+
+    this.server.registerTool(
+      "checksum_files_verif",
+      {
+        description:
+          "Verify multiple files against expected checksums. Works on a single file too. " +
+          "Supports md5, sha1, sha256, and sha512 algorithms. " +
+          "Returns verification results for all files. " +
+          "Only works within allowed directories.",
+        inputSchema: ChecksumFilesVerifArgsSchema,
+      },
+      async ({ files, algorithm }) =>
+        this.executeTool("checksum_files_verif", () =>
+          handleChecksumFilesVerif(
+            files,
+            algorithm,
+            this.allowedDirectories,
+          ),
+        ),
+    );
+
+    this.server.registerTool(
+      "get_file_infos",
+      {
+        description:
+          "Get detailed file or directory metadata for one or more paths. Works with a single path too. " +
+          "Returns size, creation time, modified time, access time, type, and permissions for each requested path. " +
+          "Only works within allowed directories.",
+        inputSchema: GetFileInfoArgsSchema,
+      },
+      async ({ paths }) =>
+        this.executeTool("get_file_infos", () =>
+          handleGetFileInfo(paths, this.allowedDirectories),
+        ),
+    );
+
+    this.server.registerTool(
+      "list_allowed_directories",
+      {
+        description:
+          "List all directories the server is allowed to access. " +
+          "No input required. " +
+          "Returns directories that this server can read/write from.",
+      },
+      async () => ({
+        content: [
+          {
+            type: "text",
+            text: `Allowed directories:\n${this.allowedDirectories.join("\n")}`,
+          },
+        ],
+      }),
+    );
+  }
+
+  private async executeTool(
+    name: string,
+    action: () => Promise<string>,
+  ): Promise<CallToolResult> {
+    try {
+      await this.log("info", "tools", { event: "call", tool: name });
+      const result = await action();
+      await this.log("info", "tools", { event: "result", tool: name });
+
+      return {
+        content: [{ type: "text", text: result }],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      await this.log("error", "tools", {
+        event: "error",
+        tool: name,
+        error: errorMessage,
+      });
+
+      return {
+        content: [{ type: "text", text: `Error: ${errorMessage}` }],
+        isError: true,
+      };
+    }
   }
 
   async connect() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("Secure MCP Filesystem Server running on stdio");
+    console.error("MCP Filesystem Extended Server running on stdio");
     console.error("Allowed directories:", this.allowedDirectories);
     await this.log("info", "main", { message: "Server connected via stdio" });
   }
