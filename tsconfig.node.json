@@ -1,0 +1,83 @@
+/*
+ *▄▄▄·▄▄▄  ▪   ▌ ▐· ▄▄▄· ·▄▄▄▄  ▄▄▄ . ▐ ▄ ▄▄▄▄▄
+ *▐█ ▄█▀▄ █·██ ▪█·█▌▐█ ▀█ ██▪ ██ ▀▄.▀·•█▌▐█•██
+ *██▀·▐▀▀▄ ▐█·▐█▐█•▄█▀▀█ ▐█· ▐█▌▐▀▀▪▄▐█▐▐▌ ▐█.▪
+ *▐█▪·•▐█•█▌▐█▌ ███ ▐█ ▪▐▌██. ██ ▐█▄▄▌██▐█▌ ▐█▌·
+ *.▀   .▀  ▀▀▀▀. ▀   ▀  ▀ ▀▀▀▀▀•  ▀▀▀ ▀▀ █▪ ▀▀▀
+ * © privadent GmbH. All rights reserved.
+ * Unauthorized copying, distribution, or modification of this software is strictly prohibited.
+ */
+{
+
+  /**
+   * $schema: Better IDE support (completion/validation).
+   */
+  "$schema": "https://json.schemastore.org/tsconfig",
+
+  /**
+   * CompilerOptions: Node-specific overrides added to strict base.
+   */
+  "compilerOptions": {
+
+    /**
+     * AllowJs: Permit .js/.mjs files for tooling/config interop.
+     * Example:.
+     * ```ts
+     * import "./register.js";
+     * ```
+     */
+    "allowJs": true,
+
+    /**
+     * Composite: Required for project references / incremental builds.
+     * Example:.
+     * ```bash
+     * tsc -b
+     * ```
+     */
+    "composite": true,
+
+    /**
+     * IsolatedDeclarations: Explicitly disabled here to avoid conflict with allowJs.
+     */
+    "isolatedDeclarations": false,
+
+    /**
+     * ModuleDetection: Force module mode for all files.
+     * Example:.
+     * ```ts
+     * export {}; // marks file as a module
+     * ```
+     */
+    "moduleDetection": "force",
+
+    /**
+     * SkipLibCheck: Do not skip checking d.ts files (max strictness).
+     */
+    "skipLibCheck": false,
+
+    /**
+     * Types: Include Node globals (process, Buffer, etc.).
+     * Example:.
+     * ```ts
+     * console.log(process.version);
+     * ```
+     */
+    "types": ["node"]
+  },
+
+  /**
+   * Extends: Inherit strict enterprise defaults from base.
+   */
+  "extends": "./tsconfig.base.json",
+
+  /**
+   * Include: Files to be type-checked by this project.
+   */
+  "include": [
+    "src/**/*.ts",
+    "tooling/**/*.ts",
+    "global.d.ts",
+    "*.config.ts"
+  ]
+}

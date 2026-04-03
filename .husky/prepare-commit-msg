@@ -1,0 +1,12 @@
+# Only run prompt for interactive commits (skip merges, reverts, and when message is provided)
+case "$2" in
+  merge|squash|revert) exit 0 ;;
+  *) ;;
+esac
+
+# Skip if a commit message already exists (e.g., via -m)
+[ -s "$1" ] && exit 0
+
+# Launch commit prompt; writes to $1
+# Using @commitlint/prompt-cli which respects commitlint.config.* prompt settings
+pnpm --silent dlx @commitlint/prompt-cli --hook --color > "$1" 2>/dev/null || true
