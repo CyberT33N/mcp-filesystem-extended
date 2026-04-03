@@ -27,7 +27,7 @@ const destination = (() => {
 
 const logger = pino(
   {
-    level: process.env.PINO_LOG_LEVEL || "debug",
+    level: process.env["PINO_LOG_LEVEL"] || "debug",
     formatters: {
       level: (label) => ({ level: label.toUpperCase() }),
     },
@@ -41,6 +41,22 @@ const logger = pino(
 );
 
 export default logger;
+
+/**
+ * Forces the shared logger infrastructure to be initialized at the runtime boundary.
+ *
+ * @returns Nothing. The call exists to make logger bootstrap explicit at the application entrypoint.
+ */
+export function initializeLogger(): void {
+  void logger;
+}
+
+/**
+ * Creates a child logger for a stable module boundary.
+ *
+ * @param moduleName - Stable module identifier that will be attached to emitted log records.
+ * @returns A child logger bound to the requested module name.
+ */
 export function createModuleLogger(moduleName: string) {
   return logger.child({ module: moduleName });
 }

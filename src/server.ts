@@ -7,7 +7,6 @@ import {
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import "./utils/logger.js";
 
 // Import all schemas
 import { ReadFilesArgsSchema } from "./batch_read_files/schema.js";

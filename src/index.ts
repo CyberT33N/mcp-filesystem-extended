@@ -1,4 +1,5 @@
 import { FilesystemServer } from "./server.js";
+import { initializeLogger } from "./utils/logger.js";
 
 async function main(): Promise<void> {
   const allowedDirectories = process.argv.slice(2);
@@ -7,6 +8,8 @@ async function main(): Promise<void> {
     console.error("At least one allowed directory must be provided.");
     process.exit(1);
   }
+
+  initializeLogger();
 
   const server = new FilesystemServer(allowedDirectories);
 
