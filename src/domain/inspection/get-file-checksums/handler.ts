@@ -1,5 +1,5 @@
-import { calculateFileHash, type HashAlgorithm } from "@infrastructure/filesystem/checksum.js";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
+import { calculateFileHash, type HashAlgorithm } from "@infrastructure/filesystem/checksum";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 export interface FileChecksumEntry {
   path: string;

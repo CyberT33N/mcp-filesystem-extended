@@ -1,7 +1,7 @@
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
-import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter.js";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
+import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
-import { searchFiles } from "./helpers.js";
+import { searchFiles } from "./helpers";
 
 export interface FindPathsByNameRootResult {
   root: string;

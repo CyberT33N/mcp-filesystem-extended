@@ -4,9 +4,9 @@ file_id: "3-application-server"
 unit_name: "Application Server Composition and Tool-Catalog Decomposition"
 parent_orchestration: "../../PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "done"
 total_tasks: 4
-completed_tasks: 0
+completed_tasks: 4
 has_sub_units: false
 sub_unit_count: 0
 ---
@@ -17,45 +17,45 @@ sub_unit_count: 0
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/3-application-server/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/4 tasks
+- **Unit Status:** done
+- **Progress:** 4/4 tasks
 
 ## Tasks
-- [ ] **3.1 Inspection registration module extraction** → [`3.1-inspection-registration-module-extraction.md`](./3.1-inspection-registration-module-extraction.md)
+- [x] **3.1 Inspection registration module extraction** → [`3.1-inspection-registration-module-extraction.md`](./3.1-inspection-registration-module-extraction.md)
   - Classification: `WAITING`
-  - Status: `pending`
+  - Status: `DONE`
   - Complexity: `MEDIUM`
   - Files Modified: `src/application/server/register-inspection-tool-catalog.ts`
-  - Blocked By: `PLAN:D1`
+  - Blocked By: `none`
   - Summary: Create a dedicated application-layer inspection registration module that consumes the finalized domain-owned inspection schemas and keeps registration logic out of the monolithic catalog root.
-- [ ] **3.2 Comparison and mutation registration module extraction** → [`3.2-comparison-and-mutation-registration-module-extraction.md`](./3.2-comparison-and-mutation-registration-module-extraction.md)
+- [x] **3.2 Comparison and mutation registration module extraction** → [`3.2-comparison-and-mutation-registration-module-extraction.md`](./3.2-comparison-and-mutation-registration-module-extraction.md)
   - Classification: `WAITING`
-  - Status: `pending`
+  - Status: `DONE`
   - Complexity: `HIGH`
   - Files Modified: `src/application/server/register-comparison-and-mutation-tool-catalog.ts`
-  - Blocked By: `PLAN:D2`
+  - Blocked By: `none`
   - Summary: Create a dedicated application-layer registration module for comparison and mutation tools that imports finalized domain contracts and eliminates central registration sprawl.
-- [ ] **3.3 Registration presets and server-scope tool isolation** → [`3.3-registration-presets-and-server-scope-tool-isolation.md`](./3.3-registration-presets-and-server-scope-tool-isolation.md)
+- [x] **3.3 Registration presets and server-scope tool isolation** → [`3.3-registration-presets-and-server-scope-tool-isolation.md`](./3.3-registration-presets-and-server-scope-tool-isolation.md)
   - Classification: `ISOLATED`
-  - Status: `pending`
+  - Status: `DONE`
   - Complexity: `MEDIUM`
   - Files Modified: `src/application/server/tool-registration-presets.ts`, `src/application/server/register-server-scope-tools.ts`
   - Blocked By: `none`
   - Summary: Extract annotation presets, execution presets, and server-scope-only registration concerns into dedicated application modules so the composition root stays thin and purpose-specific.
-- [ ] **3.4 Final composition root slim-down and server wiring update** → [`3.4-final-composition-root-slim-down-and-server-wiring-update.md`](./3.4-final-composition-root-slim-down-and-server-wiring-update.md)
+- [x] **3.4 Final composition root slim-down and server wiring update** → [`3.4-final-composition-root-slim-down-and-server-wiring-update.md`](./3.4-final-composition-root-slim-down-and-server-wiring-update.md)
   - Classification: `WAITING`
-  - Status: `pending`
+  - Status: `DONE`
   - Complexity: `HIGH`
   - Files Modified: `src/application/server/register-tool-catalog.ts`, `src/application/server/filesystem-server.ts`
-  - Blocked By: `3.1, 3.2, 3.3`
+  - Blocked By: `none`
   - Summary: Replace the oversized catalog body with a composition root that delegates to bounded registration modules and keep filesystem-server wiring aligned to the decomposed application topology.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
-| D1 | 3.1 | 3.4 | SEQUENTIAL | UNRESOLVED | The final composition root update must wait until the dedicated inspection registration module exists and exposes its stable application registration surface. | none |
-| D2 | 3.2 | 3.4 | SEQUENTIAL | UNRESOLVED | The final composition root update must wait until the comparison and mutation registration module exists and exposes its stable application registration surface. | none |
-| D3 | 3.3 | 3.4 | SEQUENTIAL | UNRESOLVED | The final composition root update must wait until registration presets and server-scope isolation modules exist so the root can delegate instead of re-declaring these concerns inline. | none |
+| D1 | 3.1 | 3.4 | SEQUENTIAL | RESOLVED | The final composition root update must wait until the dedicated inspection registration module exists and exposes its stable application registration surface. | none |
+| D2 | 3.2 | 3.4 | SEQUENTIAL | RESOLVED | The final composition root update must wait until the comparison and mutation registration module exists and exposes its stable application registration surface. | none |
+| D3 | 3.3 | 3.4 | SEQUENTIAL | RESOLVED | The final composition root update must wait until registration presets and server-scope isolation modules exist so the root can delegate instead of re-declaring these concerns inline. | none |
 
 ## Execution Order
 1. Start `3.3` immediately because it does not depend on upstream domain completion.

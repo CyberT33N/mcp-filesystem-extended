@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SearchFilesArgsSchema = z.object({
+export const FindPathsByNameArgsSchema = z.object({
   roots: z
     .array(z.string())
     .min(1)
@@ -17,4 +17,14 @@ export const SearchFilesArgsSchema = z.object({
     .optional()
     .default([])
     .describe("Glob patterns that should be excluded from the path search."),
+});
+
+export const FindPathsByNameResultSchema = z.object({
+  roots: z.array(
+    z.object({
+      root: z.string(),
+      matches: z.array(z.string()),
+    }),
+  ),
+  totalMatches: z.number(),
 });

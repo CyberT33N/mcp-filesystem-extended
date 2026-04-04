@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 export async function handleAppendFiles(
   files: Array<{path: string, content: string}>, 

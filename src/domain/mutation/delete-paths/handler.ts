@@ -1,7 +1,7 @@
 import fs from "fs/promises";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
 
-export async function handleDeleteFiles(
+export async function handleDeletePaths(
   paths: string[],
   recursive: boolean,
   allowedDirectories: string[]
@@ -10,10 +10,10 @@ export async function handleDeleteFiles(
   const errors: string[] = [];
 
   await Promise.all(
-    paths.map(async (filePath) => {
+    paths.map(async (targetPath) => {
       try {
         // Validate path is within allowed directories
-        const validPath = await validatePath(filePath, allowedDirectories);
+        const validPath = await validatePath(targetPath, allowedDirectories);
         
         // Get file stats to determine if it's a file or directory
         const stats = await fs.stat(validPath);
@@ -21,18 +21,18 @@ export async function handleDeleteFiles(
         if (stats.isDirectory()) {
           if (recursive) {
             await fs.rm(validPath, { recursive: true, force: true });
-            results.push(`Successfully deleted directory: ${filePath}`);
+            results.push(`Successfully deleted directory: ${targetPath}`);
           } else {
             throw new Error("Cannot delete directory without recursive flag");
           }
         } else {
           // Delete the file
           await fs.unlink(validPath);
-          results.push(`Successfully deleted file: ${filePath}`);
+          results.push(`Successfully deleted file: ${targetPath}`);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        errors.push(`Failed to delete ${filePath}: ${errorMessage}`);
+        errors.push(`Failed to delete ${targetPath}: ${errorMessage}`);
       }
     })
   );

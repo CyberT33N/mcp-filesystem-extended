@@ -1,15 +1,15 @@
 import fs from "fs/promises";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
-import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter.js";
-import { createUnifiedDiff } from "@infrastructure/formatting/unified-diff.js";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
+import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
+import { createUnifiedDiff } from "@infrastructure/formatting/unified-diff";
 
-interface FileDiffOperation {
+interface DiffFilesPair {
   file1: string;
   file2: string;
 }
 
 async function getFormattedFileDiff(
-  operation: FileDiffOperation,
+  operation: DiffFilesPair,
   allowedDirectories: string[]
 ): Promise<string> {
   const validFile1Path = await validatePath(operation.file1, allowedDirectories);
@@ -33,11 +33,11 @@ async function getFormattedFileDiff(
 }
 
 export async function handleFileDiff(
-  operations: FileDiffOperation[],
+  operations: DiffFilesPair[],
   allowedDirectories: string[]
 ): Promise<string> {
   if (operations.length === 1) {
-    return getFormattedFileDiff(operations[0], allowedDirectories);
+    return getFormattedFileDiff(operations[0]!, allowedDirectories);
   }
 
   const results = await Promise.all(
@@ -58,5 +58,5 @@ export async function handleFileDiff(
     })
   );
 
-  return formatBatchTextOperationResults("file diff", results);
+  return formatBatchTextOperationResults("diff files", results);
 }

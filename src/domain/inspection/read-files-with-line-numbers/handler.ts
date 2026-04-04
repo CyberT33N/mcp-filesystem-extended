@@ -1,5 +1,5 @@
 import fs from "fs/promises";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 export async function handleReadFiles(filePaths: string[], allowedDirectories: string[]): Promise<string> {
   const results = await Promise.all(

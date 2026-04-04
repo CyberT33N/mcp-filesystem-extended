@@ -1,15 +1,15 @@
 import fs from "fs/promises";
 import path from "path";
-import { normalizePath, validatePath } from "@infrastructure/filesystem/path-guard.js";
+import { normalizePath, validatePath } from "@infrastructure/filesystem/path-guard";
 
-export interface CopyFileOperation {
+export interface CopyPathsOperation {
   source: string;
   destination: string;
   recursive: boolean;
   overwrite: boolean;
 }
 
-export interface PreparedCopyFileOperation extends CopyFileOperation {
+export interface PreparedCopyPathsOperation extends CopyPathsOperation {
   validSourcePath: string;
   validDestinationPath: string;
 }
@@ -30,12 +30,12 @@ function arePathsEqualOrNested(leftPath: string, rightPath: string): boolean {
   );
 }
 
-function buildOperationLabel(operation: PreparedCopyFileOperation): string {
+function buildOperationLabel(operation: PreparedCopyPathsOperation): string {
   return `${operation.source} -> ${operation.destination}`;
 }
 
 export async function assertCopyOperationsAreSafeForParallelExecution(
-  operations: PreparedCopyFileOperation[]
+  operations: PreparedCopyPathsOperation[]
 ): Promise<void> {
   for (const operation of operations) {
     const sourceStats = await fs.stat(operation.validSourcePath);

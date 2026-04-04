@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ContentDiffArgsSchema = z.object({
+export const DiffTextContentArgsSchema = z.object({
   pairs: z
     .array(
       z.object({

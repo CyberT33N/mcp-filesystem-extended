@@ -1,8 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
-import { validatePathForCreation } from "@infrastructure/filesystem/path-guard.js";
+import { validatePathForCreation } from "@infrastructure/filesystem/path-guard";
 
-export async function handleWriteNewFiles(
+export async function handleCreateFiles(
   files: Array<{path: string, content: string}>, 
   allowedDirectories: string[]
 ): Promise<string> {
@@ -19,7 +19,7 @@ export async function handleWriteNewFiles(
         try {
           await fs.access(validPath);
           // If we get here, the file exists
-          throw new Error(`File already exists. Use patch_files to modify existing files.`);
+          throw new Error(`File already exists. Use replace_file_line_ranges to modify existing files.`);
         } catch (accessError) {
           // File doesn't exist, which is what we want for this function
           if ((accessError as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -35,10 +35,10 @@ export async function handleWriteNewFiles(
         // Write file content
         await fs.writeFile(validPath, file.content, "utf-8");
         
-        results.push(`Successfully wrote to ${file.path}`);
+        results.push(`Successfully created file: ${file.path}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        errors.push(`Failed to write file ${file.path}: ${errorMessage}`);
+        errors.push(`Failed to create file ${file.path}: ${errorMessage}`);
       }
     })
   );
@@ -48,7 +48,7 @@ export async function handleWriteNewFiles(
   const errorCount = errors.length;
   
   let output = `Processed ${successCount + errorCount} files:\n`;
-  output += `- ${successCount} files written successfully\n`;
+  output += `- ${successCount} files created successfully\n`;
   
   if (errorCount > 0) {
     output += `- ${errorCount} files failed\n\n`;

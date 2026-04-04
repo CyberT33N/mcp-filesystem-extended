@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SearchGlobArgsSchema = z.object({
+export const FindFilesByGlobArgsSchema = z.object({
   roots: z
     .array(z.string())
     .min(1)
@@ -18,4 +18,16 @@ export const SearchGlobArgsSchema = z.object({
     .default([])
     .describe("Glob patterns that should be excluded from the file search scope."),
   maxResults: z.number().optional().default(500).describe("Maximum number of results to return"),
+});
+
+export const FindFilesByGlobResultSchema = z.object({
+  roots: z.array(
+    z.object({
+      root: z.string(),
+      matches: z.array(z.string()),
+      truncated: z.boolean(),
+    }),
+  ),
+  totalMatches: z.number(),
+  truncated: z.boolean(),
 });

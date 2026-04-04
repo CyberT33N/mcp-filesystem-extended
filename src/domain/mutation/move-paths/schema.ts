@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const MoveFilesArgsSchema = z.object({
+export const MovePathsArgsSchema = z.object({
   operations: z
     .array(
       z.object({

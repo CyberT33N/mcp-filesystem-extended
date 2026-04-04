@@ -1,7 +1,7 @@
-import { calculateFileHash, type HashAlgorithm } from "@infrastructure/filesystem/checksum.js";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
+import { calculateFileHash, type HashAlgorithm } from "@infrastructure/filesystem/checksum";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
 
-import { validateHash } from "./helpers.js";
+import { validateHash } from "./helpers";
 
 interface FileVerificationResult {
   path: string;

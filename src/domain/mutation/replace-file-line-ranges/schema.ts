@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const PatchFilesArgsSchema = z.object({
+export const ReplaceFileLineRangesArgsSchema = z.object({
   files: z
     .array(
       z.object({

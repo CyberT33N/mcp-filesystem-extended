@@ -1,14 +1,14 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio";
 import {
   SetLevelRequestSchema,
   type CallToolResult,
   type LoggingMessageNotification,
-} from "@modelcontextprotocol/sdk/types.js";
+} from "@modelcontextprotocol/sdk/types";
 
-import { registerToolCatalog } from "./register-tool-catalog.js";
-import { SERVER_DESCRIPTION } from "./server-description.js";
-import { SERVER_INSTRUCTIONS } from "./server-instructions.js";
+import { registerToolCatalog } from "./register-tool-catalog";
+import { SERVER_DESCRIPTION } from "./server-description";
+import { SERVER_INSTRUCTIONS } from "./server-instructions";
 
 type LoggingLevel = LoggingMessageNotification["params"]["level"];
 

@@ -6,266 +6,164 @@
 ## 1. Scope Overview
 [INTENT: CONTEXT]
 
-This workspace contains the TypeScript implementation of a secure filesystem MCP server.
-The current architecture exposes one canonical structured directory-entry listing surface named `list_directory_entries`, keeps repository-wide tool registration in `src/server.ts`, and centralizes optional filesystem metadata in `src/file_infos/metadata.ts`.
-The consolidated listing flow returns TOON by default, always includes the required `type` field for each entry, supports recursive traversal by default, and exposes optional metadata only when explicitly requested.
+This document describes only the final target-state architecture of the workspace.
+The workspace implements a local filesystem MCP server whose public tool surface is composed by the application layer, whose tool behavior and contracts are owned by domain modules, and whose reusable technical capabilities remain inside infrastructure boundaries.
 
 ---
 
-## 2. Information Register
+## 2. Final Architecture Register
 [INTENT: REFERENCE]
 
-| ID | Type | Description | Change | Status |
-|----|------|-------------|--------|--------|
-| REQ-001 | REQUIREMENT | Canonical directory-entry listing is exposed through `list_directory_entries`. | Yes | Active |
-| REQ-002 | REQUIREMENT | `recursive=false` returns same-level files and directories only. | Yes | Active |
-| REQ-003 | REQUIREMENT | Structured directory-entry responses are encoded in TOON by default. | Yes | Active |
-| CONV-001 | CONSTRAINT | Entry metadata is centralized in `src/file_infos/metadata.ts`. | Yes | Active |
-| CONV-002 | CONSTRAINT | Every listed entry must always include the required `type` field. | Yes | Active |
-| INFO-001 | INFORMATION | The root server registry and package manifest align the consolidated tool surface and TOON dependency. | Yes | Active |
+| ID | Type | Description | Status |
+|----|------|-------------|--------|
+| ARCH-001 | REQUIREMENT | The application layer owns MCP initialization, tool catalog composition, server description/instructions, and server-scope registration. | Active |
+| ARCH-002 | REQUIREMENT | Domain modules own tool handlers, schemas, and structured result contracts for inspection, comparison, and mutation behavior. | Active |
+| ARCH-003 | REQUIREMENT | `list_allowed_directories` remains a server-scope tool and is not moved into the filesystem behavior domains. | Active |
+| ARCH-004 | CONSTRAINT | Infrastructure owns technical boundaries such as path guarding and canonical logging without becoming a second tool-contract surface. | Active |
+| ARCH-005 | CONSTRAINT | Root documentation describes the final architecture only and does not retain flat per-tool or monolithic-registration narratives. | Active |
+| ARCH-006 | INFORMATION | The final system is explained explicitly from DDD, enterprise-grade modularity, MCP composition, and 12-Factor viewpoints. | Active |
 
 ---
 
 ## 3. Information Units
 [INTENT: SPECIFICATION]
 
-### 3.1 REQ-001: Canonical Directory-Entry Listing Surface
+### 3.1 ARCH-001: Application server shell and composition root
 [INTENT: SPECIFICATION]
 
-**Type:** REQUIREMENT
+**Description:**
+`src/application/server/` is the MCP-facing shell of the system. It owns server creation, lifecycle, transport connection, root logging capability handling, tool catalog composition, server description, and server instructions.
+
+**Final State:**
+- `filesystem-server.ts` creates `McpServer`, owns the allowed-directory scope, handles root log-level updates, and wraps tool execution for logging and result normalization.
+- `register-tool-catalog.ts` is the thin composition root that delegates registration instead of containing one large inlined catalog.
+- `register-inspection-tool-catalog.ts`, `register-comparison-and-mutation-tool-catalog.ts`, and `register-server-scope-tools.ts` expose bounded registration modules.
+- `tool-registration-presets.ts` owns reusable annotation and execution presets shared across registration modules.
+- `server-description.ts` and `server-instructions.ts` define the stable MCP initialization narrative.
+
+**Architectural Implication:**
+The application layer owns orchestration and exposure, not domain behavior. It composes the public tool surface from domain-owned contracts and server-owned concerns.
+
+### 3.2 ARCH-002: Domain-owned behavior and contract surfaces
+[INTENT: SPECIFICATION]
 
 **Description:**
-The workspace exposes one canonical structured directory-entry listing surface through the MCP tool `list_directory_entries`.
-This surface is the single source of truth for directory listing behavior and replaces parallel listing semantics inside the active codebase.
+Domain modules own the behavior, schemas, and structured result contracts for the tool families they implement.
 
-**Current State:**
-The tool registration in `src/server.ts` binds `list_directory_entries` to a dedicated handler and schema under `src/list-directory-entries`.
-The handler produces a structured payload with `roots`, `entries`, nested `children` when recursion is enabled, and a required `type` field on every returned entry.
+**Final State:**
+- `src/domain/inspection/` owns inspection-oriented capabilities such as directory listing, direct file reading, metadata lookup, search, line counting, and checksum workflows.
+- `src/domain/comparison/` owns diff-oriented capabilities.
+- `src/domain/mutation/` owns additive, destructive, and targeted filesystem mutations such as create, append, copy, move, delete, directory creation, and line-range replacement.
+- The application layer imports these domain surfaces and registers them without cloning or renaming them into a second contract catalog.
 
-**Target State:**
-The workspace should continue to expose only one structured directory-entry listing surface for this responsibility, with parameterized traversal and formatting behavior instead of parallel endpoint families.
+**Architectural Implication:**
+Schema ownership follows behavior ownership. The domain layer is the single source of truth for tool-specific contracts.
 
-**Affected Files:**
+### 3.3 ARCH-003: Server-scope boundary
+[INTENT: SPECIFICATION]
 
-| Path | Relevance | Elements |
-|------|-----------|----------|
-| `src/server.ts` | Root MCP tool registration and request dispatch | `ListToolsRequestSchema`, `CallToolRequestSchema`, `list_directory_entries` |
-| `src/list-directory-entries/handler.ts` | Canonical directory-entry traversal and TOON encoding | `handleListDirectoryEntries`, `collectDirectoryEntries`, `ListedDirectoryEntry` |
-| `src/list-directory-entries/schema.ts` | Canonical input contract for listing behavior | `ListDirectoryEntriesArgsSchema` |
+**Description:**
+Some capabilities describe the server execution boundary rather than filesystem business behavior.
 
-**Positive Example(s):**
-- A caller omits `recursive`, and the returned payload includes nested `children` beneath each requested root.
-- A caller sets `recursive: false` for `.` and receives same-level files and directories, each with an explicit `type`.
+**Final State:**
+- `list_allowed_directories` is registered in `register-server-scope-tools.ts`.
+- It remains application-owned because it describes runtime scope, not a domain filesystem operation.
+- This keeps the domain families focused on real filesystem capabilities while the server shell owns process- and transport-facing scope metadata.
 
-**Negative Example(s):**
-- A separate shallow listing tool and a separate tree tool model the same responsibility in parallel.
-- A listing payload omits `type` and forces the caller to infer whether an entry is a file or directory.
+**Architectural Implication:**
+Server identity and exposure concerns remain in the application shell instead of leaking into domain modules.
+
+### 3.4 ARCH-004: Infrastructure technical boundary
+[INTENT: SPECIFICATION]
+
+**Description:**
+Infrastructure holds technical capabilities required by the higher layers without taking ownership of the public MCP catalog or domain contracts.
+
+**Final State:**
+- `src/infrastructure/filesystem/path-guard.ts` is the canonical boundary for allowed-directory enforcement, path normalization, home expansion, symlink validation, and creation-path safety checks.
+- `src/infrastructure/logging/logger.ts` is the canonical infrastructure logging surface through `initializeLogger()` and `createModuleLogger()`.
+- The infrastructure layer remains technical and reusable; it does not become a second application composition layer or a second domain contract registry.
+
+**Architectural Implication:**
+Technical concerns stay isolated, which keeps transport orchestration out of infrastructure and tool semantics out of technical helpers.
+
+### 3.5 ARCH-005: Final public tool surface
+[INTENT: SPECIFICATION]
+
+| Ownership | Public Tools |
+|-----------|--------------|
+| Inspection domain | `list_directory_entries`, `read_files_with_line_numbers`, `find_paths_by_name`, `find_files_by_glob`, `search_file_contents_by_regex`, `count_lines`, `get_path_metadata`, `get_file_checksums`, `verify_file_checksums` |
+| Comparison and mutation domains | `diff_files`, `diff_text_content`, `create_files`, `append_files`, `replace_file_line_ranges`, `create_directories`, `copy_paths`, `move_paths`, `delete_paths` |
+| Application/server scope | `list_allowed_directories` |
+
+**Constraint:**
+The documentation must describe this final catalog as the active surface and must not reintroduce obsolete flat per-tool or monolithic-registration narratives.
 
 ---
 
-### 3.2 REQ-002: Same-Level Semantics for `recursive=false`
-[INTENT: SPECIFICATION]
+## 4. Architectural Perspectives
+[INTENT: CONTEXT]
 
-**Type:** REQUIREMENT
+### 4.1 Domain-Driven Design (DDD)
+- Bounded contexts own their contracts.
+- The application layer coordinates exposure but does not become a second domain.
+- Inspection, comparison, and mutation behaviors remain separated by responsibility.
+- Server-scope concerns stay outside the behavior domains.
 
-**Description:**
-When `recursive` is set to `false`, the listing result must include all files and all directories on the exact level of the requested root path.
-It must not silently suppress directories in non-recursive mode.
+### 4.2 Enterprise-grade modularity
+- Bounded registration modules reduce coupling and make review surfaces smaller.
+- Shared presets keep policy wiring consistent across the catalog.
+- The composition root is intentionally thin, making future change safer and easier to audit.
+- The public surface remains cohesive even though internal ownership is modular.
 
-**Current State:**
-The consolidated handler models entries from the requested root path and distinguishes between recursive and same-level traversal through the `recursive` flag.
-The required `type` field remains present in both modes.
+### 4.3 MCP composition model
+- `FilesystemServer` is the shell that exposes the MCP surface.
+- Registration modules attach tools to the MCP server by ownership group.
+- Domain handlers provide the operational behavior and structured results.
+- The application shell wraps execution for call/result/error logging and client-facing MCP logging integration.
 
-**Target State:**
-Non-recursive listing must remain level-accurate and must continue to return both files and directories for the requested root path.
-
-**Affected Files:**
-
-| Path | Relevance | Elements |
-|------|-----------|----------|
-| `src/list-directory-entries/handler.ts` | Traversal semantics for same-level vs recursive behavior | `collectDirectoryEntries`, `recursive` handling |
-| `src/list-directory-entries/schema.ts` | Contract surface documenting the behavior | `recursive` |
-
-**Positive Example(s):**
-- `recursive: false` on `src` returns same-level directories such as `helpers` and `file_infos` together with same-level files such as `server.ts`.
-- `recursive: false` never emits deeper descendants below the current level.
-
-**Negative Example(s):**
-- `recursive: false` returns files only and drops same-level directories.
-- `recursive: false` still traverses into nested descendants below the requested root.
-
----
-
-### 3.3 REQ-003: TOON as the Default Structured Listing Format
-[INTENT: SPECIFICATION]
-
-**Type:** REQUIREMENT
-
-**Description:**
-The canonical structured listing surface encodes its response payload using TOON instead of JSON.
-The TOON representation is the default transport format for structured listing output.
-
-**Current State:**
-The handler imports `encode` from `@toon-format/toon` and encodes the structured `roots` payload into TOON before returning it to the MCP layer.
-The package manifest declares the TOON dependency used by the handler.
-
-**Target State:**
-Structured directory-entry listing should continue to use TOON as its default encoded output while preserving a schema-aligned payload model.
-
-**Affected Files:**
-
-| Path | Relevance | Elements |
-|------|-----------|----------|
-| `src/list-directory-entries/handler.ts` | Default output encoding | `encode`, `ListDirectoryEntriesResult` |
-| `package.json` | Dependency declaration for TOON support | `@toon-format/toon` |
-| `package-lock.json` | Lockfile alignment for the installed TOON dependency | package lock state |
-
-**Positive Example(s):**
-- The handler returns a TOON-encoded structure rooted at `roots`, preserving nested entry relationships and optional metadata fields.
-- The package manifest and lockfile both contain the TOON dependency required by the handler.
-
-**Negative Example(s):**
-- The handler serializes its structured listing payload as JSON while the contract declares TOON as the default output format.
-- The runtime uses TOON-specific code without the matching dependency being declared in the package manifest.
-
----
-
-### 3.4 CONV-001: Canonical Filesystem Metadata Surface
-[INTENT: SPECIFICATION]
-
-**Type:** CONSTRAINT
-
-**Description:**
-Optional listing metadata must originate from one canonical filesystem metadata surface.
-This canonical metadata surface lives in `src/file_infos/metadata.ts` and is shared by the listing flow and the `get_file_infos` flow.
-
-**Current State:**
-`src/file_infos/metadata.ts` exposes canonical entry-type resolution and metadata extraction.
-`src/file_infos/handler.ts` consumes that metadata surface instead of duplicating `fs.stat` mapping logic inside the formatting flow.
-
-**Target State:**
-Any future filesystem listing or metadata feature should consume the canonical metadata surface instead of re-implementing stat-to-field mapping locally.
-
-**Affected Files:**
-
-| Path | Relevance | Elements |
-|------|-----------|----------|
-| `src/file_infos/metadata.ts` | Canonical metadata source | `FileSystemEntryMetadata`, `getFileSystemEntryMetadata` |
-| `src/file_infos/handler.ts` | Existing metadata endpoint aligned to the canonical source | `getFormattedFileInfo` |
-| `src/list-directory-entries/handler.ts` | Optional metadata consumer | `includeMetadata`, `applyOptionalMetadata` |
-
-**Positive Example(s):**
-- `includeMetadata: true` on the listing tool adds `size`, `created`, `modified`, `accessed`, and `permissions` from the canonical metadata surface.
-- `get_file_infos` formats metadata from the same canonical source rather than duplicating stat-shape mapping.
-
-**Negative Example(s):**
-- The listing handler introduces a second local `fs.stat` mapping surface with different field names or formatting rules.
-- One endpoint renders permissions or timestamps differently than another endpoint for the same filesystem entry data.
-
----
-
-### 3.5 CONV-002: Required Type and Optional Metadata Discipline
-[INTENT: SPECIFICATION]
-
-**Type:** CONSTRAINT
-
-**Description:**
-Each listed entry must always expose `type` as a required field.
-Additional metadata fields are optional and are enabled only through the explicit metadata flag.
-
-**Current State:**
-The listing schema sets `includeMetadata` to `false` by default.
-The handler always resolves and returns `type`, while additional metadata fields are populated only when metadata inclusion is enabled.
-
-**Target State:**
-The required/optional distinction must remain stable: `type` is mandatory, and the remaining metadata fields remain explicitly opt-in.
-
-**Affected Files:**
-
-| Path | Relevance | Elements |
-|------|-----------|----------|
-| `src/list-directory-entries/schema.ts` | Canonical contract for metadata inclusion | `includeMetadata` |
-| `src/list-directory-entries/handler.ts` | Required entry type and optional metadata population | `type`, `size`, `created`, `modified`, `accessed`, `permissions` |
-| `src/file_infos/metadata.ts` | Canonical optional metadata fields | `FileSystemEntryMetadata` |
-
-**Positive Example(s):**
-- A listing entry contains `type: directory` even when `includeMetadata` is omitted.
-- A listing entry contains `type`, `size`, `created`, `modified`, `accessed`, and `permissions` when `includeMetadata: true` is set.
-
-**Negative Example(s):**
-- `type` is hidden behind the metadata flag.
-- Metadata fields appear by default without the caller explicitly opting in.
-
----
-
-### 3.6 INFO-001: Root Registry and Workspace Alignment
-[INTENT: SPECIFICATION]
-
-**Type:** INFORMATION
-
-**Description:**
-The workspace root remains the canonical registration and dependency surface for the MCP filesystem server.
-The consolidated tool integration is coordinated from the root server registry and the root package manifest.
-
-**Current State:**
-`src/server.ts` contains the MCP tool registration and request dispatch logic.
-The root `package.json` and `package-lock.json` align the runtime dependency set for the structured listing flow.
-
-**Target State:**
-The workspace root should continue to carry registry and dependency ownership for the server-level tool surface while feature implementations remain inside dedicated `src/<tool>` areas.
-
-**Affected Files:**
-
-| Path | Relevance | Elements |
-|------|-----------|----------|
-| `src/server.ts` | Root MCP registry and handler dispatch | `setupRequestHandlers` |
-| `package.json` | Runtime dependency surface | dependencies |
-| `package-lock.json` | Lockfile alignment | resolved dependency graph |
-
----
-
-## 4. Conventions and Constraints
-[INTENT: CONSTRAINT]
-
-- The workspace root is the confirmed metadata scope for this change set.
-- The canonical directory-entry listing surface is `list_directory_entries`.
-- TOON is the default transport format for structured listing output.
-- `recursive` defaults to `true`.
-- `recursive=false` must return same-level files and same-level directories only.
-- `type` is always required for each listed entry.
-- `includeMetadata` defaults to `false`.
-- Optional metadata fields are sourced from `src/file_infos/metadata.ts`.
-- Repository-level MCP tool registration remains centralized in `src/server.ts`.
+### 4.4 12-Factor positioning
+- The server shell stays stateless regarding business workflow progress.
+- Runtime scope is provided through allowed-directory configuration.
+- Server behavior is composed from modules instead of a single monolithic registry body.
+- Technical capabilities such as path guarding and logging remain replaceable boundaries behind stable layer ownership.
 
 ---
 
 ## 5. Path Index
 [INTENT: REFERENCE]
 
-| # | Path | Relevance | Unit IDs |
-|---|------|-----------|----------|
-| 1 | `src/server.ts` | Root MCP tool registration and dispatch | REQ-001, INFO-001 |
-| 2 | `src/list-directory-entries/handler.ts` | Canonical structured listing and TOON encoding | REQ-001, REQ-002, REQ-003, CONV-002 |
-| 3 | `src/list-directory-entries/schema.ts` | Canonical contract for traversal and metadata flags | REQ-001, REQ-002, CONV-002 |
-| 4 | `src/file_infos/metadata.ts` | Canonical metadata single source of truth | CONV-001, CONV-002 |
-| 5 | `src/file_infos/handler.ts` | Metadata endpoint aligned to the canonical metadata source | CONV-001 |
-| 6 | `package.json` | TOON dependency declaration | REQ-003, INFO-001 |
-| 7 | `package-lock.json` | Lockfile alignment for dependency changes | REQ-003, INFO-001 |
+| # | Path | Relevance |
+|---|------|-----------|
+| 1 | `src/application/server/filesystem-server.ts` | Application shell, MCP initialization, logging capability, execution wrapper |
+| 2 | `src/application/server/register-tool-catalog.ts` | Thin composition root for the full tool catalog |
+| 3 | `src/application/server/register-inspection-tool-catalog.ts` | Inspection registration boundary |
+| 4 | `src/application/server/register-comparison-and-mutation-tool-catalog.ts` | Comparison/mutation registration boundary |
+| 5 | `src/application/server/register-server-scope-tools.ts` | Server-scope registration boundary |
+| 6 | `src/application/server/tool-registration-presets.ts` | Shared application annotation and execution presets |
+| 7 | `src/application/server/server-description.ts` | Stable server description surface |
+| 8 | `src/application/server/server-instructions.ts` | Stable server instruction surface |
+| 9 | `src/infrastructure/filesystem/path-guard.ts` | Canonical path safety boundary |
+| 10 | `src/infrastructure/logging/logger.ts` | Canonical infrastructure logging boundary |
+| 11 | `PLAN.md` | Final migration summary and unit-level architecture contract |
+| 12 | `.plan/1-domain-inspection/orchestration.md` | Inspection-domain ownership narrative |
+| 13 | `.plan/2-domain-comparison-and-mutation/orchestration.md` | Comparison/mutation ownership narrative |
+| 14 | `.plan/3-application-server/orchestration.md` | Application composition narrative |
+| 15 | `.plan/4-infrastructure-and-delivery/orchestration.md` | Delivery-closeout narrative and remaining execution state |
 
 ---
 
 ## 6. Execution Context for LLM Agents
 [INTENT: CONTEXT]
 
-This workspace is a TypeScript MCP filesystem server with one root registration surface in `src/server.ts` and per-tool implementation areas under `src`.
-For the current architecture, treat `list_directory_entries` as the only canonical structured directory-entry listing surface.
-Use `src/file_infos/metadata.ts` as the single source of truth for optional filesystem metadata.
-Assume TOON is the default structured output format for the consolidated listing payload.
-When working on directory-entry behavior, preserve these invariants:
+Treat this workspace as a final-state modular MCP filesystem server.
+When describing or modifying the system:
 
-- `recursive` defaults to `true`
-- `recursive=false` returns same-level files and directories only
-- `type` is always required
-- additional metadata fields remain opt-in through `includeMetadata`
+- describe the current `application` / `domain` / `infrastructure` split,
+- keep contract ownership with the domain that owns the behavior,
+- keep server-scope concerns in the application shell,
+- keep path guarding and logging in infrastructure boundaries,
+- avoid reintroducing flat per-tool or monolithic registration narratives,
+- avoid historical migration framing when describing the architecture.
 
-Do not reintroduce parallel shallow-list and tree-list endpoint families for the same responsibility.
+This document is intentionally a final-state architectural reference for users, maintainers, and autonomous agents.

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const DeleteFilesArgsSchema = z.object({
+export const DeletePathsArgsSchema = z.object({
   paths: z
     .array(z.string())
     .min(1)

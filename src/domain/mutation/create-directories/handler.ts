@@ -1,6 +1,6 @@
 import fs from "fs/promises";
-import { validatePathForCreation } from "@infrastructure/filesystem/path-guard.js";
-import { createModuleLogger } from "@infrastructure/logging/logger.js";
+import { validatePathForCreation } from "@infrastructure/filesystem/path-guard";
+import { createModuleLogger } from "@infrastructure/logging/logger";
 
 const log = createModuleLogger("create_directories");
 

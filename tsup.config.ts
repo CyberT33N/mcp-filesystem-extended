@@ -57,7 +57,7 @@ interface ContextForOutPathGeneration {
  * • minify: False
  * • sourcemap: True
  * • treeshake: True
- * • tsconfig: 'tsconfig.json'.
+ * • tsconfig: 'tsconfig.node.json'.
  */
 const config = defineConfig({
     clean: true,
@@ -136,7 +136,7 @@ const config = defineConfig({
 
     sourcemap: true,
     treeshake: true,
-    tsconfig: 'tsconfig.json'
+    tsconfig: 'tsconfig.node.json'
 })
 
 export default config

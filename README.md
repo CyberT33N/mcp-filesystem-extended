@@ -1,272 +1,116 @@
 # Filesystem MCP Server
 
-Node.js server implementing Model Context Protocol (MCP) for filesystem operations.
+TypeScript implementation of a local filesystem Model Context Protocol (MCP) server with a final target-state architecture split into `application`, `domain`, and `infrastructure` boundaries. The public MCP surface is composed once at the application layer, while tool behavior and contract ownership stay inside the domains that own them.
 
-## Features
+## Final Architecture at a Glance
 
-- Read/create/append multiple files
-- Create/list/delete directories and files
-- Copy/move files and directories, including batch copy pairs
-- Search files by name, glob pattern, or content regex
-- Patch files using line numbers
-- File and content diffing
-- Count lines across one or more file or directory paths
-- Generate and verify file checksums
-- Get file metadata and directory trees for single or batch path requests
+| Layer | Responsibility | Representative files |
+| --- | --- | --- |
+| `application` | MCP server bootstrap, tool registration composition, MCP logging capability, server description/instructions, and server-scope concerns | `src/application/server/filesystem-server.ts`, `src/application/server/register-tool-catalog.ts`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/register-comparison-and-mutation-tool-catalog.ts`, `src/application/server/register-server-scope-tools.ts`, `src/application/server/tool-registration-presets.ts` |
+| `domain` | Tool-owned handlers, input schemas, and structured result contracts for inspection, comparison, and mutation capabilities | `src/domain/inspection/*`, `src/domain/comparison/*`, `src/domain/mutation/*` |
+| `infrastructure` | Technical capabilities that support the server without owning MCP transport or domain contracts | `src/infrastructure/filesystem/path-guard.ts`, `src/infrastructure/logging/logger.ts` |
 
-**Note**: The server will only allow operations within directories specified via `args`.
+## Public MCP Tool Surface
 
-## Code Structure
+### Inspection domain
+- `list_directory_entries`
+- `read_files_with_line_numbers`
+- `find_paths_by_name`
+- `find_files_by_glob`
+- `search_file_contents_by_regex`
+- `count_lines`
+- `get_path_metadata`
+- `get_file_checksums`
+- `verify_file_checksums`
 
-The codebase follows a feature-based organization where each API operation has its own directory:
+### Comparison and mutation domains
+- `diff_files`
+- `diff_text_content`
+- `create_files`
+- `append_files`
+- `replace_file_line_ranges`
+- `create_directories`
+- `copy_paths`
+- `move_paths`
+- `delete_paths`
 
-```
-/
-├── append_files/                   # Append to multiple files
-├── checksum_files/                 # Generate checksums for multiple files
-├── checksum_files_verif/           # Verify checksums for multiple files
-├── content_diffs/                  # Compare one or more text pairs
-├── copy_files/                     # Copy files and directories
-├── count_lines/                    # Count lines across one or more paths
-├── create_directories/             # Create multiple directories at once
-├── delete_files/                   # Delete multiple files at once
-├── directory_trees/                # Get recursive directory trees for one or more roots
-├── file_diffs/                     # Compare differences between one or more file pairs
-├── file_infos/                     # Get file metadata for one or more paths
-├── helpers/                        # Shared utilities
-│   ├── checksum.ts                 # Checksum generation utilities
-│   ├── diff.ts                     # Diff generation utilities
-│   └── path.ts                     # Path validation and security
-├── list_directories/               # List directory contents for one or more directories
-├── move_files/                     # Move or rename multiple files
-├── patch_files/                    # Patch files using line numbers
-├── batch_read_files/                     # Read multiple files
-├── search_files/                   # Search for files by name across one or more roots
-├── search_globs/                   # Search for files using glob patterns across one or more roots
-├── search_regexes/                 # Search file contents with regex across one or more roots
-├── write_new_files/                # Create new files at once
-└── server.ts                       # Main server implementation
-```
+### Application/server-scope tool
+- `list_allowed_directories`
 
-Each operation directory typically contains:
-- `schema.ts` - Zod schema for input validation
-- `handler.ts` - Main handler function for the operation
-- `helpers.ts` - Helper functions (where needed)
+The public tool catalog is the final direct target-state surface. It is composed from bounded registration modules rather than from a monolithic flat registry.
 
-## API
+## Composition Model
 
-### Resources
+1. `FilesystemServer` creates the MCP server, enables logging capability, installs request handlers, and connects the stdio transport.
+2. `registerToolCatalog` composes the public surface by delegating to:
+   - `registerInspectionToolCatalog`
+   - `registerComparisonAndMutationToolCatalog`
+   - `registerServerScopeTools`
+3. The application-layer `executeTool` wrapper centralizes call/result/error logging and normalizes plain-string results into MCP `content`.
+4. `tool-registration-presets.ts` keeps annotation presets and optional task-support hints centralized so registration modules stay thin and consistent.
+5. `server-description.ts` and `server-instructions.ts` define the stable initialization metadata exposed by the server shell.
 
-- `file://system`: File system operations interface
+## Why the Boundaries Look This Way
 
-### Tools
-- **batch_read_files**
-  - Read multiple files simultaneously (works on a single file too)
-  - Input: `paths` (string[])
-  - Failed reads won't stop the entire operation
-  - Each line is prefixed with its line number (format: "1: line content")
+### Domain-Driven Design (DDD)
+- Contract and schema ownership lives in the bounded context that owns the tool behavior.
+- Inspection result schemas stay with inspection modules.
+- Comparison and mutation behavior stays in their respective domains.
+- The application layer composes these contracts into one MCP surface but does not re-declare them as a second source of truth.
 
-- **list_directory**
-  - List directory contents with [FILE] or [DIR] prefixes
-  - Input: `paths` (string[])
-  - Pass one path for a single listing or multiple paths for batch directory listings on the same endpoint
+### Enterprise-grade modularity
+- Bounded registration modules reduce change blast radius.
+- The composition root stays readable and easy to review.
+- Tool families can evolve independently without reopening unrelated registration code.
+- Shared registration presets eliminate repeated policy wiring and keep cross-cutting application concerns consistent.
 
-- **directory_tree**
-  - Get a recursive tree view of files and directories as a JSON structure
-  - Inputs:
-    - `paths` (string[]): Root directory paths
-    - `excludePatterns` (string[]): Patterns to exclude from tree (glob format supported)
-  - Pass one path for a single tree or multiple paths for batch tree generation on the same endpoint
-  - Returns JSON with name, type, and children properties
-- **search_files**
-  - Recursively search for files/directories
-  - Inputs:
-    - `paths` (string[]): Starting directories
-    - `pattern` (string): Search pattern
-    - `excludePatterns` (string[]): Exclude any patterns. Glob formats are supported.
-  - Pass one path for a single search scope or multiple paths for batch root-path searches on the same endpoint
-  - Case-insensitive matching
-  - Returns full paths to matches
+### MCP server composition
+- The application layer owns transport initialization, server identity, logging capability negotiation, and tool registration.
+- Domain handlers provide behavior and structured results.
+- Server instructions explicitly describe cross-tool rules such as array-based multi-target inputs, allowed-directory scoping, and authoritative structured output when present.
 
-- **file_info**
-  - Get detailed file/directory metadata
-  - Input: `paths` (string[])
-  - Pass one path for a single metadata lookup or multiple paths for batch metadata retrieval on the same endpoint
-  - Returns:
-    - Size
-    - Creation time
-    - Modified time
-    - Access time
-    - Type (file/directory)
-    - Permissions
+### 12-Factor alignment
+- The server shell remains stateless with respect to business workflows.
+- Runtime scope is configuration-driven through allowed-directory inputs rather than hard-coded workspace assumptions.
+- Logging level is configuration-aware, while the MCP shell separately controls client-visible logging notifications.
+- The delivery boundary can replace or recompose the server shell without rewriting domain logic.
 
+## Runtime Invariants
 
-- **write_new_files**
-  - Create multiple new files in a single operation (works on a single file too)
-  - Fails if any file already exists (use patch_files to modify existing files)
-  - Input: `files` (array of objects):
-    - `path` (string): File location
-    - `content` (string): File content
-  - Partial failures won't stop the entire operation
-- **append_files**
-  - Append content to multiple existing files without overwriting (works on a single file too)
-  - Creates files if they don't exist
-  - Input: `files` (array of objects):
-    - `path` (string): File location
-    - `content` (string): Content to append
-  - Partial failures won't stop the entire operation
+- All path-based operations must remain inside configured allowed directories.
+- `list_allowed_directories` stays application-owned because it describes server scope, not a domain filesystem capability.
+- Domain modules remain the only canonical owners of tool behavior and contract definitions.
+- Infrastructure modules keep technical concerns such as path guarding and canonical logging out of the application composition root.
+- This documentation describes only the current final architecture and intentionally avoids legacy flat-structure or monolithic registration narratives.
 
-- **patch_files**
-  - Patch multiple files using line numbers (works on a single file too)
-  - Specify exact line ranges to replace without needing to provide the old text
-  - Inputs:
-    - `files` (array): List of file patch operations
-      - `path` (string): File to patch
-      - `patches` (array): List of patch operations per file
-        - `startLine` (number): Line number where the patch starts (1-indexed)
-        - `endLine` (number): Line number where the patch ends (1-indexed)
-        - `newText` (string): Text to replace with
-    - `dryRun` (boolean): Preview changes without applying (default: false)
-    - `options` (object): Optional formatting settings
-      - `preserveIndentation` (boolean): Preserve indentation when replacing text
+## Key Source Areas
 
-- **create_directories**
-  - Create multiple directory paths in one operation (works on a single directory too)
-  - Input: `paths` (string[]): Array of directory paths to create
-  - Creates parent directories if needed
-  - Partial failures won't stop the entire operation
-
-- **move_files**
-  - Move or rename multiple files and directories in a single operation (works on a single file too)
-  - Input: `items` (array):
-    - `source` (string): Source path
-    - `destination` (string): Destination path
-  - Option: `overwrite` (boolean): Whether to overwrite existing destinations (default: false)
-  - Partial failures won't stop the entire operation
-
-- **delete_files**
-  - Delete multiple files or directories in a single operation (works on a single file too)
-  - Inputs:
-    - `paths` (string[]): Paths to delete
-    - `recursive` (boolean): Whether to recursively delete directories (default: false)
-  - Partial failures won't stop the entire operation
-
-- **search_regex**
-  - Search file contents using regular expressions
-  - Inputs:
-    - `paths` (string[]): Root directories to search in
-    - `pattern` (string): Regular expression pattern
-    - `filePatterns` (string[]): File patterns to include (e.g. '*.js', '*.ts')
-    - `excludePatterns` (string[]): Patterns to exclude
-    - `maxResults` (number): Maximum results to return (default: 100)
-    - `caseSensitive` (boolean): Whether search is case-sensitive (default: false)
-  - Pass one path for a single regex search scope or multiple paths for batch regex searches on the same endpoint
-  - Returns matching lines with line numbers and context
-
-- **search_glob**
-  - Find files using glob patterns
-  - Inputs:
-    - `paths` (string[]): Root directories to search in
-    - `pattern` (string): Glob pattern (e.g. '**/*.js', 'src/**/*.{ts,tsx}')
-    - `excludePatterns` (string[]): Glob patterns to exclude
-    - `maxResults` (number): Maximum results to return (default: 500)
-  - Pass one path for a single glob search scope or multiple paths for batch glob searches on the same endpoint
-  - Returns full paths to matching files
-
-- **content_diff**
-  - Compare two text strings and show differences
-  - Inputs:
-    - `items` (array): Content-diff pairs
-      - `content1` (string): First content string
-      - `content2` (string): Second content string
-      - `label1` (string): Label for first content (default: "original")
-      - `label2` (string): Label for second content (default: "modified")
-  - Pass one pair for a single diff or multiple pairs for batch diff generation on the same endpoint
-  - Returns unified diff showing changes
-
-- **count_lines**
-  - Count lines in files with optional pattern matching
-  - Inputs:
-    - `paths` (string[]): File or directory paths
-    - `recursive` (boolean): Whether to count lines in all files in directory (default: false)
-    - `pattern` (string): Optional regex pattern to match lines
-    - `filePattern` (string): Glob pattern to match files when recursive (default: "**")
-    - `excludePatterns` (string[]): Glob patterns to exclude
-    - `ignoreEmptyLines` (boolean): Whether to ignore empty lines (default: false)
-  - Pass one path for a single count scope or multiple paths for batch line counting on the same endpoint
-  - Returns counts by file and totals
-
-- **checksum_files**
-  - Generate checksums for multiple files (works on a single file too)
-  - Inputs:
-    - `paths` (string[]): File paths
-    - `algorithm` (string): Hash algorithm (md5, sha1, sha256, sha512) (default: sha256)
-  - Returns hashes for all files
-
-- **checksum_files_verif**
-  - Verify multiple files against expected checksums (works on a single file too)
-  - Input: `files` (array):
-    - `path` (string): File path
-    - `expectedHash` (string): Expected hash value
-  - Option: `algorithm` (string): Hash algorithm (default: sha256)
-  - Returns verification results for all files
-
-- **list_allowed_directories**
-  - List all directories the server is allowed to access
-  - No input required
-  - Returns a list of directories that this server can read/write from
-
-## Usage with Claude Desktop
-Add this to your `claude_desktop_config.json`:
-
-Note: you can provide sandboxed directories to the server by mounting them to `/projects`. Adding the `ro` flag will make the directory readonly by the server.
-
-### Docker
-Note: all directories must be mounted to `/projects` by default.
-
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--mount", "type=bind,src=/Users/username/Desktop,dst=/projects/Desktop",
-        "--mount", "type=bind,src=/path/to/other/allowed/dir,dst=/projects/other/allowed/dir,ro",
-        "--mount", "type=bind,src=/path/to/file.txt,dst=/projects/path/to/file.txt",
-        "mcp/filesystem",
-        "/projects"
-      ]
-    }
-  }
-}
+```text
+src/
+  application/server/
+    filesystem-server.ts
+    register-tool-catalog.ts
+    register-inspection-tool-catalog.ts
+    register-comparison-and-mutation-tool-catalog.ts
+    register-server-scope-tools.ts
+    tool-registration-presets.ts
+    server-description.ts
+    server-instructions.ts
+  domain/
+    inspection/
+    comparison/
+    mutation/
+  infrastructure/
+    filesystem/path-guard.ts
+    logging/logger.ts
 ```
 
-### NPX
+## Operational Summary
 
+This repository now represents a modular MCP filesystem server whose layers are intentionally separated:
 
-### Windows
+- `application` owns orchestration and exposure,
+- `domain` owns tool behavior and contracts,
+- `infrastructure` owns technical capabilities.
 
-
-#### Local
-
-```json
-"filesystem-extended": {
-    "command": "node",
-    "args": ["C:\\Projects\\mcp\\server\\system\\files\\mcp-filesystem-extended\\dist\\index.js", "C:\\Projects", "C:\\git", "C:\\git\\privadent\\privadent-synchronizer"]
-}
-```
-
-## Build
-
-Docker build:
-
-```bash
-docker build -t mcp/filesystem -f src/filesystem/Dockerfile .
-```
-
-## License
-
-This MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.
+That separation is the final architectural source of truth for maintainers, users, and autonomous agents working in this workspace.

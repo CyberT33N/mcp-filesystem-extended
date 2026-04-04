@@ -8,3 +8,23 @@ export const CountLinesArgsSchema = z.object({
   excludeGlobs: z.array(z.string()).optional().default([]).describe("Glob patterns that should be excluded from the counting scope."),
   ignoreEmptyLines: z.boolean().optional().default(false).describe("Whether to ignore empty lines"),
 });
+
+export const CountLinesResultSchema = z.object({
+  paths: z.array(
+    z.object({
+      path: z.string(),
+      files: z.array(
+        z.object({
+          file: z.string(),
+          count: z.number(),
+          matchingCount: z.number().optional(),
+        }),
+      ),
+      totalLines: z.number(),
+      totalMatchingLines: z.number(),
+    }),
+  ),
+  totalFiles: z.number(),
+  totalLines: z.number(),
+  totalMatchingLines: z.number(),
+});

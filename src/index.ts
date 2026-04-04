@@ -1,5 +1,5 @@
-import { FilesystemServer } from "@application/server/filesystem-server.js";
-import { initializeLogger } from "@infrastructure/logging/logger.js";
+import { FilesystemServer } from "@application/server/filesystem-server";
+import { initializeLogger } from "@infrastructure/logging/logger";
 
 async function main(): Promise<void> {
   const allowedDirectories = process.argv.slice(2);

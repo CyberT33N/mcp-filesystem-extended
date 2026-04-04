@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
-import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter.js";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
+import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
 import { minimatch } from "minimatch";
 

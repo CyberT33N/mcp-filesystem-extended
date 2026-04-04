@@ -1,14 +1,14 @@
-import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter.js";
-import { createUnifiedDiff } from "@infrastructure/formatting/unified-diff.js";
+import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
+import { createUnifiedDiff } from "@infrastructure/formatting/unified-diff";
 
-interface ContentDiffOperation {
+interface DiffTextContentPair {
   content1: string;
   content2: string;
   label1: string;
   label2: string;
 }
 
-async function getFormattedContentDiff(operation: ContentDiffOperation): Promise<string> {
+async function getFormattedContentDiff(operation: DiffTextContentPair): Promise<string> {
   const diff = createUnifiedDiff(
     operation.content1,
     operation.content2,
@@ -25,10 +25,10 @@ async function getFormattedContentDiff(operation: ContentDiffOperation): Promise
 }
 
 export async function handleContentDiff(
-  operations: ContentDiffOperation[]
+  operations: DiffTextContentPair[]
 ): Promise<string> {
   if (operations.length === 1) {
-    return getFormattedContentDiff(operations[0]);
+    return getFormattedContentDiff(operations[0]!);
   }
 
   const results = await Promise.all(
@@ -49,5 +49,5 @@ export async function handleContentDiff(
     })
   );
 
-  return formatBatchTextOperationResults("content diff", results);
+  return formatBatchTextOperationResults("diff text content", results);
 }

@@ -7,8 +7,8 @@ import {
   getFileSystemEntryMetadata,
   type FileSystemEntryMetadata,
   type FileSystemEntryType,
-} from "@infrastructure/filesystem/filesystem-entry-metadata.js";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
+} from "@infrastructure/filesystem/filesystem-entry-metadata";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 /**
  * Structured directory entry returned by the `list_directory_entries` tool.

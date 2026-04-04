@@ -27,7 +27,7 @@ dotenvConfig({
     path: '.env.test'
 })
 
-// 📋 Define the base test configuration
+// 📋 Define the base verification configuration for the modularized server topology
 const cfg = defineConfig({
     /**
      * List of plugins to be used in the configuration.
@@ -120,12 +120,11 @@ const cfg = defineConfig({
          */
         environment: 'node',
 
-        /**
-         * Path to the global setup file that runs before all tests.
-         * Handles basic test infrastructure like environment variables.
-         *
-         */
-        globalSetup: ['test/pretest-base.ts'],
+         /**
+          * Path to the shared global setup file that establishes the common
+          * verification baseline before unit and regression projects run.
+          */
+         globalSetup: ['test/pretest-base.ts'],
 
         hookTimeout: 300_000,
 
@@ -150,15 +149,14 @@ const cfg = defineConfig({
          */
         mockReset: false,
 
-        /**
-         * Project configurations to manage different test types.
-         * Replaces the deprecated workspace configuration.
-         *
-         */
-        projects: [
-            './vitest.unit.config.ts',
-            './vitest.regression.config.ts'
-        ],
+         /**
+          * Project configurations keep unit and regression verification surfaces
+          * distinct while sharing one modularized server baseline.
+          */
+         projects: [
+             './vitest.unit.config.ts',
+             './vitest.regression.config.ts'
+         ],
 
         /*
          *> Behalte die ursprüngliche Implementierung von Mocks (z.B. `vi.spyOn`), selbst nach dem Testlauf.
@@ -181,12 +179,11 @@ const cfg = defineConfig({
          */
         restoreMocks: false,
 
-        /**
-         * Path to the setup file that runs before each test.
-         * Initialisiert die Electron-Mocks und andere gemeinsame Testfunktionalitäten.
-         *
-         */
-        setupFiles: ['test/vitest-setup.ts'],
+         /**
+          * Path to the shared setup file that installs common Vitest matchers and
+          * shared verification helpers for all projects.
+          */
+         setupFiles: ['test/vitest-setup.ts'],
 
         /**
          * The timeout for each test hook.

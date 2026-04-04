@@ -4,11 +4,11 @@ file_id: "mcp-filesystem-extended-migration-modularization-plan"
 plan_version: 1
 created: "2026-04-03T00:00:00Z"
 last_updated: "2026-04-03T00:00:00Z"
-status: "pending"
+status: "done"
 total_units: 4
-completed_units: 0
+completed_units: 4
 total_tasks_all_levels: 15
-completed_tasks_all_levels: 0
+completed_tasks_all_levels: 15
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
@@ -20,33 +20,33 @@ plan_directory: ".plan/"
 - **Plan Directory:** `.plan/`
 - **Total Units:** 4
 - **Hierarchy Depth:** 2 levels
-- **Overall Status:** pending
-- **Progress:** 0/15 tasks completed
+- **Overall Status:** done
+- **Progress:** 15/15 tasks completed
 
 ## Units
-- [ ] **1. Domain Inspection Contract Ownership** → [`.plan/1-domain-inspection/orchestration.md`](.plan/1-domain-inspection/orchestration.md)
+- [x] **1. Domain Inspection Contract Ownership** → [`.plan/1-domain-inspection/orchestration.md`](.plan/1-domain-inspection/orchestration.md)
   - Classification: `ISOLATED`
-  - Status: `pending` | Tasks: 4 | Completed: 0
+  - Status: `done` | Tasks: 4 | Completed: 4
   - Summary: Move inspection output schemas and canonical result-contract ownership into the domain schema surfaces so the application layer stops duplicating tool result structure.
-- [ ] **2. Domain Comparison and Mutation Alignment** → [`.plan/2-domain-comparison-and-mutation/orchestration.md`](.plan/2-domain-comparison-and-mutation/orchestration.md)
+- [x] **2. Domain Comparison and Mutation Alignment** → [`.plan/2-domain-comparison-and-mutation/orchestration.md`](.plan/2-domain-comparison-and-mutation/orchestration.md)
   - Classification: `ISOLATED`
-  - Status: `pending` | Tasks: 3 | Completed: 0
+  - Status: `done` | Tasks: 3 | Completed: 3
   - Summary: Finish the remaining comparison and mutation migration work by aligning internal schema names, handler DTOs, and result wording with the direct target-state public tool surface.
-- [ ] **3. Application Server Composition and Tool-Catalog Decomposition** → [`.plan/3-application-server/orchestration.md`](.plan/3-application-server/orchestration.md)
+- [x] **3. Application Server Composition and Tool-Catalog Decomposition** → [`.plan/3-application-server/orchestration.md`](.plan/3-application-server/orchestration.md)
   - Classification: `WAITING`
-  - Status: `pending` | Tasks: 4 | Completed: 0
+  - Status: `done` | Tasks: 4 | Completed: 4
   - Summary: Decompose the oversized application catalog into bounded registration modules that compose domain-owned contracts and keep only server-scope concerns in the application layer.
-- [ ] **4. Infrastructure, Documentation, and Delivery Verification** → [`.plan/4-infrastructure-and-delivery/orchestration.md`](.plan/4-infrastructure-and-delivery/orchestration.md)
+- [x] **4. Infrastructure, Documentation, and Delivery Verification** → [`.plan/4-infrastructure-and-delivery/orchestration.md`](.plan/4-infrastructure-and-delivery/orchestration.md)
   - Classification: `WAITING`
-  - Status: `pending` | Tasks: 4 | Completed: 0
+  - Status: `done` | Tasks: 4 | Completed: 4
   - Summary: Correct stale infrastructure leftovers, refresh documentation, add focused verification coverage, and close the migration with a final consistency pass.
 
 ## Cross-Unit Dependencies
 | ID | Source | Target | Type | Status | Description | Shared Files |
 |----|--------|--------|------|--------|-------------|--------------|
-| D1 | 1-domain-inspection | 3-application-server | WAITING | UNRESOLVED | The application registration decomposition must consume domain-owned inspection output schemas instead of central catalog-local schema duplicates. | none |
-| D2 | 2-domain-comparison-and-mutation | 3-application-server | WAITING | UNRESOLVED | The application registration split must import the finalized comparison and mutation schema and handler contracts after the remaining naming alignment is complete. | none |
-| D3 | 3-application-server | 4-infrastructure-and-delivery | WAITING | UNRESOLVED | Documentation, tests, and delivery verification must target the final decomposed application topology and tool-catalog integration surface. | none |
+| D1 | 1-domain-inspection | 3-application-server | WAITING | RESOLVED | The application registration decomposition must consume domain-owned inspection output schemas instead of central catalog-local schema duplicates. | none |
+| D2 | 2-domain-comparison-and-mutation | 3-application-server | WAITING | RESOLVED | The application registration split must import the finalized comparison and mutation schema and handler contracts after the remaining naming alignment is complete. | none |
+| D3 | 3-application-server | 4-infrastructure-and-delivery | WAITING | RESOLVED | Documentation, tests, and delivery verification must target the final decomposed application topology and tool-catalog integration surface. | none |
 
 ## Legend
 

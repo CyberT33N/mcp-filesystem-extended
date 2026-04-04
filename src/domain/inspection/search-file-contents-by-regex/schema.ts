@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SearchRegexArgsSchema = z.object({
+export const SearchFileContentsByRegexArgsSchema = z.object({
   roots: z
     .array(z.string())
     .min(1)
@@ -26,4 +26,26 @@ export const SearchRegexArgsSchema = z.object({
     .describe("Glob patterns that should be excluded from the regex search scope."),
   maxResults: z.number().optional().default(100).describe("Maximum number of results to return"),
   caseSensitive: z.boolean().optional().default(false).describe("Whether the search should be case-sensitive"),
+});
+
+export const SearchFileContentsByRegexResultSchema = z.object({
+  roots: z.array(
+    z.object({
+      root: z.string(),
+      matches: z.array(
+        z.object({
+          file: z.string(),
+          line: z.number(),
+          content: z.string(),
+          match: z.string(),
+        }),
+      ),
+      filesSearched: z.number(),
+      totalMatches: z.number(),
+      truncated: z.boolean(),
+    }),
+  ),
+  totalLocations: z.number(),
+  totalMatches: z.number(),
+  truncated: z.boolean(),
 });

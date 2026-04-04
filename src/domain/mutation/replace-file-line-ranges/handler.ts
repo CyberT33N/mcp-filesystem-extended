@@ -1,13 +1,16 @@
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
-import { applyFilePatches, PatchOptions } from "./helpers.js";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
+import {
+  applyFileLineRangeReplacements,
+  ReplaceFileLineRangesOptions,
+} from "./helpers";
 
-export async function handlePatchFiles(
+export async function handleReplaceFileLineRanges(
   files: Array<{
     path: string;
-    patches: Array<{ startLine: number; endLine: number; newText: string }>;
+    replacements: Array<{ startLine: number; endLine: number; newText: string }>;
   }>,
   dryRun: boolean,
-  options: PatchOptions,
+  options: ReplaceFileLineRangesOptions,
   allowedDirectories: string[]
 ): Promise<string> {
   const results: string[] = [];
@@ -19,13 +22,18 @@ export async function handlePatchFiles(
         // Validate path is within allowed directories
         const validPath = await validatePath(file.path, allowedDirectories);
         
-        // Apply patches to the file
-        const result = await applyFilePatches(validPath, file.patches, dryRun, options);
+        // Apply line-range replacements to the file
+        const result = await applyFileLineRangeReplacements(
+          validPath,
+          file.replacements,
+          dryRun,
+          options,
+        );
         
         results.push(`File: ${file.path}\n${result}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        errors.push(`Failed to patch ${file.path}: ${errorMessage}`);
+        errors.push(`Failed to replace line ranges in ${file.path}: ${errorMessage}`);
       }
     })
   );
@@ -35,16 +43,16 @@ export async function handlePatchFiles(
   const errorCount = errors.length;
   
   let output = `Processed ${successCount + errorCount} files:\n`;
-  output += `- ${successCount} files patched successfully\n`;
+  output += `- ${successCount} files updated successfully\n`;
   
   if (errorCount > 0) {
     output += `- ${errorCount} files failed\n\n`;
     output += "Errors:\n" + errors.join("\n\n");
   }
   
-  // Add patch results for successful patches
+  // Add line-range replacement results for successful updates
   if (successCount > 0) {
-    output += "\n\nPatch Results:\n" + "=".repeat(40) + "\n";
+    output += "\n\nReplacement Results:\n" + "=".repeat(40) + "\n";
     output += results.join("\n" + "=".repeat(40) + "\n");
   }
   

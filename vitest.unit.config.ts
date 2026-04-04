@@ -23,7 +23,7 @@ import baseConfig from './vitest.config'
 // ═══╡ 🏷️TYPES ╞═══
 import type { ViteUserConfig } from 'vitest/config'
 
-// 📋 Define the unit test configuration
+// 📋 Define the unit verification configuration for the final modularized topology
 const cfg = defineConfig({
     test: {
 
@@ -52,18 +52,16 @@ const cfg = defineConfig({
          */
         include: ['test/unit/**/*.test.ts'],
 
-        /**
-         * Name of the test configuration for workspace selection.
-         *
-         */
-        name: 'unit',
+         /**
+          * Name of the verification project for workspace selection.
+          */
+         name: 'unit',
 
-        /**
-         * Specifies the setup files to use for unit tests.
-         * Der Electron-Mock wird bereits in der Basiskonfiguration geladen.
-         *
-         */
-        setupFiles: ['test/unit/test-setup.ts'],
+         /**
+          * Setup file for unit verification. It keeps category-specific globals
+          * separated from the shared base and shared Vitest setup.
+          */
+         setupFiles: ['test/unit/test-setup.ts'],
 
         /**
          * Type checking configuration for unit tests.
@@ -80,8 +78,7 @@ const cfg = defineConfig({
 }) satisfies ViteUserConfig
 
 /**
- * 🛠️ Merges the existing Vitest configuration with additional custom
- * configurations defined below.
+ * 🛠️ Merges the shared modular verification baseline with the unit-specific surface.
  */
 const mergedCfg = mergeConfig(baseConfig, defineConfig(cfg))
 

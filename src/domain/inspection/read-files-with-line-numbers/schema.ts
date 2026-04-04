@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ReadFilesArgsSchema = z.object({
+export const ReadFilesWithLineNumbersArgsSchema = z.object({
   paths: z
     .array(z.string())
     .min(1)

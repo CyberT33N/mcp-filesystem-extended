@@ -1,9 +1,9 @@
 import {
   getFileSystemEntryMetadata,
   type FileSystemEntryMetadata,
-} from "@infrastructure/filesystem/filesystem-entry-metadata.js";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
-import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter.js";
+} from "@infrastructure/filesystem/filesystem-entry-metadata";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
+import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
 export interface PathMetadataEntry extends FileSystemEntryMetadata {
   path: string;

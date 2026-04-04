@@ -1,18 +1,18 @@
 import fs from "fs/promises";
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
-import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter.js";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
+import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
 import {
   assertCopyOperationsAreSafeForParallelExecution,
   copyDir,
-  type CopyFileOperation,
-  type PreparedCopyFileOperation,
-} from "./helpers.js";
+  type CopyPathsOperation,
+  type PreparedCopyPathsOperation,
+} from "./helpers";
 
 async function prepareCopyOperation(
-  operation: CopyFileOperation,
+  operation: CopyPathsOperation,
   allowedDirectories: string[]
-): Promise<PreparedCopyFileOperation> {
+): Promise<PreparedCopyPathsOperation> {
   const validSourcePath = await validatePath(operation.source, allowedDirectories);
   const validDestinationPath = await validatePath(operation.destination, allowedDirectories);
 
@@ -24,7 +24,7 @@ async function prepareCopyOperation(
 }
 
 async function copySingleOperation(
-  operation: PreparedCopyFileOperation,
+  operation: PreparedCopyPathsOperation,
   allowedDirectories: string[]
 ): Promise<string> {
   try {
@@ -61,8 +61,8 @@ async function copySingleOperation(
   }
 }
 
-export async function handleCopyFile(
-  operations: CopyFileOperation[],
+export async function handleCopyPaths(
+  operations: CopyPathsOperation[],
   allowedDirectories: string[]
 ): Promise<string> {
   const preparedOperations = await Promise.all(
@@ -89,5 +89,5 @@ export async function handleCopyFile(
     })
   );
 
-  return formatBatchTextOperationResults("copy", results);
+  return formatBatchTextOperationResults("copy paths", results);
 }

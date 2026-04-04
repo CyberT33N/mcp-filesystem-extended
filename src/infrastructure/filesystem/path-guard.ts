@@ -1,9 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
 import os from 'os';
-import { createModuleLogger } from "../utils/logger.js";
+import { createModuleLogger } from "../logging/logger";
 
-const log = createModuleLogger("helpers/path");
+const log = createModuleLogger("infrastructure/filesystem/path-guard");
 
 // Normalize all paths consistently
 export function normalizePath(p: string): string {

@@ -2,17 +2,17 @@ import fs from "fs/promises";
 import {
   createUnifiedDiff,
   normalizeLineEndings,
-} from "@infrastructure/formatting/unified-diff.js";
+} from "@infrastructure/formatting/unified-diff";
 
-export interface PatchOptions {
+export interface ReplaceFileLineRangesOptions {
   preserveIndentation: boolean;
 }
 
-export async function applyFilePatches(
+export async function applyFileLineRangeReplacements(
   filePath: string,
-  patches: Array<{startLine: number, endLine: number, newText: string}>,
+  replacements: Array<{startLine: number, endLine: number, newText: string}>,
   dryRun: boolean = false,
-  options: PatchOptions = { preserveIndentation: true }
+  options: ReplaceFileLineRangesOptions = { preserveIndentation: true }
 ): Promise<string> {
   // Read file content and normalize line endings
   const content = normalizeLineEndings(await fs.readFile(filePath, 'utf-8'));
@@ -20,30 +20,30 @@ export async function applyFilePatches(
   // Split content into lines
   const contentLines = content.split('\n');
   
-  // Sort patches by line number in descending order to avoid affecting line numbers of earlier patches
-  const sortedPatches = [...patches].sort((a, b) => b.startLine - a.startLine);
+  // Sort replacements by line number in descending order to avoid affecting line numbers of earlier updates
+  const sortedReplacements = [...replacements].sort((a, b) => b.startLine - a.startLine);
   
-  // Apply patches sequentially
+  // Apply replacements sequentially
   let modifiedContentLines = [...contentLines];
-  const patchResults: Array<{
-    patch: {startLine: number, endLine: number, newText: string},
+  const replacementResults: Array<{
+    replacement: {startLine: number, endLine: number, newText: string},
     applied: boolean,
     message?: string
   }> = [];
   
-  for (const patch of sortedPatches) {
-    const { startLine, endLine, newText } = patch;
-    const patchResult: {
-      patch: {startLine: number, endLine: number, newText: string},
+  for (const replacement of sortedReplacements) {
+    const { startLine, endLine, newText } = replacement;
+    const replacementResult: {
+      replacement: {startLine: number, endLine: number, newText: string},
       applied: boolean,
       message?: string
-    } = { patch, applied: false };
+    } = { replacement, applied: false };
     
     // Validate line numbers
     if (startLine < 1 || endLine < startLine || endLine > contentLines.length) {
-      patchResult.message = `Invalid line range: ${startLine}-${endLine} (file has ${contentLines.length} lines)`;
-      patchResults.push(patchResult);
-      throw new Error(patchResult.message);
+      replacementResult.message = `Invalid line range: ${startLine}-${endLine} (file has ${contentLines.length} lines)`;
+      replacementResults.push(replacementResult);
+      throw new Error(replacementResult.message);
     }
     
     // Convert to 0-based indices for array
@@ -57,7 +57,7 @@ export async function applyFilePatches(
     
     if (options.preserveIndentation) {
       // Detect indentation from the first line being replaced
-      const originalIndent = modifiedContentLines[startIndex].match(/^\s*/)?.[0] || '';
+      const originalIndent = modifiedContentLines[startIndex]!.match(/^\s*/)?.[0] || '';
       
       // Apply indentation to new lines
       const indentedNewLines = newLines.map((line, idx) => {
@@ -72,8 +72,8 @@ export async function applyFilePatches(
       modifiedContentLines.splice(startIndex, linesToReplace, ...newLines);
     }
     
-    patchResult.applied = true;
-    patchResults.push(patchResult);
+    replacementResult.applied = true;
+    replacementResults.push(replacementResult);
   }
   
   const modifiedContent = modifiedContentLines.join('\n');
@@ -90,11 +90,11 @@ export async function applyFilePatches(
   // Build result with detailed information
   let resultText = `${'`'.repeat(numBackticks)}diff\n${diff}${'`'.repeat(numBackticks)}\n\n`;
   
-  // Add patch details
-  resultText += "Patch details:\n";
-  patchResults.forEach((result, i) => {
-    const { startLine, endLine } = result.patch;
-    resultText += `Patch ${i + 1}: ${result.applied ? 'APPLIED' : 'FAILED'} (lines ${startLine}-${endLine})\n`;
+  // Add replacement details
+  resultText += "Replacement details:\n";
+  replacementResults.forEach((result, i) => {
+    const { startLine, endLine } = result.replacement;
+    resultText += `Replacement ${i + 1}: ${result.applied ? 'APPLIED' : 'FAILED'} (lines ${startLine}-${endLine})\n`;
     if (result.message) {
       resultText += `  Message: ${result.message}\n`;
     }

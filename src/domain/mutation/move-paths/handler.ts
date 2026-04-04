@@ -3,12 +3,12 @@ import path from "path";
 import {
   validatePath,
   validatePathForCreation,
-} from "@infrastructure/filesystem/path-guard.js";
-import { createModuleLogger } from "@infrastructure/logging/logger.js";
+} from "@infrastructure/filesystem/path-guard";
+import { createModuleLogger } from "@infrastructure/logging/logger";
 
-const log = createModuleLogger("move_files");
+const log = createModuleLogger("move_paths");
 
-export async function handleMoveFiles(
+export async function handleMovePaths(
   items: Array<{source: string, destination: string}>,
   overwrite: boolean,
   allowedDirectories: string[]
@@ -16,7 +16,7 @@ export async function handleMoveFiles(
   const results: string[] = [];
   const errors: string[] = [];
 
-  log.debug({ items, overwrite, allowedDirectories }, "handleMoveFiles called");
+  log.debug({ items, overwrite, allowedDirectories }, "handleMovePaths called");
 
   await Promise.all(
     items.map(async (item) => {
@@ -98,6 +98,6 @@ export async function handleMoveFiles(
     output += "Errors:\n" + errors.join("\n");
   }
   
-  log.debug({ successCount, errorCount }, "handleMoveFiles completed");
+  log.debug({ successCount, errorCount }, "handleMovePaths completed");
   return output;
 }

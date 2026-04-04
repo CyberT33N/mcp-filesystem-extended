@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const FileDiffArgsSchema = z.object({
+export const DiffFilesArgsSchema = z.object({
   pairs: z
     .array(
       z.object({

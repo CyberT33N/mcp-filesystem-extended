@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const WriteNewFilesArgsSchema = z.object({
+export const CreateFilesArgsSchema = z.object({
   files: z
     .array(
       z.object({

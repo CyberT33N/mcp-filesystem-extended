@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const CopyFileArgsSchema = z.object({
+export const CopyPathsArgsSchema = z.object({
   operations: z
     .array(
       z.object({

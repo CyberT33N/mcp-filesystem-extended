@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { minimatch } from 'minimatch';
-import { validatePath } from "@infrastructure/filesystem/path-guard.js";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 export async function searchFiles(
   rootPath: string,
