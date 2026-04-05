@@ -45,12 +45,12 @@ function linkFromRoot(root, subPath) {
 const TYPESCRIPT_ESLINT_FORK_ROOT_WIN32 =
   'C:\\Projects\\programming-languages\\typescript\\forks\\linting\\typescript-eslint'
 const TYPESCRIPT_ESLINT_FORK_ROOT_LINUX =
-  '/home/t33n/Projects/programming-languages/typescript/forks/linting/typescript-eslint'
+  '/home/t33n/projects/programming-languages/typescript/forks/linting/typescript-eslint'
 
 const ESLINT_PLUGIN_ENTERPRISE_ROOT_WIN32 =
   'C:\\Projects\\programming-languages\\typescript\\linting\\eslint\\eslint-plugin-enterprise'
 const ESLINT_PLUGIN_ENTERPRISE_ROOT_LINUX =
-  '/home/t33n/Projects/programming-languages/typescript/linting/eslint/eslint-plugin-enterprise'
+  '/home/t33n/projects/programming-languages/typescript/linting/eslint/eslint-plugin-enterprise'
 
 /**
  * @returns {{ tsEslintForkRoot: string; enterprisePluginRoot: string }}
