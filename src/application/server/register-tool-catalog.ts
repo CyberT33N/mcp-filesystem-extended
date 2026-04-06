@@ -1,5 +1,5 @@
-import { type McpServer } from "@modelcontextprotocol/sdk/server/mcp";
-import { type CallToolResult } from "@modelcontextprotocol/sdk/types";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types";
 
 import { registerComparisonAndMutationToolCatalog } from "./register-comparison-and-mutation-tool-catalog";
 import { registerInspectionToolCatalog } from "./register-inspection-tool-catalog";
