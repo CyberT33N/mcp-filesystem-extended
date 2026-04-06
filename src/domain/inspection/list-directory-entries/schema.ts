@@ -1,5 +1,13 @@
 import { z } from "zod";
+import type { FileSystemEntryMetadata } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
+import {
+  DefaultedFileSystemEntryMetadataSelectionSchema,
+  FileSystemEntryMetadataSchema,
+} from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 
+/**
+ * Input schema for the `list_directory_entries` tool.
+ */
 export const ListDirectoryEntriesArgsSchema = z.object({
   roots: z
     .array(z.string())
@@ -14,13 +22,9 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .describe(
       "Whether nested directory content should be traversed recursively. Set to false to return only same-level files and directories for each requested root."
     ),
-  includeMetadata: z
-    .boolean()
-    .optional()
-    .default(false)
-    .describe(
-      "Whether optional metadata fields from the canonical file_infos metadata surface should be included. The required type field is always returned."
-    ),
+  metadata: DefaultedFileSystemEntryMetadataSelectionSchema.describe(
+    "Optional grouped metadata selectors. `size` and `type` are always returned. Set `timestamps` and/or `permissions` to true to include those groups."
+  ),
   excludeGlobs: z
     .array(z.string())
     .optional()
@@ -33,7 +37,7 @@ export const ListDirectoryEntriesArgsSchema = z.object({
 /**
  * Structured directory entry returned by the directory-entry listing result.
  */
-interface ListedDirectoryEntryOutput {
+interface ListedDirectoryEntryOutput extends FileSystemEntryMetadata {
   /**
    * Leaf entry name.
    */
@@ -45,39 +49,9 @@ interface ListedDirectoryEntryOutput {
   path: string;
 
   /**
-   * Required entry category.
-   */
-  type: "directory" | "file" | "other";
-
-  /**
    * Nested child entries when recursive traversal is enabled.
    */
   children?: ListedDirectoryEntryOutput[] | undefined;
-
-  /**
-   * Entry size in bytes when metadata inclusion is enabled.
-   */
-  size?: number | undefined;
-
-  /**
-   * Entry creation timestamp when metadata inclusion is enabled.
-   */
-  created?: string | undefined;
-
-  /**
-   * Entry last-modified timestamp when metadata inclusion is enabled.
-   */
-  modified?: string | undefined;
-
-  /**
-   * Entry last-accessed timestamp when metadata inclusion is enabled.
-   */
-  accessed?: string | undefined;
-
-  /**
-   * Entry permission bits when metadata inclusion is enabled.
-   */
-  permissions?: string | undefined;
 }
 
 /**
@@ -105,18 +79,15 @@ interface ListDirectoryEntriesStructuredResult {
   roots: ListedDirectoryRootOutput[];
 }
 
+const ListedDirectoryEntryBaseSchema = FileSystemEntryMetadataSchema.extend({
+  name: z.string(),
+  path: z.string(),
+});
+
 export const ListedDirectoryEntryOutputSchema: z.ZodType<ListedDirectoryEntryOutput> = z.lazy(
   () =>
-    z.object({
-      name: z.string(),
-      path: z.string(),
-      type: z.enum(["directory", "file", "other"]),
+    ListedDirectoryEntryBaseSchema.extend({
       children: z.array(ListedDirectoryEntryOutputSchema).optional(),
-      size: z.number().optional(),
-      created: z.string().optional(),
-      modified: z.string().optional(),
-      accessed: z.string().optional(),
-      permissions: z.string().optional(),
     }),
 );
 

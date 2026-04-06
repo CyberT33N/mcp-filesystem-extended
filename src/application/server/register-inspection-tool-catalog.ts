@@ -1,6 +1,6 @@
 import {
   getPathMetadataResult,
-  handleGetFileInfo,
+  handleGetPathMetadata,
 } from "@domain/inspection/get-path-metadata/handler";
 import {
   GetPathMetadataArgsSchema,
@@ -94,24 +94,24 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "List directory entries",
       description:
         "Lists structured directory entries for one or more directory roots. " +
-        "Use this tool for directory topology and optional entry metadata, not for name or content search.",
+        "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ListDirectoryEntriesArgsSchema,
       outputSchema: ListDirectoryEntriesStructuredResultSchema,
     },
-    async ({ roots, recursive, includeMetadata, excludeGlobs }) =>
+    async ({ roots, recursive, metadata, excludeGlobs }) =>
       executeTool("list_directory_entries", async () => {
         const result = await getListDirectoryEntriesResult(
           roots,
           recursive,
-          includeMetadata,
+          metadata,
           excludeGlobs,
           allowedDirectories,
         );
         const text = await handleListDirectoryEntries(
           roots,
           recursive,
-          includeMetadata,
+          metadata,
           excludeGlobs,
           allowedDirectories,
         );
@@ -351,15 +351,15 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Get path metadata",
       description:
         "Returns structured metadata for one or more files or directories. " +
-        "Use this tool for metadata lookup, not for reading file contents.",
+        "Required `size` and `type` are always included, while grouped timestamp and permission metadata can be requested explicitly.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: GetPathMetadataArgsSchema,
       outputSchema: GetPathMetadataResultSchema,
     },
-    async ({ paths }) =>
+    async ({ paths, metadata }) =>
       executeTool("get_path_metadata", async () => {
-        const result = await getPathMetadataResult(paths, allowedDirectories);
-        const text = await handleGetFileInfo(paths, allowedDirectories);
+        const result = await getPathMetadataResult(paths, metadata, allowedDirectories);
+        const text = await handleGetPathMetadata(paths, metadata, allowedDirectories);
 
         return {
           content: [{ type: "text", text }],

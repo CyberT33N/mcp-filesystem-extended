@@ -4,16 +4,17 @@ import path from "path";
 import { encode } from "@toon-format/toon";
 import { minimatch } from "minimatch";
 import {
-  getFileSystemEntryMetadata,
+  DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   type FileSystemEntryMetadata,
-  type FileSystemEntryType,
-} from "@infrastructure/filesystem/filesystem-entry-metadata";
+  type FileSystemEntryMetadataSelection,
+} from "@domain/inspection/shared/filesystem-entry-metadata-contract";
+import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 /**
  * Structured directory entry returned by the `list_directory_entries` tool.
  */
-export interface ListedDirectoryEntry {
+export interface ListedDirectoryEntry extends FileSystemEntryMetadata {
   /**
    * Leaf entry name.
    */
@@ -25,39 +26,9 @@ export interface ListedDirectoryEntry {
   path: string;
 
   /**
-   * Required entry category.
-   */
-  type: FileSystemEntryType;
-
-  /**
    * Nested child entries when recursive traversal is enabled.
    */
   children?: ListedDirectoryEntry[];
-
-  /**
-   * Entry size in bytes when metadata inclusion is enabled.
-   */
-  size?: number;
-
-  /**
-   * Entry creation timestamp when metadata inclusion is enabled.
-   */
-  created?: string;
-
-  /**
-   * Entry last-modified timestamp when metadata inclusion is enabled.
-   */
-  modified?: string;
-
-  /**
-   * Entry last-accessed timestamp when metadata inclusion is enabled.
-   */
-  accessed?: string;
-
-  /**
-   * Entry permission bits when metadata inclusion is enabled.
-   */
-  permissions?: string;
 }
 
 /**
@@ -83,18 +54,6 @@ export interface ListDirectoryEntriesResult {
    * Listing roots in request order.
    */
   roots: ListedDirectoryRoot[];
-}
-
-function resolveEntryType(entry: Dirent): FileSystemEntryType {
-  if (entry.isDirectory()) {
-    return "directory";
-  }
-
-  if (entry.isFile()) {
-    return "file";
-  }
-
-  return "other";
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -125,25 +84,11 @@ function shouldExcludePath(relativePath: string, excludePatterns: string[]): boo
   });
 }
 
-function applyOptionalMetadata(
-  entry: ListedDirectoryEntry,
-  metadata: FileSystemEntryMetadata
-): ListedDirectoryEntry {
-  return {
-    ...entry,
-    size: metadata.size,
-    created: metadata.created,
-    modified: metadata.modified,
-    accessed: metadata.accessed,
-    permissions: metadata.permissions,
-  };
-}
-
 async function collectDirectoryEntries(
   currentPath: string,
   currentRelativePath: string,
   recursive: boolean,
-  includeMetadata: boolean,
+  metadataSelection: FileSystemEntryMetadataSelection,
   excludePatterns: string[]
 ): Promise<ListedDirectoryEntry[]> {
   const entries = await fs.readdir(currentPath, { withFileTypes: true });
@@ -161,23 +106,23 @@ async function collectDirectoryEntries(
       continue;
     }
 
+    const metadata = await getFileSystemEntryMetadata(
+      entryAbsolutePath,
+      metadataSelection
+    );
+
     let listedEntry: ListedDirectoryEntry = {
       name: entry.name,
       path: relativePath,
-      type: resolveEntryType(entry),
+      ...metadata,
     };
-
-    if (includeMetadata) {
-      const metadata = await getFileSystemEntryMetadata(entryAbsolutePath);
-      listedEntry = applyOptionalMetadata(listedEntry, metadata);
-    }
 
     if (recursive && entry.isDirectory()) {
       listedEntry.children = await collectDirectoryEntries(
         entryAbsolutePath,
         rawRelativePath,
         recursive,
-        includeMetadata,
+        metadataSelection,
         excludePatterns
       );
     }
@@ -191,7 +136,7 @@ async function collectDirectoryEntries(
 async function buildListedDirectoryRoot(
   requestedPath: string,
   recursive: boolean,
-  includeMetadata: boolean,
+  metadataSelection: FileSystemEntryMetadataSelection,
   excludePatterns: string[],
   allowedDirectories: string[]
 ): Promise<ListedDirectoryRoot> {
@@ -203,7 +148,7 @@ async function buildListedDirectoryRoot(
       validPath,
       "",
       recursive,
-      includeMetadata,
+      metadataSelection,
       excludePatterns
     ),
   };
@@ -212,9 +157,15 @@ async function buildListedDirectoryRoot(
 /**
  * Builds the structured directory listing result used by the directory-entry surface.
  *
+ * @remarks
+ * This surface reuses the grouped metadata contract defined in
+ * `@domain/inspection/shared/filesystem-entry-metadata-contract` so
+ * `get_path_metadata` and `list_directory_entries` stay aligned on the same
+ * metadata selection behavior.
+ *
  * @param requestedPaths - Directory paths to list.
  * @param recursive - Whether nested directory content should be traversed.
- * @param includeMetadata - Whether optional metadata fields should be added.
+ * @param metadataSelection - Grouped optional metadata flags. `size` and `type` remain required defaults.
  * @param excludePatterns - Optional glob-like exclude patterns.
  * @param allowedDirectories - Allowed directory roots used during path validation.
  * @returns Structured directory listing result.
@@ -222,7 +173,7 @@ async function buildListedDirectoryRoot(
 export async function getListDirectoryEntriesResult(
   requestedPaths: string[],
   recursive: boolean,
-  includeMetadata: boolean,
+  metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   excludePatterns: string[],
   allowedDirectories: string[]
 ): Promise<ListDirectoryEntriesResult> {
@@ -231,7 +182,7 @@ export async function getListDirectoryEntriesResult(
       buildListedDirectoryRoot(
         requestedPath,
         recursive,
-        includeMetadata,
+        metadataSelection,
         excludePatterns,
         allowedDirectories
       )
@@ -250,7 +201,7 @@ export async function getListDirectoryEntriesResult(
  *
  * @param requestedPaths - Directory paths to list.
  * @param recursive - Whether nested directory content should be traversed.
- * @param includeMetadata - Whether optional metadata fields should be added.
+ * @param metadataSelection - Grouped optional metadata flags. `size` and `type` remain required defaults.
  * @param excludePatterns - Optional glob-like exclude patterns.
  * @param allowedDirectories - Allowed directory roots used during path validation.
  * @returns TOON-encoded structured directory listing output.
@@ -258,14 +209,14 @@ export async function getListDirectoryEntriesResult(
 export async function handleListDirectoryEntries(
   requestedPaths: string[],
   recursive: boolean,
-  includeMetadata: boolean,
+  metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   excludePatterns: string[],
   allowedDirectories: string[]
 ): Promise<string> {
   const result = await getListDirectoryEntriesResult(
     requestedPaths,
     recursive,
-    includeMetadata,
+    metadataSelection,
     excludePatterns,
     allowedDirectories
   );

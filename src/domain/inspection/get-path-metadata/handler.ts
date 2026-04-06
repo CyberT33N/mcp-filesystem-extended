@@ -1,30 +1,59 @@
 import {
-  getFileSystemEntryMetadata,
+  DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   type FileSystemEntryMetadata,
-} from "@infrastructure/filesystem/filesystem-entry-metadata";
+  type FileSystemEntryMetadataSelection,
+} from "@domain/inspection/shared/filesystem-entry-metadata-contract";
+import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
+/**
+ * Structured metadata entry returned by the `get_path_metadata` tool.
+ */
 export interface PathMetadataEntry extends FileSystemEntryMetadata {
+  /**
+   * Path exactly as requested by the caller.
+   */
   path: string;
 }
 
+/**
+ * Error surface returned when one requested path could not be resolved.
+ */
 export interface PathMetadataError {
+  /**
+   * Path exactly as requested by the caller.
+   */
   path: string;
+
+  /**
+   * Human-readable error message describing the lookup failure.
+   */
   error: string;
 }
 
+/**
+ * Structured result returned by the `get_path_metadata` tool.
+ */
 export interface PathMetadataResult {
+  /**
+   * Successfully resolved metadata entries in request order.
+   */
   entries: PathMetadataEntry[];
+
+  /**
+   * Lookup errors for requested paths that could not be resolved.
+   */
   errors: PathMetadataError[];
 }
 
 async function getPathMetadataEntry(
   filePath: string,
+  metadataSelection: FileSystemEntryMetadataSelection,
   allowedDirectories: string[]
 ): Promise<PathMetadataEntry> {
   const validPath = await validatePath(filePath, allowedDirectories);
-  const metadata = await getFileSystemEntryMetadata(validPath);
+  const metadata = await getFileSystemEntryMetadata(validPath, metadataSelection);
 
   return {
     path: filePath,
@@ -33,30 +62,53 @@ async function getPathMetadataEntry(
 }
 
 function formatPathMetadataEntry(entry: PathMetadataEntry): string {
-  const formattedInfo = {
-    path: entry.path,
-    size: `${entry.size} bytes`,
-    type: entry.type,
-    created: entry.created,
-    modified: entry.modified,
-    accessed: entry.accessed,
-    permissions: entry.permissions,
-  };
+  const lines: Array<[string, string]> = [
+    ["path", entry.path],
+    ["size", `${entry.size} bytes`],
+    ["type", entry.type],
+  ];
 
-  return Object.entries(formattedInfo)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join("\n");
+  if (entry.created !== undefined) {
+    lines.push(["created", entry.created]);
+  }
+
+  if (entry.modified !== undefined) {
+    lines.push(["modified", entry.modified]);
+  }
+
+  if (entry.accessed !== undefined) {
+    lines.push(["accessed", entry.accessed]);
+  }
+
+  if (entry.permissions !== undefined) {
+    lines.push(["permissions", entry.permissions]);
+  }
+
+  return lines.map(([key, value]) => `${key}: ${value}`).join("\n");
 }
 
+/**
+ * Builds the structured `get_path_metadata` result.
+ *
+ * @param paths - File or directory paths to inspect.
+ * @param metadataSelection - Grouped optional metadata flags. `size` and `type` remain required defaults.
+ * @param allowedDirectories - Allowed directory roots used during path validation.
+ * @returns Structured metadata lookup result.
+ */
 export async function getPathMetadataResult(
   paths: string[],
+  metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   allowedDirectories: string[]
 ): Promise<PathMetadataResult> {
   const results = await Promise.all(
     paths.map(async (filePath) => {
       try {
         return {
-          entry: await getPathMetadataEntry(filePath, allowedDirectories),
+          entry: await getPathMetadataEntry(
+            filePath,
+            metadataSelection,
+            allowedDirectories
+          ),
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -77,8 +129,17 @@ export async function getPathMetadataResult(
   };
 }
 
-export async function handleGetFileInfo(
+/**
+ * Formats the `get_path_metadata` result as text output.
+ *
+ * @param paths - File or directory paths to inspect.
+ * @param metadataSelection - Grouped optional metadata flags. `size` and `type` remain required defaults.
+ * @param allowedDirectories - Allowed directory roots used during path validation.
+ * @returns Text output for the metadata lookup.
+ */
+export async function handleGetPathMetadata(
   paths: string[],
+  metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   allowedDirectories: string[]
 ): Promise<string> {
   if (paths.length === 1) {
@@ -89,11 +150,19 @@ export async function handleGetFileInfo(
     }
 
     return formatPathMetadataEntry(
-      await getPathMetadataEntry(firstPath, allowedDirectories)
+      await getPathMetadataEntry(
+        firstPath,
+        metadataSelection,
+        allowedDirectories
+      )
     );
   }
 
-  const result = await getPathMetadataResult(paths, allowedDirectories);
+  const result = await getPathMetadataResult(
+    paths,
+    metadataSelection,
+    allowedDirectories
+  );
 
   const results = [
     ...result.entries.map((entry) => ({
@@ -106,5 +175,5 @@ export async function handleGetFileInfo(
     })),
   ];
 
-  return formatBatchTextOperationResults("file info", results);
+  return formatBatchTextOperationResults("path metadata", results);
 }
