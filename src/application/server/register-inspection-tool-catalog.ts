@@ -66,10 +66,7 @@ import {
 } from "@domain/inspection/verify-file-checksums/schema";
 
 import type { RegisterToolCatalogContext } from "./register-tool-catalog";
-import {
-  OPTIONAL_TASK_EXECUTION,
-  READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
-} from "./tool-registration-presets";
+import { READ_ONLY_LOCAL_TOOL_ANNOTATIONS } from "./tool-registration-presets";
 
 /**
  * Registers only the inspection tool family on the application-layer MCP server shell.
@@ -77,7 +74,7 @@ import {
 export function registerInspectionToolCatalog(context: RegisterToolCatalogContext): void {
   const { server, allowedDirectories, executeTool } = context;
 
-  const readFilesWithLineNumbersTool = server.registerTool(
+  server.registerTool(
     "read_files_with_line_numbers",
     {
       title: "Read files with line numbers",
@@ -90,9 +87,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     async ({ paths }) =>
       executeTool("read_files_with_line_numbers", () => handleReadFiles(paths, allowedDirectories)),
   );
-  readFilesWithLineNumbersTool.execution = OPTIONAL_TASK_EXECUTION;
 
-  const listDirectoryEntriesTool = server.registerTool(
+  server.registerTool(
     "list_directory_entries",
     {
       title: "List directory entries",
@@ -128,7 +124,6 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         };
       }),
   );
-  listDirectoryEntriesTool.execution = OPTIONAL_TASK_EXECUTION;
 
   server.registerTool(
     "find_paths_by_name",
@@ -166,7 +161,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       }),
   );
 
-  const findFilesByGlobTool = server.registerTool(
+  server.registerTool(
     "find_files_by_glob",
     {
       title: "Find files by glob",
@@ -204,9 +199,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         };
       }),
   );
-  findFilesByGlobTool.execution = OPTIONAL_TASK_EXECUTION;
 
-  const searchFileContentsByRegexTool = server.registerTool(
+  server.registerTool(
     "search_file_contents_by_regex",
     {
       title: "Search file contents by regex",
@@ -249,9 +243,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         };
       }),
   );
-  searchFileContentsByRegexTool.execution = OPTIONAL_TASK_EXECUTION;
 
-  const countLinesTool = server.registerTool(
+  server.registerTool(
     "count_lines",
     {
       title: "Count lines",
@@ -294,9 +287,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         };
       }),
   );
-  countLinesTool.execution = OPTIONAL_TASK_EXECUTION;
 
-  const getFileChecksumsTool = server.registerTool(
+  server.registerTool(
     "get_file_checksums",
     {
       title: "Get file checksums",
@@ -321,9 +313,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         };
       }),
   );
-  getFileChecksumsTool.execution = OPTIONAL_TASK_EXECUTION;
 
-  const verifyFileChecksumsTool = server.registerTool(
+  server.registerTool(
     "verify_file_checksums",
     {
       title: "Verify file checksums",
@@ -353,9 +344,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         };
       }),
   );
-  verifyFileChecksumsTool.execution = OPTIONAL_TASK_EXECUTION;
 
-  const getPathMetadataTool = server.registerTool(
+  server.registerTool(
     "get_path_metadata",
     {
       title: "Get path metadata",
@@ -380,5 +370,4 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         };
       }),
   );
-  getPathMetadataTool.execution = OPTIONAL_TASK_EXECUTION;
 }

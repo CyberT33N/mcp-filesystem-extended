@@ -34,10 +34,3 @@ export const DESTRUCTIVE_LOCAL_TOOL_ANNOTATIONS = {
   destructiveHint: true,
   openWorldHint: false,
 } as const;
-
-/**
- * Shared execution hint used by tools that may optionally run with task support.
- */
-export const OPTIONAL_TASK_EXECUTION = {
-  taskSupport: "optional",
-} as const;
