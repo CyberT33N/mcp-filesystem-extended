@@ -1,11 +1,52 @@
 import fs from "fs/promises";
 import path from "path";
+
+import {
+  CONTENT_MUTATION_TOTAL_INPUT_CHARS,
+  PATH_MUTATION_SUMMARY_CAP_CHARS,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  createRuntimeBudgetExceededFailure,
+  formatToolGuardrailFailureAsText,
+} from "@domain/shared/guardrails/tool-guardrail-error-contract";
+import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { validatePathForCreation } from "@infrastructure/filesystem/path-guard";
 
+/**
+ * Creates new files while enforcing cumulative content-bearing mutation budgets before any write
+ * begins.
+ *
+ * @remarks
+ * Content-bearing mutation endpoints are governed primarily by request-size safety. This handler
+ * refuses oversize cumulative content before touching the filesystem and keeps the success summary
+ * small so mutation responses do not mirror large caller-supplied payloads.
+ *
+ * @param files - File creation requests containing the target path and full file content.
+ * @param allowedDirectories - Directory roots that bound every requested creation path.
+ * @returns A concise mutation summary covering successful creates and file-level failures.
+ */
 export async function handleCreateFiles(
   files: Array<{path: string, content: string}>, 
   allowedDirectories: string[]
 ): Promise<string> {
+  const totalInputChars = files.reduce(
+    (totalChars, file) => totalChars + file.content.length,
+    0,
+  );
+
+  if (totalInputChars > CONTENT_MUTATION_TOTAL_INPUT_CHARS) {
+    throw new Error(
+      formatToolGuardrailFailureAsText(
+        createRuntimeBudgetExceededFailure({
+          toolName: "create_files",
+          budgetSurface: "Cumulative content-bearing mutation input characters",
+          measuredValue: totalInputChars,
+          limitValue: CONTENT_MUTATION_TOTAL_INPUT_CHARS,
+        }),
+      ),
+    );
+  }
+
   const results: string[] = [];
   const errors: string[] = [];
   
@@ -54,6 +95,13 @@ export async function handleCreateFiles(
     output += `- ${errorCount} files failed\n\n`;
     output += "Errors:\n" + errors.join("\n");
   }
+
+  assertActualTextBudget(
+    "create_files",
+    output.length,
+    PATH_MUTATION_SUMMARY_CAP_CHARS,
+    "Create-files mutation summary",
+  );
   
   return output;
 }

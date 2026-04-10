@@ -6,6 +6,13 @@ import {
   type LoggingMessageNotification,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import {
+  createGlobalResponseFuseTriggeredFailure,
+  formatToolGuardrailFailureAsText,
+} from "@domain/shared/guardrails/tool-guardrail-error-contract";
+import { GLOBAL_RESPONSE_HARD_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
+
 import { registerToolCatalog } from "./register-tool-catalog";
 import { SERVER_DESCRIPTION } from "./server-description";
 import { SERVER_INSTRUCTIONS } from "./server-instructions";
@@ -24,7 +31,13 @@ const LOG_LEVEL_MAP: Record<LoggingLevel, number> = {
 };
 
 /**
- * Application-layer MCP server shell that owns initialization, logging, and tool registration.
+ * Application-layer MCP server shell that owns initialization, logging, tool registration, and the
+ * final global response fuse.
+ *
+ * @remarks
+ * This layer is intentionally the last safety floor in the guardrail stack. Schema caps and
+ * handler-level preflights remain the primary control planes, while the server shell converts only
+ * oversize successful responses into a canonical refusal when earlier layers still allow execution.
  */
 export class FilesystemServer {
   private readonly server: McpServer;
@@ -91,6 +104,41 @@ export class FilesystemServer {
     });
   }
 
+  private measureSuccessfulResponseChars(result: CallToolResult | string): number {
+    if (typeof result === "string") {
+      return result.length;
+    }
+
+    const textContentChars = result.content.reduce(
+      (totalChars, contentBlock) =>
+        totalChars + (contentBlock.type === "text" ? contentBlock.text.length : 0),
+      0,
+    );
+
+    const structuredContentChars =
+      result.structuredContent === undefined
+        ? 0
+        : JSON.stringify(result.structuredContent).length;
+
+    return textContentChars + structuredContentChars;
+  }
+
+  private createGlobalResponseFuseErrorResult(
+    toolName: string,
+    responseChars: number,
+  ): CallToolResult {
+    const failure = createGlobalResponseFuseTriggeredFailure({
+      toolName,
+      projectedResponseChars: responseChars,
+      globalLimitChars: GLOBAL_RESPONSE_HARD_CAP_CHARS,
+    });
+
+    return {
+      content: [{ type: "text", text: formatToolGuardrailFailureAsText(failure) }],
+      isError: true,
+    };
+  }
+
   private async executeTool(
     toolName: string,
     action: () => Promise<CallToolResult | string>,
@@ -99,6 +147,32 @@ export class FilesystemServer {
       await this.log("info", "tools", { event: "call", tool: toolName });
       const result = await action();
       await this.log("info", "tools", { event: "result", tool: toolName });
+
+      if (typeof result !== "string" && result.isError === true) {
+        return result;
+      }
+
+      // This global fuse is intentionally the last server-shell safety floor.
+      // Schema caps and handler preflights remain the primary guardrail layers.
+      const successfulResponseChars = this.measureSuccessfulResponseChars(result);
+
+      try {
+        assertActualTextBudget(
+          toolName,
+          successfulResponseChars,
+          GLOBAL_RESPONSE_HARD_CAP_CHARS,
+          "global successful response fuse",
+        );
+      } catch {
+        await this.log("warning", "tools", {
+          event: "global_response_fuse_triggered",
+          tool: toolName,
+          responseChars: successfulResponseChars,
+          globalResponseHardCapChars: GLOBAL_RESPONSE_HARD_CAP_CHARS,
+        });
+
+        return this.createGlobalResponseFuseErrorResult(toolName, successfulResponseChars);
+      }
 
       if (typeof result !== "string") {
         return result;
@@ -125,6 +199,10 @@ export class FilesystemServer {
 
   /**
    * Connects the server to the stdio transport and begins serving requests.
+   *
+   * @remarks
+   * The transport layer exposes the already-harmonized caller contract, including the stable server
+   * instructions and the non-bypassable global response fuse owned by this class.
    *
    * @returns Nothing. The method resolves once the MCP transport is connected.
    */

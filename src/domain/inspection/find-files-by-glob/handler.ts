@@ -1,16 +1,32 @@
 import fs from "fs/promises";
 import path from "path";
+import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
 import { minimatch } from "minimatch";
 
+/**
+ * Describes the structured glob-search result for one requested root.
+ *
+ * @remarks
+ * This contract preserves root-local matches and truncation state so discovery
+ * callers can distinguish normal completion from family-budget cutoffs.
+ */
 export interface FindFilesByGlobRootResult {
   root: string;
   matches: string[];
   truncated: boolean;
 }
 
+/**
+ * Describes the structured glob-search result across the full request batch.
+ *
+ * @remarks
+ * The batch result aggregates per-root discovery output while keeping one
+ * shared truncation signal for callers that need machine-readable breadth data.
+ */
 export interface FindFilesByGlobResult {
   roots: FindFilesByGlobRootResult[];
   totalMatches: number;
@@ -23,7 +39,7 @@ async function getFindFilesByGlobRootResult(
   excludePatterns: string[],
   maxResults: number,
   allowedDirectories: string[]
-): Promise<string> {
+): Promise<FindFilesByGlobRootResult> {
   const validRootPath = await validatePath(searchPath, allowedDirectories);
 
   const results: string[] = [];
@@ -113,9 +129,33 @@ async function getFormattedSearchGlobResult(
     output += `${match}\n`;
   }
 
-  return output.trimEnd();
+  output = output.trimEnd();
+
+  assertActualTextBudget(
+    "find_files_by_glob",
+    output.length,
+    DISCOVERY_RESPONSE_CAP_CHARS,
+    "formatted glob search results",
+  );
+
+  return output;
 }
 
+/**
+ * Returns the structured glob-search result for one or more requested roots.
+ *
+ * @remarks
+ * Use this surface when callers need machine-readable discovery output while
+ * still inheriting path validation, root-local truncation, and family-level
+ * response-budget protection in downstream formatting layers.
+ *
+ * @param searchPaths - Requested root directories in caller-supplied order.
+ * @param pattern - Glob expression applied to relative paths beneath each root.
+ * @param excludePatterns - Glob patterns removed from traversal before result collection.
+ * @param maxResults - Maximum number of matches retained per root before truncation.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @returns Structured per-root glob-search results and aggregate totals.
+ */
 export async function getFindFilesByGlobResult(
   searchPaths: string[],
   pattern: string,
@@ -142,6 +182,21 @@ export async function getFindFilesByGlobResult(
   };
 }
 
+/**
+ * Formats glob-search results for the caller-visible text response surface.
+ *
+ * @remarks
+ * This discovery entrypoint keeps file enumeration broad enough for caller use
+ * but still enforces a bounded match ceiling and rejects oversize formatted
+ * output through the shared discovery response budget.
+ *
+ * @param searchPaths - Requested root directories in caller-supplied order.
+ * @param pattern - Glob expression applied to relative paths beneath each root.
+ * @param excludePatterns - Glob patterns removed from traversal before result collection.
+ * @param maxResults - Maximum number of matches retained per root before truncation.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @returns Human-readable glob-search output bounded by the discovery-family text budget.
+ */
 export async function handleSearchGlob(
   searchPaths: string[],
   pattern: string,
@@ -150,8 +205,14 @@ export async function handleSearchGlob(
   allowedDirectories: string[]
 ): Promise<string> {
   if (searchPaths.length === 1) {
+    const firstSearchPath = searchPaths[0];
+
+    if (firstSearchPath === undefined) {
+      throw new Error("Expected one root path for glob-based search.");
+    }
+
     return getFormattedSearchGlobResult(
-      searchPaths[0],
+      firstSearchPath,
       pattern,
       excludePatterns,
       maxResults,
@@ -183,5 +244,14 @@ export async function handleSearchGlob(
     })
   );
 
-  return formatBatchTextOperationResults("search glob", results);
+  const output = formatBatchTextOperationResults("search glob", results);
+
+  assertActualTextBudget(
+    "find_files_by_glob",
+    output.length,
+    DISCOVERY_RESPONSE_CAP_CHARS,
+    "formatted batched glob search results",
+  );
+
+  return output;
 }

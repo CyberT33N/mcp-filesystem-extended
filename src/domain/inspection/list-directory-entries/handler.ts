@@ -2,6 +2,8 @@ import fs from "fs/promises";
 import type { Dirent } from "fs";
 import path from "path";
 import { encode } from "@toon-format/toon";
+import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { minimatch } from "minimatch";
 import {
   DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
@@ -221,5 +223,14 @@ export async function handleListDirectoryEntries(
     allowedDirectories
   );
 
-  return encode(result);
+  const output = encode(result);
+
+  assertActualTextBudget(
+    "list_directory_entries",
+    output.length,
+    DISCOVERY_RESPONSE_CAP_CHARS,
+    "encoded structured directory listing output",
+  );
+
+  return output;
 }

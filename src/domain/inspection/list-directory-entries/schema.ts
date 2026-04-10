@@ -4,17 +4,52 @@ import {
   DefaultedFileSystemEntryMetadataSelectionSchema,
   FileSystemEntryMetadataSchema,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
+import {
+  GLOB_PATTERN_MAX_CHARS,
+  MAX_DISCOVERY_ROOTS_PER_REQUEST,
+  MAX_EXCLUDE_GLOBS_PER_REQUEST,
+  PATH_MAX_CHARS,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
 
 /**
  * Input schema for the `list_directory_entries` tool.
  */
 export const ListDirectoryEntriesArgsSchema = z.object({
+  /**
+   * Listing roots.
+   *
+   * @remarks
+   * Use this property to define the directories whose entries should be listed
+   * in request order.
+   *
+   * @example
+   * ```ts
+   * {
+   *   roots: ["src", ".plan"]
+   * }
+   * ```
+   */
   roots: z
-    .array(z.string())
+    .array(z.string().max(PATH_MAX_CHARS))
     .min(1)
+    .max(MAX_DISCOVERY_ROOTS_PER_REQUEST)
     .describe(
       "Paths to directories to list. Pass one path for a single listing root or multiple paths for batch listing roots."
     ),
+  /**
+   * Recursive traversal mode.
+   *
+   * @remarks
+   * Enable this property when nested children should be collected instead of
+   * limiting the output to the first directory level.
+   *
+   * @example
+   * ```ts
+   * {
+   *   recursive: false
+   * }
+   * ```
+   */
   recursive: z
     .boolean()
     .optional()
@@ -22,11 +57,40 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .describe(
       "Whether nested directory content should be traversed recursively. Set to false to return only same-level files and directories for each requested root."
     ),
+  /**
+   * Metadata selection.
+   *
+   * @remarks
+   * This property narrows the optional metadata groups that should accompany
+   * every listed entry.
+   *
+   * @example
+   * ```ts
+   * {
+   *   metadata: { timestamps: true, permissions: true }
+   * }
+   * ```
+   */
   metadata: DefaultedFileSystemEntryMetadataSelectionSchema.describe(
     "Optional grouped metadata selectors. `size` and `type` are always returned. Set `timestamps` and/or `permissions` to true to include those groups."
   ),
+  /**
+   * Listing exclusions.
+   *
+   * @remarks
+   * Use this property to remove matching entries from the structured listing so
+   * callers can suppress irrelevant or noisy paths.
+   *
+   * @example
+   * ```ts
+   * {
+   *   excludeGlobs: ["**\/node_modules/**"]
+   * }
+   * ```
+   */
   excludeGlobs: z
-    .array(z.string())
+    .array(z.string().max(GLOB_PATTERN_MAX_CHARS))
+    .max(MAX_EXCLUDE_GLOBS_PER_REQUEST)
     .optional()
     .default([])
     .describe(
@@ -80,22 +144,105 @@ interface ListDirectoryEntriesStructuredResult {
 }
 
 const ListedDirectoryEntryBaseSchema = FileSystemEntryMetadataSchema.extend({
+  /**
+   * Entry name.
+   *
+   * @remarks
+   * This property exposes the leaf name of the listed directory entry without
+   * repeating the full relative path.
+   *
+   * @example
+   * ```ts
+   * {
+   *   name: "schema.ts"
+   * }
+   * ```
+   */
   name: z.string(),
+  /**
+   * Relative entry path.
+   *
+   * @remarks
+   * This property reports the path of the entry relative to the requested root
+   * so callers can reconstruct structure without absolute filesystem leakage.
+   *
+   * @example
+   * ```ts
+   * {
+   *   path: "domain/inspection/schema.ts"
+   * }
+   * ```
+   */
   path: z.string(),
 });
 
 export const ListedDirectoryEntryOutputSchema: z.ZodType<ListedDirectoryEntryOutput> = z.lazy(
   () =>
     ListedDirectoryEntryBaseSchema.extend({
+      /**
+       * Nested child entries.
+       *
+       * @remarks
+       * This optional property is present when recursive traversal includes the
+       * current entry's descendants in the structured listing response.
+       *
+       * @example
+       * ```ts
+       * {
+       *   children: [{ name: "schema.ts", path: "domain/schema.ts" }]
+       * }
+       * ```
+       */
       children: z.array(ListedDirectoryEntryOutputSchema).optional(),
     }),
 );
 
 export const ListDirectoryEntriesStructuredResultSchema: z.ZodType<ListDirectoryEntriesStructuredResult> =
   z.object({
+    /**
+     * Listing roots.
+     *
+     * @remarks
+     * This property preserves one structured listing payload per requested root
+     * directory.
+     *
+     * @example
+     * ```ts
+     * {
+     *   roots: [{ requestedPath: "src", entries: [] }]
+     * }
+     * ```
+     */
     roots: z.array(
       z.object({
+        /**
+         * Requested root echo.
+         *
+         * @remarks
+         * This property repeats the root path exactly as the caller supplied it.
+         *
+         * @example
+         * ```ts
+         * {
+         *   requestedPath: "src"
+         * }
+         * ```
+         */
         requestedPath: z.string(),
+        /**
+         * Structured root entries.
+         *
+         * @remarks
+         * This property contains the entry tree collected beneath the current
+         * requested root.
+         *
+         * @example
+         * ```ts
+         * {
+         *   entries: [{ name: "domain", path: "domain" }]
+         * }
+         * ```
+         */
         entries: z.array(ListedDirectoryEntryOutputSchema),
       }),
     ),

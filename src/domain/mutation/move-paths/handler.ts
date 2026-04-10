@@ -1,6 +1,11 @@
 import fs from "fs/promises";
 import path from "path";
 import {
+  createRuntimeBudgetExceededFailure,
+  formatToolGuardrailFailureAsText,
+} from "@domain/shared/guardrails/tool-guardrail-error-contract";
+import { MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
   validatePath,
   validatePathForCreation,
 } from "@infrastructure/filesystem/path-guard";
@@ -8,11 +13,36 @@ import { createModuleLogger } from "@infrastructure/logging/logger";
 
 const log = createModuleLogger("move_paths");
 
+/**
+ * Moves filesystem entries after validating path scope and refusing oversized mutation batches
+ * before any filesystem mutation begins.
+ *
+ * @remarks
+ * Move operations combine destructive source removal with destination creation, so the handler
+ * treats them as blast-radius-sensitive path mutations. Batch-size refusal, validated scope, and
+ * explicit overwrite handling must complete before any rename occurs.
+ *
+ * @param items - Move operations already mapped into source and destination pairs.
+ * @param overwrite - Whether existing destinations may be replaced.
+ * @param allowedDirectories - Allowed filesystem roots used by path validation.
+ * @returns A deterministic batch summary or a shared guardrail refusal message.
+ */
 export async function handleMovePaths(
   items: Array<{source: string, destination: string}>,
   overwrite: boolean,
   allowedDirectories: string[]
 ): Promise<string> {
+  if (items.length > MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST) {
+    return formatToolGuardrailFailureAsText(
+      createRuntimeBudgetExceededFailure({
+        toolName: "move_paths",
+        budgetSurface: "move_paths.operations",
+        measuredValue: items.length,
+        limitValue: MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST,
+      })
+    );
+  }
+
   const results: string[] = [];
   const errors: string[] = [];
 

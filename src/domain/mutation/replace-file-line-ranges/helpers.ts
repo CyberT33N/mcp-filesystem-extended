@@ -1,16 +1,34 @@
+import { FILE_DIFF_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import fs from "fs/promises";
 import {
   createUnifiedDiff,
   normalizeLineEndings,
 } from "@infrastructure/formatting/unified-diff";
 
+/**
+ * Configures how line-range replacements are applied before preview generation and optional writes.
+ */
 export interface ReplaceFileLineRangesOptions {
+  /**
+   * Preserves the indentation of the first replaced line on the first inserted line when enabled.
+   */
   preserveIndentation: boolean;
 }
 
+/**
+ * Applies validated line-range replacements to one file, builds a complete diff preview, and refuses
+ * oversize preview output before any successful result is returned.
+ *
+ * @param filePath - Absolute validated file path whose line ranges should be replaced.
+ * @param replacements - Inclusive line-range replacements using the canonical `replacementText` payload surface.
+ * @param dryRun - When true, computes the preview without writing the file.
+ * @param options - Controls indentation preservation during replacement application.
+ * @returns A complete diff preview and replacement summary for the requested line-range update.
+ */
 export async function applyFileLineRangeReplacements(
   filePath: string,
-  replacements: Array<{startLine: number, endLine: number, newText: string}>,
+  replacements: Array<{startLine: number, endLine: number, replacementText: string}>,
   dryRun: boolean = false,
   options: ReplaceFileLineRangesOptions = { preserveIndentation: true }
 ): Promise<string> {
@@ -26,15 +44,15 @@ export async function applyFileLineRangeReplacements(
   // Apply replacements sequentially
   let modifiedContentLines = [...contentLines];
   const replacementResults: Array<{
-    replacement: {startLine: number, endLine: number, newText: string},
+    replacement: {startLine: number, endLine: number, replacementText: string},
     applied: boolean,
     message?: string
   }> = [];
   
   for (const replacement of sortedReplacements) {
-    const { startLine, endLine, newText } = replacement;
+    const { startLine, endLine, replacementText } = replacement;
     const replacementResult: {
-      replacement: {startLine: number, endLine: number, newText: string},
+      replacement: {startLine: number, endLine: number, replacementText: string},
       applied: boolean,
       message?: string
     } = { replacement, applied: false };
@@ -51,8 +69,8 @@ export async function applyFileLineRangeReplacements(
     const endIndex = endLine - 1;
     const linesToReplace = endIndex - startIndex + 1;
     
-    // Normalize newText
-    const normalizedNew = normalizeLineEndings(newText);
+    // Normalize replacementText
+    const normalizedNew = normalizeLineEndings(replacementText);
     const newLines = normalizedNew.split('\n');
     
     if (options.preserveIndentation) {
@@ -99,6 +117,13 @@ export async function applyFileLineRangeReplacements(
       resultText += `  Message: ${result.message}\n`;
     }
   });
+
+  assertActualTextBudget(
+    "replace_file_line_ranges",
+    resultText.length,
+    FILE_DIFF_RESPONSE_CAP_CHARS,
+    "Line-range replacement preview output exceeds the file-diff family cap.",
+  );
   
   if (!dryRun) {
     await fs.writeFile(filePath, modifiedContent, 'utf-8');

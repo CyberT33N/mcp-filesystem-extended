@@ -1,0 +1,194 @@
+/**
+ * Shared handler-preflight helpers that resolve real filesystem metadata before content-oriented
+ * endpoints start expensive reads, traversal fan-out, or diff preparation.
+ *
+ * @remarks
+ * Schema caps remain the primary contract layer for static request-shape limits. This module owns
+ * the metadata-first preflight layer that rejects dynamic byte, path, and file-type risk once real
+ * paths have been validated and resolved, so oversized or invalid candidate sets fail before any
+ * broader execution begins.
+ */
+import type { FileSystemEntryType } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
+import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
+import { validatePath } from "@infrastructure/filesystem/path-guard";
+
+import {
+  createMetadataPreflightRejectedFailure,
+  formatToolGuardrailFailureAsText,
+} from "./tool-guardrail-error-contract";
+import { MAX_GENERIC_PATHS_PER_REQUEST, PATH_MAX_CHARS } from "./tool-guardrail-limits";
+
+/**
+ * Canonical validated metadata entry shared by filesystem preflight helpers.
+ */
+export interface FilesystemPreflightEntry {
+  /**
+   * Original path string received from the caller before validation resolves it.
+   */
+  requestedPath: string;
+
+  /**
+   * Absolute validated filesystem path returned by the path guard.
+   */
+  validPath: string;
+
+  /**
+   * Resolved filesystem entry type returned by the shared metadata reader.
+   */
+  type: FileSystemEntryType;
+
+  /**
+   * Resolved filesystem entry size in bytes.
+   */
+  size: number;
+}
+
+function throwMetadataPreflightRejectedFailure(
+  toolName: string,
+  preflightTarget: string,
+  measuredValue: string | number,
+  limitValue: string | number,
+  reason: string,
+): never {
+  const failure = createMetadataPreflightRejectedFailure({
+    toolName,
+    preflightTarget,
+    measuredValue,
+    limitValue,
+    reason,
+  });
+
+  throw new Error(formatToolGuardrailFailureAsText(failure));
+}
+
+/**
+ * Collects validated filesystem metadata entries for the metadata-first preflight layer before
+ * any file-content read, diff preparation, or wide traversal begins.
+ *
+ * @param toolName - Exact tool name that owns the preflight request and any resulting refusal.
+ * @param requestedPaths - Caller-supplied filesystem targets that must be validated and resolved.
+ * @param allowedDirectories - Allowed root directories used by the path guard.
+ * @returns Ordered validated metadata entries preserving the caller's original path order.
+ */
+export async function collectValidatedFilesystemPreflightEntries(
+  toolName: string,
+  requestedPaths: string[],
+  allowedDirectories: string[],
+): Promise<FilesystemPreflightEntry[]> {
+  if (requestedPaths.length > MAX_GENERIC_PATHS_PER_REQUEST) {
+    throwMetadataPreflightRejectedFailure(
+      toolName,
+      "requestedPaths",
+      requestedPaths.length,
+      MAX_GENERIC_PATHS_PER_REQUEST,
+      "Requested path count exceeds the shared metadata preflight ceiling.",
+    );
+  }
+
+  const entries: FilesystemPreflightEntry[] = [];
+
+  for (const requestedPath of requestedPaths) {
+    if (requestedPath.length > PATH_MAX_CHARS) {
+      throwMetadataPreflightRejectedFailure(
+        toolName,
+        requestedPath,
+        requestedPath.length,
+        PATH_MAX_CHARS,
+        "Requested path length exceeds the shared metadata preflight ceiling.",
+      );
+    }
+
+    try {
+      const validPath = await validatePath(requestedPath, allowedDirectories);
+      const metadata = await getFileSystemEntryMetadata(validPath);
+
+      entries.push({
+        requestedPath,
+        validPath,
+        type: metadata.type,
+        size: metadata.size,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+
+      throwMetadataPreflightRejectedFailure(
+        toolName,
+        requestedPath,
+        "unresolved",
+        "validated existing path inside allowed directories",
+        reason,
+      );
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Sums the total byte footprint of validated preflight entries.
+ *
+ * @param entries - Validated preflight entries gathered before content execution.
+ * @returns The aggregate byte count across all validated entries.
+ */
+export function sumPreflightBytes(entries: FilesystemPreflightEntry[]): number {
+  return entries.reduce((totalBytes, entry) => totalBytes + entry.size, 0);
+}
+
+/**
+ * Rejects validated candidate sets whose aggregate byte load exceeds a hard preflight budget.
+ *
+ * @param toolName - Exact tool name that owns the preflight request.
+ * @param totalBytes - Aggregate byte count across the validated candidate set.
+ * @param hardCapBytes - Hard byte ceiling that must not be exceeded.
+ * @param summary - Concise English summary of the guarded candidate set.
+ * @returns Nothing when the candidate byte budget remains within the hard cap and execution may continue.
+ */
+export function assertCandidateByteBudget(
+  toolName: string,
+  totalBytes: number,
+  hardCapBytes: number,
+  summary: string,
+): void {
+  if (totalBytes <= hardCapBytes) {
+    return;
+  }
+
+  throwMetadataPreflightRejectedFailure(
+    toolName,
+    summary,
+    totalBytes,
+    hardCapBytes,
+    "Candidate byte budget exceeds the preflight ceiling before content execution begins.",
+  );
+}
+
+/**
+ * Rejects validated entries whose resolved filesystem types are not permitted for the current
+ * operation after path validation but before the wider handler workflow begins.
+ *
+ * @param toolName - Exact tool name that owns the preflight request.
+ * @param entries - Validated entries whose resolved types must be checked.
+ * @param allowedTypes - Filesystem entry types that the current operation accepts.
+ * @returns Nothing when every entry type is permitted for the operation.
+ */
+export function assertExpectedFileTypes(
+  toolName: string,
+  entries: FilesystemPreflightEntry[],
+  allowedTypes: Array<"file" | "directory">,
+): void {
+  for (const entry of entries) {
+    const isAllowedType = allowedTypes.some((allowedType) => allowedType === entry.type);
+
+    if (isAllowedType) {
+      continue;
+    }
+
+    throwMetadataPreflightRejectedFailure(
+      toolName,
+      entry.requestedPath,
+      entry.type,
+      allowedTypes.join(", "),
+      "Resolved filesystem entry type is not permitted for this operation.",
+    );
+  }
+}

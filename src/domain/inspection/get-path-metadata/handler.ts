@@ -1,3 +1,5 @@
+import { METADATA_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
   DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   type FileSystemEntryMetadata,
@@ -149,13 +151,22 @@ export async function handleGetPathMetadata(
       throw new Error("Expected one path for file metadata lookup.");
     }
 
-    return formatPathMetadataEntry(
+    const output = formatPathMetadataEntry(
       await getPathMetadataEntry(
         firstPath,
         metadataSelection,
         allowedDirectories
       )
     );
+
+    assertActualTextBudget(
+      "get_path_metadata",
+      output.length,
+      METADATA_RESPONSE_CAP_CHARS,
+      "formatted single-path metadata output",
+    );
+
+    return output;
   }
 
   const result = await getPathMetadataResult(
@@ -175,5 +186,14 @@ export async function handleGetPathMetadata(
     })),
   ];
 
-  return formatBatchTextOperationResults("path metadata", results);
+  const output = formatBatchTextOperationResults("path metadata", results);
+
+  assertActualTextBudget(
+    "get_path_metadata",
+    output.length,
+    METADATA_RESPONSE_CAP_CHARS,
+    "formatted batched path metadata output",
+  );
+
+  return output;
 }

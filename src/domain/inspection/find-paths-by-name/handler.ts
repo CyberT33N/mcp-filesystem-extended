@@ -1,30 +1,56 @@
+import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
 import { searchFiles } from "./helpers";
 
+/**
+ * Describes the structured name-search result for one requested root.
+ *
+ * @remarks
+ * This contract preserves root-local matches and truncation state so callers
+ * can distinguish complete traversal from a family-budget cutoff.
+ */
 export interface FindPathsByNameRootResult {
   root: string;
   matches: string[];
+  truncated: boolean;
 }
 
+/**
+ * Describes the structured name-search result across the full request batch.
+ *
+ * @remarks
+ * The batch result aggregates per-root discovery output while keeping one
+ * shared truncation signal for callers that need machine-readable breadth data.
+ */
 export interface FindPathsByNameResult {
   roots: FindPathsByNameRootResult[];
   totalMatches: number;
+  truncated: boolean;
 }
 
 async function getFindPathsByNameRootResult(
   directoryPath: string,
   pattern: string,
   excludePatterns: string[],
-  allowedDirectories: string[]
+  allowedDirectories: string[],
+  maxResults: number,
 ): Promise<FindPathsByNameRootResult> {
   const validPath = await validatePath(directoryPath, allowedDirectories);
-  const matches = await searchFiles(validPath, pattern, excludePatterns, allowedDirectories);
+  const result = await searchFiles(
+    validPath,
+    pattern,
+    excludePatterns,
+    allowedDirectories,
+    maxResults,
+  );
 
   return {
     root: directoryPath,
-    matches,
+    matches: result.matches,
+    truncated: result.truncated,
   };
 }
 
@@ -32,22 +58,58 @@ async function getFormattedSearchFilesResult(
   directoryPath: string,
   pattern: string,
   excludePatterns: string[],
-  allowedDirectories: string[]
+  allowedDirectories: string[],
+  maxResults: number,
 ): Promise<string> {
   const result = await getFindPathsByNameRootResult(
     directoryPath,
     pattern,
     excludePatterns,
-    allowedDirectories
+    allowedDirectories,
+    maxResults,
   );
-  return result.matches.length > 0 ? result.matches.join("\n") : "No matches found";
+
+  if (result.matches.length === 0) {
+    return "No matches found";
+  }
+
+  let output = result.matches.join("\n");
+
+  if (result.truncated) {
+    output += `\n(limited to ${maxResults} results)`;
+  }
+
+  assertActualTextBudget(
+    "find_paths_by_name",
+    output.length,
+    DISCOVERY_RESPONSE_CAP_CHARS,
+    "formatted name-based search results",
+  );
+
+  return output;
 }
 
+/**
+ * Returns the structured name-search result for one or more requested roots.
+ *
+ * @remarks
+ * Use this surface when callers need machine-readable discovery output while
+ * still inheriting path validation, helper-driven traversal, and family-level
+ * response-budget protection in downstream formatting layers.
+ *
+ * @param directoryPaths - Requested root directories in caller-supplied order.
+ * @param pattern - Case-insensitive name substring applied to files and directories.
+ * @param excludePatterns - Glob patterns removed from traversal before result collection.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @param maxResults - Maximum number of matches retained per root before truncation.
+ * @returns Structured per-root name-search results and aggregate totals.
+ */
 export async function getFindPathsByNameResult(
   directoryPaths: string[],
   pattern: string,
   excludePatterns: string[],
-  allowedDirectories: string[]
+  allowedDirectories: string[],
+  maxResults = 500,
 ): Promise<FindPathsByNameResult> {
   const roots = await Promise.all(
     directoryPaths.map((directoryPath) =>
@@ -55,7 +117,8 @@ export async function getFindPathsByNameResult(
         directoryPath,
         pattern,
         excludePatterns,
-        allowedDirectories
+        allowedDirectories,
+        maxResults,
       )
     )
   );
@@ -63,14 +126,31 @@ export async function getFindPathsByNameResult(
   return {
     roots,
     totalMatches: roots.reduce((total, root) => total + root.matches.length, 0),
+    truncated: roots.some((root) => root.truncated),
   };
 }
 
+/**
+ * Formats name-search results for the caller-visible text response surface.
+ *
+ * @remarks
+ * This discovery entrypoint keeps name-based search broad enough for caller use
+ * but still rejects oversized formatted output through the shared discovery
+ * response budget instead of returning unbounded path lists.
+ *
+ * @param directoryPaths - Requested root directories in caller-supplied order.
+ * @param pattern - Case-insensitive name substring applied to files and directories.
+ * @param excludePatterns - Glob patterns removed from traversal before result collection.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @param maxResults - Maximum number of matches retained per root before truncation.
+ * @returns Human-readable name-search output bounded by the discovery-family text budget.
+ */
 export async function handleSearchFiles(
   directoryPaths: string[],
   pattern: string,
   excludePatterns: string[],
-  allowedDirectories: string[]
+  allowedDirectories: string[],
+  maxResults = 500,
 ): Promise<string> {
   if (directoryPaths.length === 1) {
     const firstDirectoryPath = directoryPaths[0];
@@ -83,7 +163,8 @@ export async function handleSearchFiles(
       firstDirectoryPath,
       pattern,
       excludePatterns,
-      allowedDirectories
+      allowedDirectories,
+      maxResults,
     );
   }
 
@@ -94,7 +175,8 @@ export async function handleSearchFiles(
           directoryPath,
           pattern,
           excludePatterns,
-          allowedDirectories
+          allowedDirectories,
+          maxResults,
         );
         return {
           label: directoryPath,
@@ -110,5 +192,14 @@ export async function handleSearchFiles(
     })
   );
 
-  return formatBatchTextOperationResults("search files", results);
+  const output = formatBatchTextOperationResults("search files", results);
+
+  assertActualTextBudget(
+    "find_paths_by_name",
+    output.length,
+    DISCOVERY_RESPONSE_CAP_CHARS,
+    "formatted batched name-based search results",
+  );
+
+  return output;
 }

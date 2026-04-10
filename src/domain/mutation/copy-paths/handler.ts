@@ -1,4 +1,9 @@
 import fs from "fs/promises";
+import {
+  createRuntimeBudgetExceededFailure,
+  formatToolGuardrailFailureAsText,
+} from "@domain/shared/guardrails/tool-guardrail-error-contract";
+import { MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
@@ -61,10 +66,34 @@ async function copySingleOperation(
   }
 }
 
+/**
+ * Copies files or directories after validating path scope and refusing oversized mutation batches
+ * before any filesystem mutation begins.
+ *
+ * @remarks
+ * Path-mutation endpoints are governed primarily by blast radius and batch breadth instead of
+ * large response bodies. This handler therefore rejects oversize operation sets before copying and
+ * uses shared overlap checks to prevent unsafe parallel copy plans.
+ *
+ * @param operations - Copy operations requested by the caller.
+ * @param allowedDirectories - Allowed filesystem roots used by path validation.
+ * @returns A deterministic batch summary or a shared guardrail refusal message.
+ */
 export async function handleCopyPaths(
   operations: CopyPathsOperation[],
   allowedDirectories: string[]
 ): Promise<string> {
+  if (operations.length > MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST) {
+    return formatToolGuardrailFailureAsText(
+      createRuntimeBudgetExceededFailure({
+        toolName: "copy_paths",
+        budgetSurface: "copy_paths.operations",
+        measuredValue: operations.length,
+        limitValue: MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST,
+      })
+    );
+  }
+
   const preparedOperations = await Promise.all(
     operations.map((operation) => prepareCopyOperation(operation, allowedDirectories))
   );

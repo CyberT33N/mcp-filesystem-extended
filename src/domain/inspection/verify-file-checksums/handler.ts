@@ -1,3 +1,5 @@
+import { METADATA_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { calculateFileHash, type HashAlgorithm } from "@infrastructure/filesystem/checksum";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 
@@ -26,6 +28,19 @@ export interface FileChecksumVerificationResult {
   };
 }
 
+/**
+ * Computes structured checksum-verification results for a requested file batch.
+ *
+ * @remarks
+ * This helper keeps path validation, checksum generation, and normalized hash
+ * comparison inside the metadata family while preserving partial failures for
+ * later formatting under the shared response budget.
+ *
+ * @param files - Requested file and expected-hash pairs in caller-supplied order.
+ * @param algorithm - Hash algorithm selected by the request contract.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @returns Structured verification entries, failures, and aggregate summary counts.
+ */
 export async function getFileChecksumVerificationResult(
   files: Array<{ path: string; expectedHash: string }>,
   algorithm: HashAlgorithm,
@@ -76,6 +91,19 @@ export async function getFileChecksumVerificationResult(
   };
 }
 
+/**
+ * Formats checksum-verification results for the caller-visible text surface.
+ *
+ * @remarks
+ * The verification endpoint stays in the metadata family, so the formatted
+ * output emphasizes concise validity summaries while the final text surface is
+ * still rejected if it would exceed the shared metadata response cap.
+ *
+ * @param files - Requested file and expected-hash pairs in caller-supplied order.
+ * @param algorithm - Hash algorithm selected by the request contract.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @returns Human-readable verification output bounded by the metadata-family text budget.
+ */
 export async function handleChecksumFilesVerif(
   files: Array<{ path: string; expectedHash: string }>,
   algorithm: HashAlgorithm,
@@ -120,6 +148,13 @@ export async function handleChecksumFilesVerif(
       output += `! ${error.path}: ${error.error}\n`;
     }
   }
+
+  assertActualTextBudget(
+    "verify_file_checksums",
+    output.length,
+    METADATA_RESPONSE_CAP_CHARS,
+    "formatted checksum verification output",
+  );
 
   return output;
 }

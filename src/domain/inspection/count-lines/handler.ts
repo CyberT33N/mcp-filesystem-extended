@@ -1,5 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
+import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
@@ -11,6 +13,14 @@ interface FileLineCount {
   matchingCount?: number | undefined;
 }
 
+/**
+ * Describes the structured count-lines result for one requested path.
+ *
+ * @remarks
+ * This contract preserves per-path aggregation so recursive breadth and
+ * matching-line totals remain inspectable before the final formatted text
+ * output is subjected to the discovery response budget.
+ */
 export interface CountLinesPathResult {
   path: string;
   files: FileLineCount[];
@@ -18,6 +28,14 @@ export interface CountLinesPathResult {
   totalMatchingLines: number;
 }
 
+/**
+ * Describes the structured count-lines result across the entire request batch.
+ *
+ * @remarks
+ * The batch result keeps aggregate totals available for structured consumers
+ * while the human-readable surface stays bounded by the shared text budget and
+ * the global response fuse.
+ */
 export interface CountLinesResult {
   paths: CountLinesPathResult[];
   totalFiles: number;
@@ -80,6 +98,23 @@ async function getCountLinesPathResult(
   };
 }
 
+/**
+ * Formats count-lines output for one or more requested paths.
+ *
+ * @remarks
+ * This handler keeps statically expressible request limits in schema, then
+ * enforces response-size protection at formatting time so recursive discovery
+ * output is refused instead of silently escaping the family budget.
+ *
+ * @param filePaths - Requested file or directory scopes in caller-supplied order.
+ * @param recursive - Whether directory inputs may traverse nested files.
+ * @param pattern - Optional regex used to count matching lines in addition to total lines.
+ * @param filePattern - Glob-like file filter applied during recursive traversal.
+ * @param excludePatterns - Glob-like exclusions removed before counting proceeds.
+ * @param ignoreEmptyLines - Whether blank lines should be excluded from totals.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @returns Human-readable count-lines output that respects the discovery-family text budget.
+ */
 export async function handleCountLines(
   filePaths: string[],
   recursive: boolean,
@@ -121,6 +156,13 @@ export async function handleCountLines(
     if (pattern) {
       output += `, ${result.totalMatchingLines} matching lines`;
     }
+
+    assertActualTextBudget(
+      "count_lines",
+      output.length,
+      DISCOVERY_RESPONSE_CAP_CHARS,
+      "formatted count-lines output",
+    );
 
     return output;
   }
@@ -177,9 +219,34 @@ export async function handleCountLines(
     })
   );
 
-  return formatBatchTextOperationResults("count lines", results);
+  const output = formatBatchTextOperationResults("count lines", results);
+
+  assertActualTextBudget(
+    "count_lines",
+    output.length,
+    DISCOVERY_RESPONSE_CAP_CHARS,
+    "formatted batched count-lines output",
+  );
+
+  return output;
 }
 
+/**
+ * Returns the structured count-lines result for one or more requested paths.
+ *
+ * @remarks
+ * Use this surface when callers need machine-readable aggregation while keeping
+ * the same validated traversal rules as the formatted handler entrypoint.
+ *
+ * @param filePaths - Requested file or directory scopes in caller-supplied order.
+ * @param recursive - Whether directory inputs may traverse nested files.
+ * @param pattern - Optional regex used to count matching lines in addition to total lines.
+ * @param filePattern - Glob-like file filter applied during recursive traversal.
+ * @param excludePatterns - Glob-like exclusions removed before counting proceeds.
+ * @param ignoreEmptyLines - Whether blank lines should be excluded from totals.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @returns Structured per-path and aggregate line-count totals.
+ */
 export async function getCountLinesResult(
   filePaths: string[],
   recursive: boolean,

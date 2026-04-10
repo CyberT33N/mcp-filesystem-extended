@@ -1,6 +1,10 @@
 const SERVER_INSTRUCTION_LINES = [
   "- All multi-target tools accept arrays even when only one item is processed.",
   "- All path inputs must resolve inside allowed directories.",
+  "- Hard request and response safety caps are enforced server-side across all tool families.",
+  "- Callers may narrow scope, but they cannot disable or override server-side hard caps.",
+  "- Metadata-first admission control applies to file-read-style operations when projected responses would exceed safe budgets.",
+  "- Regex content search may refuse structurally unsafe patterns or oversized search scopes before returning results.",
   "- Use find_paths_by_name for file or directory name lookup, find_files_by_glob for glob matching, and search_file_contents_by_regex for content search.",
   "- replace_file_line_ranges uses 1-based inclusive line ranges and does not accept unified diff patch text.",
   "- Read-only tools are marked through annotations; destructive or state-changing tools are local-only and closed-world.",
@@ -9,5 +13,11 @@ const SERVER_INSTRUCTION_LINES = [
 
 /**
  * Stable server-level instruction text exposed during MCP initialization.
+ *
+ * @remarks
+ * These lines summarize the caller-visible contract for the layered guardrail model. They steer
+ * callers toward narrower requests, clarify that hard caps remain non-bypassable, and reinforce
+ * that structured responses stay authoritative when a tool exposes both text and structured
+ * surfaces.
  */
 export const SERVER_INSTRUCTIONS = SERVER_INSTRUCTION_LINES.join("\n");

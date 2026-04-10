@@ -70,6 +70,12 @@ import { READ_ONLY_LOCAL_TOOL_ANNOTATIONS } from "./tool-registration-presets";
 
 /**
  * Registers only the inspection tool family on the application-layer MCP server shell.
+ *
+ * @remarks
+ * The visible inspection contract must guide callers toward narrower requests without implying that
+ * hard caps are optional. Tool descriptions therefore summarize schema caps, metadata-first
+ * preflights, and runtime refusal behavior qualitatively while leaving numeric ownership in the
+ * shared guardrail modules.
  */
 export function registerInspectionToolCatalog(context: RegisterToolCatalogContext): void {
   const { server, allowedDirectories, executeTool } = context;
@@ -80,7 +86,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Read files with line numbers",
       description:
         "Reads one or more text files and returns line-numbered content blocks. " +
-        "Use this tool for direct file reading, not for metadata lookup or content search.",
+        "Use this tool for direct file reading, not for metadata lookup or content search. " +
+        "Projected oversized reads are refused by server-side safety caps, so reduce file count or narrow scope before retrying.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ReadFilesWithLineNumbersArgsSchema,
     },
@@ -94,7 +101,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "List directory entries",
       description:
         "Lists structured directory entries for one or more directory roots. " +
-        "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly.",
+        "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly. " +
+        "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ListDirectoryEntriesArgsSchema,
       outputSchema: ListDirectoryEntriesStructuredResultSchema,
@@ -131,7 +139,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Find paths by name",
       description:
         "Finds file and directory paths by case-insensitive name substring. " +
-        "Use this tool for path discovery, not for searching file contents.",
+        "Use this tool for path discovery, not for searching file contents. " +
+        "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: FindPathsByNameArgsSchema,
       outputSchema: FindPathsByNameResultSchema,
@@ -167,7 +176,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Find files by glob",
       description:
         "Finds files by glob pattern under one or more roots. " +
-        "Use this tool when the selection is expressed in glob syntax rather than plain name matching or regex content search.",
+        "Use this tool when the selection is expressed in glob syntax rather than plain name matching or regex content search. " +
+        "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: FindFilesByGlobArgsSchema,
       outputSchema: FindFilesByGlobResultSchema,
@@ -206,7 +216,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Search file contents by regex",
       description:
         "Searches text file contents with a regular expression. " +
-        "Use this tool for content matching, not for file-name or glob matching.",
+        "Use this tool for content matching, not for file-name or glob matching. " +
+        "Structurally unsafe patterns and oversized search scopes are refused, so narrow roots, globs, or `maxResults` before retrying.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByRegexArgsSchema,
       outputSchema: SearchFileContentsByRegexResultSchema,
@@ -250,7 +261,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Count lines",
       description:
         "Counts lines in files or traversed directory trees. " +
-        "Use this tool for totals and filtered line counting, not for reading full file content.",
+        "Use this tool for totals and filtered line counting, not for reading full file content. " +
+        "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: CountLinesArgsSchema,
       outputSchema: CountLinesResultSchema,
@@ -294,7 +306,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Get file checksums",
       description:
         "Generates checksums for one or more files using a selected hash algorithm. " +
-        "Use this tool for hash generation, not for verification against expected values.",
+        "Use this tool for hash generation, not for verification against expected values. " +
+        "Results remain bounded by server safety caps, and oversized multi-file requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: GetFileChecksumsArgsSchema,
       outputSchema: GetFileChecksumsResultSchema,
@@ -320,7 +333,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Verify file checksums",
       description:
         "Verifies one or more files against expected hash values. " +
-        "Use this tool when an expected checksum is already known.",
+        "Use this tool when an expected checksum is already known. " +
+        "Results remain bounded by server safety caps, and oversized multi-file requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: VerifyFileChecksumsArgsSchema,
       outputSchema: VerifyFileChecksumsResultSchema,
@@ -351,7 +365,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Get path metadata",
       description:
         "Returns structured metadata for one or more files or directories. " +
-        "Required `size` and `type` are always included, while grouped timestamp and permission metadata can be requested explicitly.",
+        "Required `size` and `type` are always included, while grouped timestamp and permission metadata can be requested explicitly. " +
+        "Results remain bounded by server safety caps, and oversized multi-path requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: GetPathMetadataArgsSchema,
       outputSchema: GetPathMetadataResultSchema,
