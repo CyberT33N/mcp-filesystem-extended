@@ -160,14 +160,15 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           allowedDirectories,
         );
 
-        return {
-          content: [{ type: "text", text }],
-          structuredContent: {
-            roots: result.roots,
-            totalMatches: result.totalMatches,
-          },
-        };
-      }),
+      return {
+        content: [{ type: "text", text }],
+        structuredContent: {
+          roots: result.roots,
+          totalMatches: result.totalMatches,
+          truncated: result.truncated,
+        },
+      };
+    }),
   );
 
   server.registerTool(
