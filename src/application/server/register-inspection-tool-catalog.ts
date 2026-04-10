@@ -87,7 +87,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Reads one or more text files and returns line-numbered content blocks. " +
         "Use this tool for direct file reading, not for metadata lookup or content search. " +
-        "Projected oversized reads are refused by server-side safety caps, so reduce file count or narrow scope before retrying.",
+        "Projected oversized reads are refused by server-side safety caps, so reduce file count or narrow scope for constrained results.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ReadFilesWithLineNumbersArgsSchema,
     },
@@ -218,7 +218,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Searches text file contents with a regular expression. " +
         "Use this tool for content matching, not for file-name or glob matching. " +
-        "Structurally unsafe patterns and oversized search scopes are refused, so narrow roots, globs, or `maxResults` before retrying.",
+        "Structurally unsafe patterns and oversized search scopes are refused, so narrow roots, globs, or `maxResults` for constrained searches.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByRegexArgsSchema,
       outputSchema: SearchFileContentsByRegexResultSchema,
