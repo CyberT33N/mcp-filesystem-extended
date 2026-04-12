@@ -91,6 +91,7 @@ export function registerComparisonAndMutationToolCatalog(
       title: "Copy paths",
       description:
         "Copies files or directories to new destinations. " +
+        "Creates missing destination parent directories recursively, so do not call create_directories first. " +
         "Use this tool when the source should remain in place after the operation. " +
         "Batch-size and blast-radius limits are enforced server-side and cannot be bypassed.",
       annotations: ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
@@ -207,6 +208,7 @@ export function registerComparisonAndMutationToolCatalog(
       title: "Move paths",
       description:
         "Moves or renames files or directories. " +
+        "Creates missing destination parent directories recursively, so do not call create_directories first. " +
         "Use this tool when the source should no longer remain at the original path. " +
         "Batch-size and blast-radius limits are enforced server-side and cannot be bypassed.",
       annotations: DESTRUCTIVE_LOCAL_TOOL_ANNOTATIONS,

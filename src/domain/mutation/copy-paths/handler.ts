@@ -1,10 +1,11 @@
 import fs from "fs/promises";
+import path from "path";
 import {
   createRuntimeBudgetExceededFailure,
   formatToolGuardrailFailureAsText,
 } from "@domain/shared/guardrails/tool-guardrail-error-contract";
 import { MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST } from "@domain/shared/guardrails/tool-guardrail-limits";
-import { validatePath } from "@infrastructure/filesystem/path-guard";
+import { validatePath, validatePathForCreation } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
 import {
@@ -19,7 +20,7 @@ async function prepareCopyOperation(
   allowedDirectories: string[]
 ): Promise<PreparedCopyPathsOperation> {
   const validSourcePath = await validatePath(operation.source, allowedDirectories);
-  const validDestinationPath = await validatePath(operation.destination, allowedDirectories);
+  const validDestinationPath = await validatePathForCreation(operation.destination, allowedDirectories);
 
   return {
     ...operation,
@@ -34,6 +35,7 @@ async function copySingleOperation(
 ): Promise<string> {
   try {
     const sourceStats = await fs.stat(operation.validSourcePath);
+    await fs.mkdir(path.dirname(operation.validDestinationPath), { recursive: true });
 
     try {
       await fs.access(operation.validDestinationPath);

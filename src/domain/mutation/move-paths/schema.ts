@@ -51,12 +51,12 @@ export const MovePathsArgsSchema = z.object({
          * }
          * ```
          */
-        destinationPath: z.string().max(PATH_MAX_CHARS).describe("Path to the destination file or directory"),
+        destinationPath: z.string().max(PATH_MAX_CHARS).describe("Path to the destination file or directory. Missing destination parent directories are created recursively by this tool."),
       })
     )
     .min(1)
     .max(MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST)
-    .describe("Move operations. Pass one operation for a single move or multiple operations for a batch move."),
+    .describe("Move operations. Pass one operation for a single move or multiple operations for a batch move. The tool creates missing destination parent directories recursively, so a separate create_directories call is unnecessary."),
   /**
    * Overwrite flag.
    *
