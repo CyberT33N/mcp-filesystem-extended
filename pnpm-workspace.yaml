@@ -63,6 +63,7 @@ catalog:
   glob: ^13.0.6
   globals: ~16.4.0
   husky: ~9.1.7
+  ignore: 7.0.5
   jest-extended: ~6.0.0
   jiti: ~2.5.1
   jsonc-eslint-parser: ~2.4.1

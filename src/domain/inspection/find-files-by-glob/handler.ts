@@ -1,5 +1,11 @@
 import fs from "fs/promises";
 import path from "path";
+import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
+import {
+  resolveTraversalScopePolicy,
+  shouldExcludeTraversalScopePath,
+  shouldTraverseTraversalScopeDirectoryPath,
+} from "@domain/shared/guardrails/traversal-scope-policy";
 import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
@@ -33,19 +39,37 @@ export interface FindFilesByGlobResult {
   truncated: boolean;
 }
 
+function normalizeRelativePath(relativePath: string): string {
+  return relativePath.split(path.sep).join("/");
+}
+
 async function getFindFilesByGlobRootResult(
   searchPath: string,
   pattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   maxResults: number,
   allowedDirectories: string[]
 ): Promise<FindFilesByGlobRootResult> {
   const validRootPath = await validatePath(searchPath, allowedDirectories);
+  const gitIgnoreTraversalEnrichment = respectGitIgnore
+    ? await readGitIgnoreTraversalEnrichmentForRoot(validRootPath)
+    : null;
+  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
+    searchPath,
+    excludePatterns,
+    {
+      includeExcludedGlobs,
+      respectGitIgnore,
+      gitIgnoreTraversalEnrichment,
+    }
+  );
 
   const results: string[] = [];
   let searchAborted = false;
 
-  async function findMatches(currentPath: string) {
+  async function findMatches(currentPath: string, currentRelativePath: string) {
     if (searchAborted) return;
 
     try {
@@ -59,12 +83,22 @@ async function getFindFilesByGlobRootResult(
         try {
           await validatePath(fullPath, allowedDirectories);
 
-          const relativePath = path.relative(validRootPath, fullPath);
-          const shouldExclude = excludePatterns.some((excludePattern) => {
-            return minimatch(relativePath, excludePattern, { dot: true });
-          });
+          const rawRelativePath =
+            currentRelativePath === ""
+              ? entry.name
+              : path.join(currentRelativePath, entry.name);
+          const relativePath = normalizeRelativePath(rawRelativePath);
+          const shouldTraverseExcludedDirectory =
+            entry.isDirectory() &&
+            shouldTraverseTraversalScopeDirectoryPath(
+              relativePath,
+              traversalScopePolicyResolution
+            );
 
-          if (shouldExclude) {
+          if (
+            shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
+            !shouldTraverseExcludedDirectory
+          ) {
             continue;
           }
 
@@ -78,7 +112,7 @@ async function getFindFilesByGlobRootResult(
           }
 
           if (entry.isDirectory()) {
-            await findMatches(fullPath);
+            await findMatches(fullPath, rawRelativePath);
           }
         } catch (error) {
           continue;
@@ -89,7 +123,7 @@ async function getFindFilesByGlobRootResult(
     }
   }
 
-  await findMatches(validRootPath);
+  await findMatches(validRootPath, "");
 
   return {
     root: searchPath,
@@ -102,6 +136,8 @@ async function getFormattedSearchGlobResult(
   searchPath: string,
   pattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   maxResults: number,
   allowedDirectories: string[]
 ): Promise<string> {
@@ -109,6 +145,8 @@ async function getFormattedSearchGlobResult(
     searchPath,
     pattern,
     excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
     maxResults,
     allowedDirectories
   );
@@ -152,6 +190,8 @@ async function getFormattedSearchGlobResult(
  * @param searchPaths - Requested root directories in caller-supplied order.
  * @param pattern - Glob expression applied to relative paths beneath each root.
  * @param excludePatterns - Glob patterns removed from traversal before result collection.
+ * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates.
  * @param maxResults - Maximum number of matches retained per root before truncation.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @returns Structured per-root glob-search results and aggregate totals.
@@ -160,6 +200,8 @@ export async function getFindFilesByGlobResult(
   searchPaths: string[],
   pattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   maxResults: number,
   allowedDirectories: string[]
 ): Promise<FindFilesByGlobResult> {
@@ -169,6 +211,8 @@ export async function getFindFilesByGlobResult(
         searchPath,
         pattern,
         excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
         maxResults,
         allowedDirectories
       )
@@ -193,6 +237,8 @@ export async function getFindFilesByGlobResult(
  * @param searchPaths - Requested root directories in caller-supplied order.
  * @param pattern - Glob expression applied to relative paths beneath each root.
  * @param excludePatterns - Glob patterns removed from traversal before result collection.
+ * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates.
  * @param maxResults - Maximum number of matches retained per root before truncation.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @returns Human-readable glob-search output bounded by the discovery-family text budget.
@@ -201,6 +247,8 @@ export async function handleSearchGlob(
   searchPaths: string[],
   pattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   maxResults: number,
   allowedDirectories: string[]
 ): Promise<string> {
@@ -215,6 +263,8 @@ export async function handleSearchGlob(
       firstSearchPath,
       pattern,
       excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
       maxResults,
       allowedDirectories
     );
@@ -227,6 +277,8 @@ export async function handleSearchGlob(
           searchPath,
           pattern,
           excludePatterns,
+          includeExcludedGlobs,
+          respectGitIgnore,
           maxResults,
           allowedDirectories
         );

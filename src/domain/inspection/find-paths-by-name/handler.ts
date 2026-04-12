@@ -38,6 +38,8 @@ async function getFindPathsByNameRootResult(
   directoryPath: string,
   pattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   allowedDirectories: string[],
   maxResults: number,
 ): Promise<FindPathsByNameRootResult> {
@@ -46,6 +48,8 @@ async function getFindPathsByNameRootResult(
     validPath,
     pattern,
     excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
     allowedDirectories,
     maxResults,
   );
@@ -61,6 +65,8 @@ async function getFormattedSearchFilesResult(
   directoryPath: string,
   pattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   allowedDirectories: string[],
   maxResults: number,
 ): Promise<string> {
@@ -68,6 +74,8 @@ async function getFormattedSearchFilesResult(
     directoryPath,
     pattern,
     excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
     allowedDirectories,
     maxResults,
   );
@@ -103,6 +111,8 @@ async function getFormattedSearchFilesResult(
  * @param directoryPaths - Requested root directories in caller-supplied order.
  * @param pattern - Case-insensitive name substring applied to files and directories.
  * @param excludePatterns - Glob patterns removed from traversal before result collection.
+ * @param includeExcludedGlobs - Explicit descendant re-include globs that may reopen excluded subtrees.
+ * @param respectGitIgnore - Indicates whether optional root-local `.gitignore` enrichment should participate in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param maxResults - Maximum number of matches retained per root before truncation.
  * @returns Structured per-root name-search results and aggregate totals.
@@ -111,6 +121,8 @@ export async function getFindPathsByNameResult(
   directoryPaths: string[],
   pattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[] = [],
+  respectGitIgnore = false,
   allowedDirectories: string[],
   maxResults = DISCOVERY_MAX_RESULTS_HARD_CAP,
 ): Promise<FindPathsByNameResult> {
@@ -120,6 +132,8 @@ export async function getFindPathsByNameResult(
         directoryPath,
         pattern,
         excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
         allowedDirectories,
         maxResults,
       )
@@ -144,6 +158,8 @@ export async function getFindPathsByNameResult(
  * @param directoryPaths - Requested root directories in caller-supplied order.
  * @param pattern - Case-insensitive name substring applied to files and directories.
  * @param excludePatterns - Glob patterns removed from traversal before result collection.
+ * @param includeExcludedGlobs - Explicit descendant re-include globs that may reopen excluded subtrees.
+ * @param respectGitIgnore - Indicates whether optional root-local `.gitignore` enrichment should participate in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param maxResults - Maximum number of matches retained per root before truncation.
  * @returns Human-readable name-search output bounded by the discovery-family text budget.
@@ -152,6 +168,8 @@ export async function handleSearchFiles(
   directoryPaths: string[],
   pattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[] = [],
+  respectGitIgnore = false,
   allowedDirectories: string[],
   maxResults = DISCOVERY_MAX_RESULTS_HARD_CAP,
 ): Promise<string> {
@@ -166,6 +184,8 @@ export async function handleSearchFiles(
       firstDirectoryPath,
       pattern,
       excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
       allowedDirectories,
       maxResults,
     );
@@ -178,6 +198,8 @@ export async function handleSearchFiles(
           directoryPath,
           pattern,
           excludePatterns,
+          includeExcludedGlobs,
+          respectGitIgnore,
           allowedDirectories,
           maxResults,
         );

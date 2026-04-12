@@ -204,6 +204,22 @@ function inferRuntimeBudgetUnit(budgetSurface: string): string | undefined {
     return "match locations";
   }
 
+  if (normalizedSurface.includes("entries")) {
+    return "entries";
+  }
+
+  if (normalizedSurface.includes("directories")) {
+    return "directories";
+  }
+
+  if (
+    normalizedSurface.includes("milliseconds") ||
+    normalizedSurface.includes("runtime") ||
+    normalizedSurface.includes("time budget")
+  ) {
+    return "milliseconds";
+  }
+
   if (normalizedSurface.includes("results")) {
     return "results";
   }

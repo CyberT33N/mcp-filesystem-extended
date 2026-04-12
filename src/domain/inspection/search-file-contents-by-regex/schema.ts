@@ -30,7 +30,7 @@ export const SearchFileContentsByRegexArgsSchema = z.object({
     .min(1)
     .max(MAX_REGEX_ROOTS_PER_REQUEST)
     .describe(
-      "Root directories to search in. Pass one path for a single regex search scope or multiple paths for batch regex searches."
+      "Root directories to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Pass one path for a single regex search scope or multiple paths for batch regex searches."
     ),
   /**
    * Regex pattern.
@@ -73,7 +73,7 @@ export const SearchFileContentsByRegexArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob patterns used to limit which files are searched before the regex is applied to file contents."
+      "Glob patterns used to limit which files are searched before the regex is applied to file contents. These file filters do not reopen default-excluded trees by themselves."
     ),
   /**
    * Exclude globs.
@@ -94,7 +94,51 @@ export const SearchFileContentsByRegexArgsSchema = z.object({
     .max(MAX_EXCLUDE_GLOBS_PER_REQUEST)
     .optional()
     .default([])
-    .describe("Glob patterns that should be excluded from the regex search scope."),
+    .describe("Glob patterns that add caller-specific exclusions on top of the default excluded trees for the regex search scope."),
+  /**
+   * Optional `.gitignore` enrichment toggle.
+   *
+   * @remarks
+   * Enable this property only when root-local `.gitignore` rules should augment
+   * the server-owned default traversal exclusions for the current regex request.
+   *
+   * @example
+   * ```ts
+   * {
+   *   respectGitIgnore: true
+   * }
+   * ```
+   */
+  respectGitIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Whether optional root-local `.gitignore` enrichment should add more exclusions to the default traversal policy for this regex request."
+    ),
+  /**
+   * Explicit descendant re-include globs.
+   *
+   * @remarks
+   * Use this property to reopen explicitly named descendants beneath default-
+   * excluded or caller-excluded trees without changing the baseline file-filter
+   * role of `includeGlobs`.
+   *
+   * @example
+   * ```ts
+   * {
+   *   includeExcludedGlobs: ["**\\/node_modules/my-package/**"]
+   * }
+   * ```
+   */
+  includeExcludedGlobs: z
+    .array(z.string().max(GLOB_PATTERN_MAX_CHARS))
+    .max(MAX_EXCLUDE_GLOBS_PER_REQUEST)
+    .optional()
+    .default([])
+    .describe(
+      "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this regex search request without changing the file-filter role of `includeGlobs`."
+    ),
   /**
    * Match location cap.
    *

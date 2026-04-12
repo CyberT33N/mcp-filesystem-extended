@@ -1,10 +1,15 @@
 import fs from "fs/promises";
-import type { Dirent } from "fs";
 import path from "path";
 import { encode } from "@toon-format/toon";
+import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
+import {
+  resolveTraversalScopePolicy,
+  shouldExcludeTraversalScopePath,
+  shouldTraverseTraversalScopeDirectoryPath,
+  type TraversalScopePolicyResolution,
+} from "@domain/shared/guardrails/traversal-scope-policy";
 import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
-import { minimatch } from "minimatch";
 import {
   DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   type FileSystemEntryMetadata,
@@ -62,36 +67,12 @@ function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
 
-function shouldExcludePath(relativePath: string, excludePatterns: string[]): boolean {
-  if (relativePath === "") {
-    return false;
-  }
-
-  return excludePatterns.some((pattern) => {
-    let globPattern = pattern;
-
-    if (!pattern.includes("*") && !pattern.includes("?")) {
-      if (pattern.includes("/")) {
-        globPattern = `**/${pattern}/**`;
-      } else {
-        globPattern = `**/*${pattern}*/**`;
-      }
-    }
-
-    return minimatch(relativePath, globPattern, {
-      dot: true,
-      nocase: true,
-      matchBase: true,
-    });
-  });
-}
-
 async function collectDirectoryEntries(
   currentPath: string,
   currentRelativePath: string,
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection,
-  excludePatterns: string[]
+  traversalScopePolicyResolution: TraversalScopePolicyResolution,
 ): Promise<ListedDirectoryEntry[]> {
   const entries = await fs.readdir(currentPath, { withFileTypes: true });
   const listedEntries: ListedDirectoryEntry[] = [];
@@ -104,7 +85,15 @@ async function collectDirectoryEntries(
         : path.join(currentRelativePath, entry.name);
     const relativePath = normalizeRelativePath(rawRelativePath);
 
-    if (shouldExcludePath(relativePath, excludePatterns)) {
+    const shouldTraverseExcludedDirectory =
+      recursive &&
+      entry.isDirectory() &&
+      shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
+
+    if (
+      shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
+      !shouldTraverseExcludedDirectory
+    ) {
       continue;
     }
 
@@ -125,7 +114,7 @@ async function collectDirectoryEntries(
         rawRelativePath,
         recursive,
         metadataSelection,
-        excludePatterns
+        traversalScopePolicyResolution,
       );
     }
 
@@ -140,9 +129,23 @@ async function buildListedDirectoryRoot(
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   allowedDirectories: string[]
 ): Promise<ListedDirectoryRoot> {
   const validPath = await validatePath(requestedPath, allowedDirectories);
+  const gitIgnoreTraversalEnrichment = respectGitIgnore
+    ? await readGitIgnoreTraversalEnrichmentForRoot(validPath)
+    : null;
+  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
+    requestedPath,
+    excludePatterns,
+    {
+      includeExcludedGlobs,
+      respectGitIgnore,
+      gitIgnoreTraversalEnrichment,
+    },
+  );
 
   return {
     requestedPath,
@@ -151,7 +154,7 @@ async function buildListedDirectoryRoot(
       "",
       recursive,
       metadataSelection,
-      excludePatterns
+      traversalScopePolicyResolution,
     ),
   };
 }
@@ -169,6 +172,8 @@ async function buildListedDirectoryRoot(
  * @param recursive - Whether nested directory content should be traversed.
  * @param metadataSelection - Grouped optional metadata flags. `size` and `type` remain required defaults.
  * @param excludePatterns - Optional glob-like exclude patterns.
+ * @param includeExcludedGlobs - Optional additive descendant re-include globs.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment should participate.
  * @param allowedDirectories - Allowed directory roots used during path validation.
  * @returns Structured directory listing result.
  */
@@ -177,6 +182,8 @@ export async function getListDirectoryEntriesResult(
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   allowedDirectories: string[]
 ): Promise<ListDirectoryEntriesResult> {
   const roots = await Promise.all(
@@ -186,6 +193,8 @@ export async function getListDirectoryEntriesResult(
         recursive,
         metadataSelection,
         excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
         allowedDirectories
       )
     )
@@ -205,6 +214,8 @@ export async function getListDirectoryEntriesResult(
  * @param recursive - Whether nested directory content should be traversed.
  * @param metadataSelection - Grouped optional metadata flags. `size` and `type` remain required defaults.
  * @param excludePatterns - Optional glob-like exclude patterns.
+ * @param includeExcludedGlobs - Optional additive descendant re-include globs.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment should participate.
  * @param allowedDirectories - Allowed directory roots used during path validation.
  * @returns TOON-encoded structured directory listing output.
  */
@@ -213,6 +224,8 @@ export async function handleListDirectoryEntries(
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   allowedDirectories: string[]
 ): Promise<string> {
   const result = await getListDirectoryEntriesResult(
@@ -220,6 +233,8 @@ export async function handleListDirectoryEntries(
     recursive,
     metadataSelection,
     excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
     allowedDirectories
   );
 

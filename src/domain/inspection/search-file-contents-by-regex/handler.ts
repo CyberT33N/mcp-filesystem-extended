@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
+import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import { minimatch } from "minimatch";
 
 import {
@@ -16,6 +17,17 @@ import {
   normalizeRegexMatchExcerpt,
   resetRegexLastIndex,
 } from "@domain/shared/guardrails/regex-search-safety";
+import {
+  assertTraversalRuntimeBudget,
+  createTraversalRuntimeBudgetState,
+  recordTraversalDirectoryVisit,
+  recordTraversalEntryVisit,
+} from "@domain/shared/guardrails/traversal-runtime-budget";
+import {
+  resolveTraversalScopePolicy,
+  shouldExcludeTraversalScopePath,
+  shouldTraverseTraversalScopeDirectoryPath,
+} from "@domain/shared/guardrails/traversal-scope-policy";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
   REGEX_SEARCH_MAX_CANDIDATE_BYTES,
@@ -32,14 +44,8 @@ interface SearchResult {
   match: string;
 }
 
-function getExcludeGlobPattern(excludePattern: string): string {
-  return excludePattern.includes("*") ? excludePattern : `**/${excludePattern}/**`;
-}
-
-function isExcludedPath(relativePath: string, excludePatterns: string[]): boolean {
-  return excludePatterns.some((excludePattern) =>
-    minimatch(relativePath, getExcludeGlobPattern(excludePattern), { dot: true }),
-  );
+function normalizeRelativePath(relativePath: string): string {
+  return relativePath.split(path.sep).join("/");
 }
 
 function matchesIncludedFilePatterns(candidatePath: string, filePatterns: string[]): boolean {
@@ -232,11 +238,26 @@ async function getSearchRegexPathResult(
   pattern: string,
   filePatterns: string[],
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   maxResults: number,
   caseSensitive: boolean,
   allowedDirectories: string[],
 ): Promise<SearchRegexPathResult> {
   const validRootPath = await getValidatedRootPath(searchPath, allowedDirectories);
+  const gitIgnoreTraversalEnrichment = respectGitIgnore
+    ? await readGitIgnoreTraversalEnrichmentForRoot(validRootPath)
+    : null;
+  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
+    searchPath,
+    excludePatterns,
+    {
+      includeExcludedGlobs,
+      respectGitIgnore,
+      gitIgnoreTraversalEnrichment,
+    },
+  );
+  const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   const regex = compileGuardrailedSearchRegex(SEARCH_REGEX_TOOL_NAME, pattern, caseSensitive);
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
 
@@ -246,10 +267,16 @@ async function getSearchRegexPathResult(
   let searchAborted = false;
   let totalBytesScanned = 0;
 
-  async function searchDirectory(dirPath: string): Promise<void> {
+  async function searchDirectory(
+    dirPath: string,
+    currentRelativePath: string,
+  ): Promise<void> {
     if (searchAborted) {
       return;
     }
+
+    recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
+    assertTraversalRuntimeBudget(SEARCH_REGEX_TOOL_NAME, traversalRuntimeBudgetState);
 
     let entryNames: string[];
 
@@ -264,6 +291,9 @@ async function getSearchRegexPathResult(
         break;
       }
 
+      recordTraversalEntryVisit(traversalRuntimeBudgetState);
+      assertTraversalRuntimeBudget(SEARCH_REGEX_TOOL_NAME, traversalRuntimeBudgetState);
+
       const fullPath = path.join(dirPath, entryName);
       let candidateEntry: FilesystemPreflightEntry;
 
@@ -273,14 +303,27 @@ async function getSearchRegexPathResult(
         continue;
       }
 
-      const relativePath = path.relative(validRootPath, candidateEntry.validPath);
+      const rawRelativePath =
+        currentRelativePath === ""
+          ? entryName
+          : path.join(currentRelativePath, entryName);
+      const relativePath = normalizeRelativePath(rawRelativePath);
+      const shouldTraverseExcludedDirectory =
+        candidateEntry.type === "directory" &&
+        shouldTraverseTraversalScopeDirectoryPath(
+          relativePath,
+          traversalScopePolicyResolution,
+        );
 
-      if (isExcludedPath(relativePath, excludePatterns)) {
+      if (
+        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
+        !shouldTraverseExcludedDirectory
+      ) {
         continue;
       }
 
       if (candidateEntry.type === "directory") {
-        await searchDirectory(candidateEntry.validPath);
+        await searchDirectory(candidateEntry.validPath, rawRelativePath);
         continue;
       }
 
@@ -340,7 +383,7 @@ async function getSearchRegexPathResult(
     }
   }
 
-  await searchDirectory(validRootPath);
+  await searchDirectory(validRootPath, "");
 
   return {
     root: searchPath,
@@ -364,6 +407,8 @@ async function getSearchRegexPathResult(
  * @param pattern - Raw regex pattern supplied by the caller.
  * @param filePatterns - Include globs that narrow candidate file names before content scanning.
  * @param excludePatterns - Exclude globs that remove candidate paths from traversal.
+ * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
  * @param maxResults - Caller-requested maximum number of returned locations per root.
  * @param caseSensitive - Whether regex compilation should preserve case sensitivity.
  * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
@@ -374,6 +419,8 @@ export async function handleSearchRegex(
   pattern: string,
   filePatterns: string[],
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   maxResults: number,
   caseSensitive: boolean,
   allowedDirectories: string[],
@@ -392,6 +439,8 @@ export async function handleSearchRegex(
       pattern,
       filePatterns,
       excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
       effectiveMaxResults,
       caseSensitive,
       allowedDirectories,
@@ -410,6 +459,8 @@ export async function handleSearchRegex(
           pattern,
           filePatterns,
           excludePatterns,
+          includeExcludedGlobs,
+          respectGitIgnore,
           effectiveMaxResults,
           caseSensitive,
           allowedDirectories,
@@ -447,6 +498,8 @@ export async function handleSearchRegex(
  * @param pattern - Raw regex pattern supplied by the caller.
  * @param filePatterns - Include globs that narrow candidate file names before content scanning.
  * @param excludePatterns - Exclude globs that remove candidate paths from traversal.
+ * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
  * @param maxResults - Caller-requested maximum number of returned locations per root.
  * @param caseSensitive - Whether regex compilation should preserve case sensitivity.
  * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
@@ -457,6 +510,8 @@ export async function getSearchRegexResult(
   pattern: string,
   filePatterns: string[],
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   maxResults: number,
   caseSensitive: boolean,
   allowedDirectories: string[],
@@ -469,6 +524,8 @@ export async function getSearchRegexResult(
         pattern,
         filePatterns,
         excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
         effectiveMaxResults,
         caseSensitive,
         allowedDirectories,

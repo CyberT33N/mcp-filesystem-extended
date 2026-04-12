@@ -1,7 +1,13 @@
 import fs from "fs/promises";
 import path from "path";
 import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
+import {
+  resolveTraversalScopePolicy,
+  shouldExcludeTraversalScopePath,
+  shouldTraverseTraversalScopeDirectoryPath,
+} from "@domain/shared/guardrails/traversal-scope-policy";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
@@ -43,12 +49,18 @@ export interface CountLinesResult {
   totalMatchingLines: number;
 }
 
+function normalizeRelativePath(relativePath: string): string {
+  return relativePath.split(path.sep).join("/");
+}
+
 async function getCountLinesPathResult(
   filePath: string,
   recursive: boolean,
   pattern: string | undefined,
   filePattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   ignoreEmptyLines: boolean,
   allowedDirectories: string[]
 ): Promise<CountLinesPathResult> {
@@ -72,8 +84,11 @@ async function getCountLinesPathResult(
   } else if (stats.isDirectory() && recursive) {
     files = await countLinesInDirectory(
       validPath,
+      filePath,
       filePattern,
       excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
       regex,
       ignoreEmptyLines,
       allowedDirectories
@@ -111,6 +126,8 @@ async function getCountLinesPathResult(
  * @param pattern - Optional regex used to count matching lines in addition to total lines.
  * @param filePattern - Glob-like file filter applied during recursive traversal.
  * @param excludePatterns - Glob-like exclusions removed before counting proceeds.
+ * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
  * @param ignoreEmptyLines - Whether blank lines should be excluded from totals.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @returns Human-readable count-lines output that respects the discovery-family text budget.
@@ -121,6 +138,8 @@ export async function handleCountLines(
   pattern: string | undefined,
   filePattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   ignoreEmptyLines: boolean,
   allowedDirectories: string[]
 ): Promise<string> {
@@ -131,6 +150,8 @@ export async function handleCountLines(
       pattern,
       filePattern,
       excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
       ignoreEmptyLines,
       allowedDirectories
     );
@@ -185,6 +206,8 @@ export async function handleCountLines(
         pattern,
         filePattern,
         excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
         ignoreEmptyLines,
         allowedDirectories
       )
@@ -243,6 +266,8 @@ export async function handleCountLines(
  * @param pattern - Optional regex used to count matching lines in addition to total lines.
  * @param filePattern - Glob-like file filter applied during recursive traversal.
  * @param excludePatterns - Glob-like exclusions removed before counting proceeds.
+ * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
  * @param ignoreEmptyLines - Whether blank lines should be excluded from totals.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @returns Structured per-path and aggregate line-count totals.
@@ -253,6 +278,8 @@ export async function getCountLinesResult(
   pattern: string | undefined,
   filePattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   ignoreEmptyLines: boolean,
   allowedDirectories: string[]
 ): Promise<CountLinesResult> {
@@ -264,6 +291,8 @@ export async function getCountLinesResult(
         pattern,
         filePattern,
         excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
         ignoreEmptyLines,
         allowedDirectories
       )
@@ -319,13 +348,28 @@ async function countLinesInFile(
 
 async function countLinesInDirectory(
   dirPath: string,
+  requestedRootPath: string,
   filePattern: string,
   excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
   regex: RegExp | undefined,
   ignoreEmptyLines: boolean,
   allowedDirectories: string[]
 ): Promise<FileLineCount[]> {
   const results: FileLineCount[] = [];
+  const gitIgnoreTraversalEnrichment = respectGitIgnore
+    ? await readGitIgnoreTraversalEnrichmentForRoot(dirPath)
+    : null;
+  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
+    requestedRootPath,
+    excludePatterns,
+    {
+      includeExcludedGlobs,
+      respectGitIgnore,
+      gitIgnoreTraversalEnrichment,
+    }
+  );
   
   async function processDirectory(currentPath: string) {
     try {
@@ -339,14 +383,18 @@ async function countLinesInDirectory(
           await validatePath(fullPath, allowedDirectories);
           
           // Get relative path for glob matching
-          const relativePath = path.relative(dirPath, fullPath);
-          
-          // Check if path should be excluded
-          const shouldExclude = excludePatterns.some(excludePattern => {
-            return minimatch(relativePath, excludePattern, { dot: true });
-          });
-          
-          if (shouldExclude) {
+          const relativePath = normalizeRelativePath(path.relative(dirPath, fullPath));
+          const shouldTraverseExcludedDirectory =
+            entry.isDirectory() &&
+            shouldTraverseTraversalScopeDirectoryPath(
+              relativePath,
+              traversalScopePolicyResolution,
+            );
+
+          if (
+            shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
+            !shouldTraverseExcludedDirectory
+          ) {
             continue;
           }
           

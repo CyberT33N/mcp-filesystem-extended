@@ -27,7 +27,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .min(1)
     .max(MAX_DISCOVERY_ROOTS_PER_REQUEST)
     .describe(
-      "Root directories to search in. Pass one path for a single glob search scope or multiple paths for batch glob searches."
+      "Root directories to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Pass one path for a single glob search scope or multiple paths for batch glob searches."
     ),
   /**
    * Match glob.
@@ -68,7 +68,51 @@ export const FindFilesByGlobArgsSchema = z.object({
     .max(MAX_EXCLUDE_GLOBS_PER_REQUEST)
     .optional()
     .default([])
-    .describe("Glob patterns that should be excluded from the file search scope."),
+    .describe("Glob patterns that add caller-specific exclusions on top of the default excluded trees for the file search scope."),
+  /**
+   * Optional `.gitignore` enrichment toggle.
+   *
+   * @remarks
+   * Enable this property only when root-local `.gitignore` rules should augment
+   * the server-owned default traversal exclusions for the current request.
+   *
+   * @example
+   * ```ts
+   * {
+   *   respectGitIgnore: true
+   * }
+   * ```
+   */
+  respectGitIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Whether optional root-local `.gitignore` enrichment should add more exclusions to the default traversal policy for this glob request."
+    ),
+  /**
+   * Explicit descendant re-include globs.
+   *
+   * @remarks
+   * Use this property to reopen explicitly named descendants beneath default-
+   * excluded or caller-excluded trees without disabling the hardened baseline
+   * for the full request scope.
+   *
+   * @example
+   * ```ts
+   * {
+   *   includeExcludedGlobs: ["**\/node_modules/my-package/**"]
+   * }
+   * ```
+   */
+  includeExcludedGlobs: z
+    .array(z.string().max(GLOB_PATTERN_MAX_CHARS))
+    .max(MAX_EXCLUDE_GLOBS_PER_REQUEST)
+    .optional()
+    .default([])
+    .describe(
+      "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this file search request without broadening the full root scope."
+    ),
   /**
    * Result ceiling.
    *

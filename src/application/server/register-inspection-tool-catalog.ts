@@ -100,20 +100,22 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "List directory entries",
       description:
-        "Lists structured directory entries for one or more directory roots. " +
+        "Lists structured directory entries for one or more directory roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly. " +
         "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ListDirectoryEntriesArgsSchema,
       outputSchema: ListDirectoryEntriesStructuredResultSchema,
     },
-    async ({ roots, recursive, metadata, excludeGlobs }) =>
+    async ({ roots, recursive, metadata, excludeGlobs, respectGitIgnore, includeExcludedGlobs }) =>
       executeTool("list_directory_entries", async () => {
         const result = await getListDirectoryEntriesResult(
           roots,
           recursive,
           metadata,
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           allowedDirectories,
         );
         const text = await handleListDirectoryEntries(
@@ -121,6 +123,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           recursive,
           metadata,
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           allowedDirectories,
         );
 
@@ -138,25 +142,29 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Find paths by name",
       description:
-        "Finds file and directory paths by case-insensitive name substring. " +
+        "Finds file and directory paths by case-insensitive name substring while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for path discovery, not for searching file contents. " +
         "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: FindPathsByNameArgsSchema,
       outputSchema: FindPathsByNameResultSchema,
     },
-    async ({ roots, nameContains, excludeGlobs }) =>
+    async ({ roots, nameContains, excludeGlobs, includeExcludedGlobs, respectGitIgnore }) =>
       executeTool("find_paths_by_name", async () => {
         const result = await getFindPathsByNameResult(
           roots,
           nameContains,
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           allowedDirectories,
         );
         const text = await handleSearchFiles(
           roots,
           nameContains,
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           allowedDirectories,
         );
 
@@ -176,19 +184,21 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Find files by glob",
       description:
-        "Finds files by glob pattern under one or more roots. " +
+        "Finds files by glob pattern under one or more roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool when the selection is expressed in glob syntax rather than plain name matching or regex content search. " +
         "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: FindFilesByGlobArgsSchema,
       outputSchema: FindFilesByGlobResultSchema,
     },
-    async ({ roots, glob, excludeGlobs, maxResults }) =>
+    async ({ roots, glob, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
       executeTool("find_files_by_glob", async () => {
         const result = await getFindFilesByGlobResult(
           roots,
           glob,
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           maxResults,
           allowedDirectories,
         );
@@ -196,6 +206,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           roots,
           glob,
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           maxResults,
           allowedDirectories,
         );
@@ -216,20 +228,22 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Search file contents by regex",
       description:
-        "Searches text file contents with a regular expression. " +
+        "Searches text file contents with a regular expression while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for content matching, not for file-name or glob matching. " +
         "Structurally unsafe patterns and oversized search scopes are refused, so narrow roots, globs, or `maxResults` for constrained searches.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByRegexArgsSchema,
       outputSchema: SearchFileContentsByRegexResultSchema,
     },
-    async ({ roots, regex, includeGlobs, excludeGlobs, maxResults, caseSensitive }) =>
+    async ({ roots, regex, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults, caseSensitive }) =>
       executeTool("search_file_contents_by_regex", async () => {
         const result = await getSearchRegexResult(
           roots,
           regex,
           includeGlobs,
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           maxResults,
           caseSensitive,
           allowedDirectories,
@@ -239,6 +253,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           regex,
           includeGlobs,
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           maxResults,
           caseSensitive,
           allowedDirectories,
@@ -261,14 +277,14 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Count lines",
       description:
-        "Counts lines in files or traversed directory trees. " +
+        "Counts lines in files or traversed directory trees while broad directory roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for totals and filtered line counting, not for reading full file content. " +
         "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: CountLinesArgsSchema,
       outputSchema: CountLinesResultSchema,
     },
-    async ({ paths, recursive, regex, includeGlobs, excludeGlobs, ignoreEmptyLines }) =>
+    async ({ paths, recursive, regex, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, ignoreEmptyLines }) =>
       executeTool("count_lines", async () => {
         const result = await getCountLinesResult(
           paths,
@@ -276,6 +292,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           regex,
           includeGlobs[0] ?? "**",
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           ignoreEmptyLines,
           allowedDirectories,
         );
@@ -285,6 +303,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           regex,
           includeGlobs[0] ?? "**",
           excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
           ignoreEmptyLines,
           allowedDirectories,
         );

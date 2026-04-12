@@ -83,6 +83,34 @@ The public tool catalog is the final direct target-state surface. It is composed
 - Infrastructure modules keep technical concerns such as path guarding and canonical logging out of the application composition root.
 - This documentation describes only the current final architecture and intentionally avoids legacy flat-structure or monolithic registration narratives.
 
+## Traversal Hardening Model
+
+The recursive inspection surface now follows one shared traversal policy that narrows broad-root requests before endpoint-specific traversal begins.
+
+### Default excluded directory classes
+
+When callers provide broad roots, traversal-oriented discovery and recursive inspection tools exclude vendor, cache, and generated directory classes by default. This keeps high-noise trees such as `node_modules`, package caches, build outputs, and coverage directories out of broad traversal passes unless the caller explicitly targets them.
+
+### Explicit root access still works
+
+The hardening model does not block intentional access to excluded trees. Callers can still provide explicit roots inside excluded directories, and those roots remain valid because the policy distinguishes between broad-root traversal and explicit path targeting.
+
+### Additive re-includes stay narrow
+
+`includeExcludedGlobs` reopens named descendants without widening the whole traversal request. This keeps the default exclusion baseline intact while still allowing focused access to known subtrees that matter for a specific workflow.
+
+### `.gitignore` is secondary
+
+Root-local `.gitignore` participation is optional and additive. The server-owned traversal policy remains the canonical default baseline, while `respectGitIgnore` can layer repository-local ignore rules on top when callers want additional narrowing.
+
+### Traversal runtime budgets prevent unstable broad scans
+
+Traversal runtime budgets cap visited entries, visited directories, and soft wall-clock time for traversal-heavy operations. These budgets exist to prevent oversized recursive scans from degrading response quality, consuming excessive runtime, or timing out before returning a stable result.
+
+### Developer-facing rationale
+
+This model exists to protect prompting efficiency and runtime stability without removing legitimate access paths. Broad-root requests stay safe by default, while explicit roots and additive re-include controls preserve deliberate access to excluded areas when callers truly need it.
+
 ## Key Source Areas
 
 ```text

@@ -1,6 +1,9 @@
 const SERVER_INSTRUCTION_LINES = [
   "- All multi-target tools accept arrays even when only one item is processed.",
   "- All path inputs must resolve inside allowed directories.",
+  "- Traversal-oriented discovery and recursive inspection tools exclude default vendor/cache trees when callers provide broad roots.",
+  "- Explicit roots inside excluded trees remain valid, and `includeExcludedGlobs` can reopen named descendants without broadening the full request scope.",
+  "- `respectGitIgnore` is an additive opt-in that can layer root-local `.gitignore` exclusions on top of the default traversal policy.",
   "- Hard request and response safety caps are enforced server-side across all tool families.",
   "- Callers may narrow scope, but they cannot disable or override server-side hard caps.",
   "- Metadata-first admission control applies to file-read-style operations when projected responses would exceed safe budgets.",

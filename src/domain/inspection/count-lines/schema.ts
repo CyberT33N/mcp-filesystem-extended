@@ -32,7 +32,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  paths: z.array(z.string().max(PATH_MAX_CHARS)).min(1).max(MAX_GENERIC_PATHS_PER_REQUEST).describe("Paths to files or directories to count. Pass one path for a single count scope or multiple paths for batch line counting."),
+  paths: z.array(z.string().max(PATH_MAX_CHARS)).min(1).max(MAX_GENERIC_PATHS_PER_REQUEST).describe("Paths to files or directories to count. Broad directory roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Pass one path for a single count scope or multiple paths for batch line counting."),
   /**
    * Recursive traversal switch.
    *
@@ -47,7 +47,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  recursive: z.boolean().optional().default(false).describe("Whether to recursively count lines in directories"),
+  recursive: z.boolean().optional().default(false).describe("Whether to recursively count lines in directories. Recursive traversal still respects the default excluded trees unless callers target them explicitly or reopen descendants."),
   /**
    * Optional line filter regex.
    *
@@ -77,7 +77,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  includeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_INCLUDE_GLOBS_PER_REQUEST).optional().default(["**"]).describe("Glob patterns used to limit which files are included when counting recursively."),
+  includeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_INCLUDE_GLOBS_PER_REQUEST).optional().default(["**"]).describe("Glob patterns used to limit which files are included when counting recursively. These file filters do not reopen default-excluded trees by themselves."),
   /**
    * Exclude glob filters.
    *
@@ -92,7 +92,51 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  excludeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_EXCLUDE_GLOBS_PER_REQUEST).optional().default([]).describe("Glob patterns that should be excluded from the counting scope."),
+  excludeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_EXCLUDE_GLOBS_PER_REQUEST).optional().default([]).describe("Glob patterns that add caller-specific exclusions on top of the default excluded trees for the counting scope."),
+  /**
+   * Optional `.gitignore` enrichment toggle.
+   *
+   * @remarks
+   * Enable this property only when root-local `.gitignore` rules should augment
+   * the server-owned default traversal exclusions for the current count-lines request.
+   *
+   * @example
+   * ```ts
+   * {
+   *   respectGitIgnore: true
+   * }
+   * ```
+   */
+  respectGitIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Whether optional root-local `.gitignore` enrichment should add more exclusions to the default traversal policy for this count-lines request.",
+    ),
+  /**
+   * Explicit descendant re-include globs.
+   *
+   * @remarks
+   * Use this property to reopen explicitly named descendants beneath default-
+   * excluded or caller-excluded trees without changing the baseline file-filter
+   * role of `includeGlobs`.
+   *
+   * @example
+   * ```ts
+   * {
+   *   includeExcludedGlobs: ["**\\/node_modules/my-package/**"]
+   * }
+   * ```
+   */
+  includeExcludedGlobs: z
+    .array(z.string().max(GLOB_PATTERN_MAX_CHARS))
+    .max(MAX_EXCLUDE_GLOBS_PER_REQUEST)
+    .optional()
+    .default([])
+    .describe(
+      "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this count-lines request without changing the file-filter role of `includeGlobs`.",
+    ),
   /**
    * Empty-line handling mode.
    *

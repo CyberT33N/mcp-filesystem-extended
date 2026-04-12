@@ -63,6 +63,7 @@
     "fast-copy": "catalog:",
     "glob": "catalog:",
     "globals": "catalog:",
+    "ignore": "catalog:",
     "minimatch": "catalog:",
     "pino": "catalog:",
     "piscina": "catalog:",

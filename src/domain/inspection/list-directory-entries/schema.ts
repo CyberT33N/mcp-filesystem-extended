@@ -34,7 +34,7 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .min(1)
     .max(MAX_DISCOVERY_ROOTS_PER_REQUEST)
     .describe(
-      "Paths to directories to list. Pass one path for a single listing root or multiple paths for batch listing roots."
+      "Paths to directories to list. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Pass one path for a single listing root or multiple paths for batch listing roots."
     ),
   /**
    * Recursive traversal mode.
@@ -53,9 +53,9 @@ export const ListDirectoryEntriesArgsSchema = z.object({
   recursive: z
     .boolean()
     .optional()
-    .default(true)
+    .default(false)
     .describe(
-      "Whether nested directory content should be traversed recursively. Set to false to return only same-level files and directories for each requested root."
+      "Whether nested directory content should be traversed recursively. Defaults to false so broad-root listing remains same-level unless callers explicitly opt into deep traversal, and recursive traversal still respects the default excluded trees unless callers target them explicitly or reopen descendants."
     ),
   /**
    * Metadata selection.
@@ -94,7 +94,51 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob-like patterns for entries that should be excluded from the structured listing output."
+      "Glob-like patterns that add caller-specific exclusions on top of the default excluded trees for the structured listing output."
+    ),
+  /**
+   * Optional `.gitignore` enrichment toggle.
+   *
+   * @remarks
+   * Enable this property only when root-local `.gitignore` rules should augment
+   * the server-owned default traversal exclusions for the current request.
+   *
+   * @example
+   * ```ts
+   * {
+   *   respectGitIgnore: true
+   * }
+   * ```
+   */
+  respectGitIgnore: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "Whether optional root-local `.gitignore` enrichment should add more exclusions to the default traversal policy for this listing request."
+    ),
+  /**
+   * Explicit descendant re-include globs.
+   *
+   * @remarks
+   * Use this property to reopen explicitly named descendants beneath default-
+   * excluded or caller-excluded trees without disabling the hardened baseline
+   * for the full request scope.
+   *
+   * @example
+   * ```ts
+   * {
+   *   includeExcludedGlobs: ["**\/node_modules/my-package/**"]
+   * }
+   * ```
+   */
+  includeExcludedGlobs: z
+    .array(z.string().max(GLOB_PATTERN_MAX_CHARS))
+    .max(MAX_EXCLUDE_GLOBS_PER_REQUEST)
+    .optional()
+    .default([])
+    .describe(
+      "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this listing request without broadening the full root scope."
     ),
 });
 

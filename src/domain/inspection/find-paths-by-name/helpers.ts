@@ -1,6 +1,11 @@
 import fs from "fs/promises";
 import path from "path";
-import { minimatch } from 'minimatch';
+import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
+import {
+  resolveTraversalScopePolicy,
+  shouldExcludeTraversalScopePath,
+  shouldTraverseTraversalScopeDirectoryPath,
+} from "@domain/shared/guardrails/traversal-scope-policy";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 /**
@@ -27,6 +32,8 @@ export interface SearchFilesResult {
  * @param rootPath - Validated root path used as the traversal anchor.
  * @param pattern - Case-insensitive substring matched against entry names.
  * @param excludePatterns - Glob-like exclusion patterns applied to relative paths.
+ * @param includeExcludedGlobs - Explicit descendant re-include globs that may reopen excluded subtrees.
+ * @param respectGitIgnore - Indicates whether optional root-local `.gitignore` enrichment should participate in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param maxResults - Maximum number of collected matches before truncation.
  * @returns Helper-level matches and truncation state for the traversal.
@@ -35,11 +42,25 @@ export async function searchFiles(
   rootPath: string,
   pattern: string,
   excludePatterns: string[] = [],
+  includeExcludedGlobs: string[] = [],
+  respectGitIgnore: boolean,
   allowedDirectories: string[],
   maxResults: number,
 ): Promise<SearchFilesResult> {
   const results: string[] = [];
   let truncated = false;
+  const gitIgnoreTraversalEnrichment = respectGitIgnore
+    ? await readGitIgnoreTraversalEnrichmentForRoot(rootPath)
+    : null;
+  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
+    rootPath,
+    excludePatterns,
+    {
+      includeExcludedGlobs,
+      respectGitIgnore,
+      gitIgnoreTraversalEnrichment,
+    },
+  );
 
   async function search(currentPath: string) {
     if (truncated) {
@@ -59,34 +80,18 @@ export async function searchFiles(
         // Validate each path before processing
         await validatePath(fullPath, allowedDirectories);
 
-        // Check if path matches any exclude pattern
-        const relativePath = path.relative(rootPath, fullPath);
-        const shouldExclude = excludePatterns.some(pattern => {
-          // Handle different pattern formats
-          // 1. If pattern already contains glob characters, use as is
-          // 2. If pattern is a simple name, match anywhere in path
-          // 3. If pattern is a path segment, match that segment
-          let globPattern = pattern;
-          
-          if (!pattern.includes('*') && !pattern.includes('?')) {
-            // For simple string patterns without glob characters
-            if (pattern.includes('/')) {
-              // If it includes path separators, it's a path segment
-              globPattern = `**/${pattern}/**`;
-            } else {
-              // Otherwise it's a simple name to match anywhere
-              globPattern = `**/*${pattern}*/**`;
-            }
-          }
-          
-          return minimatch(relativePath, globPattern, { 
-            dot: true,           // Include dotfiles
-            nocase: true,        // Case insensitive matching
-            matchBase: true      // Match basename of path
-          });
-        });
+        const relativePath = path.relative(rootPath, fullPath).split(path.sep).join("/");
+        const shouldTraverseExcludedDirectory =
+          entry.isDirectory() &&
+          shouldTraverseTraversalScopeDirectoryPath(
+            relativePath,
+            traversalScopePolicyResolution,
+          );
 
-        if (shouldExclude) {
+        if (
+          shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
+          !shouldTraverseExcludedDirectory
+        ) {
           continue;
         }
 

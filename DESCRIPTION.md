@@ -22,6 +22,8 @@ The workspace implements a local filesystem MCP server whose public tool surface
 | ARCH-004 | CONSTRAINT | Infrastructure owns technical boundaries such as path guarding and canonical logging without becoming a second tool-contract surface. | Active |
 | ARCH-005 | CONSTRAINT | Root documentation describes the final architecture only and does not retain flat per-tool or monolithic-registration narratives. | Active |
 | ARCH-006 | INFORMATION | The final system is explained explicitly from DDD, enterprise-grade modularity, MCP composition, and 12-Factor viewpoints. | Active |
+| ARCH-007 | REQUIREMENT | Broad-root traversal defaults exclude vendor, cache, and generated trees unless callers explicitly target them or reopen named descendants through additive controls. | Active |
+| ARCH-008 | CONSTRAINT | Root-local `.gitignore` participation is optional and secondary, and traversal runtime budgets may refuse oversized recursive scans before they destabilize the server surface. | Active |
 
 ---
 
@@ -99,6 +101,35 @@ Technical concerns stay isolated, which keeps transport orchestration out of inf
 **Constraint:**
 The documentation must describe this final catalog as the active surface and must not reintroduce obsolete flat per-tool or monolithic-registration narratives.
 
+### 3.6 ARCH-007: Traversal hardening and explicit access model
+[INTENT: SPECIFICATION]
+
+**Description:**
+Traversal-oriented discovery and recursive inspection tools now share one server-owned traversal policy that narrows broad-root requests before endpoint-specific recursion begins.
+
+**Final State:**
+- Broad-root traversal excludes vendor, cache, and generated directory classes by default.
+- Explicit roots inside excluded trees remain valid and continue to pass through normal path authorization.
+- `includeExcludedGlobs` reopens named descendants additively instead of broadening the whole request scope.
+- The traversal policy remains shared across listing, glob, regex, and recursive counting surfaces rather than being redefined per endpoint.
+
+**Architectural Implication:**
+The server protects prompt efficiency and runtime stability by default while still preserving deliberate access to excluded trees when callers explicitly request it.
+
+### 3.7 ARCH-008: Secondary `.gitignore` enrichment and traversal budgets
+[INTENT: SPECIFICATION]
+
+**Description:**
+The traversal model includes two additional guardrail surfaces: optional root-local `.gitignore` enrichment and traversal runtime budgets.
+
+**Final State:**
+- `respectGitIgnore` is an additive opt-in layered on top of the shared traversal policy rather than a replacement for it.
+- `.gitignore` remains secondary, so the server-owned exclusion baseline still governs broad-root traversal by default.
+- Traversal runtime budgets cap visited entries, visited directories, and soft runtime so oversized recursive scans fail with deterministic refusal behavior instead of degrading the server.
+
+**Architectural Implication:**
+The server keeps recursive inspection predictable and fast without weakening explicit access paths or delegating the default exclusion baseline to repository-local ignore files.
+
 ---
 
 ## 4. Architectural Perspectives
@@ -128,6 +159,12 @@ The documentation must describe this final catalog as the active surface and mus
 - Server behavior is composed from modules instead of a single monolithic registry body.
 - Technical capabilities such as path guarding and logging remain replaceable boundaries behind stable layer ownership.
 
+### 4.5 Traversal hardening from a developer-experience perspective
+- Broad-root requests stay readable and predictable because high-noise trees are filtered out before recursive inspection expands.
+- Explicit roots preserve intentional workflows such as targeted inspection inside excluded trees.
+- Additive re-includes and optional `.gitignore` participation let callers narrow or reopen scope deliberately without erasing the server baseline.
+- Traversal runtime budgets explain why some recursive scans are refused: the refusal is intentional protection against unstable, timeout-prone traversal.
+
 ---
 
 ## 5. Path Index
@@ -145,11 +182,11 @@ The documentation must describe this final catalog as the active surface and mus
 | 8 | `src/application/server/server-instructions.ts` | Stable server instruction surface |
 | 9 | `src/infrastructure/filesystem/path-guard.ts` | Canonical path safety boundary |
 | 10 | `src/infrastructure/logging/logger.ts` | Canonical infrastructure logging boundary |
-| 11 | `PLAN.md` | Final migration summary and unit-level architecture contract |
-| 12 | `.plan/1-domain-inspection/orchestration.md` | Inspection-domain ownership narrative |
-| 13 | `.plan/2-domain-comparison-and-mutation/orchestration.md` | Comparison/mutation ownership narrative |
-| 14 | `.plan/3-application-server/orchestration.md` | Application composition narrative |
-| 15 | `.plan/4-infrastructure-and-delivery/orchestration.md` | Delivery-closeout narrative and remaining execution state |
+| 11 | `src/domain/shared/guardrails/traversal-scope-policy.ts` | Shared traversal policy SSOT for default excludes, explicit roots, and additive re-includes |
+| 12 | `src/domain/shared/guardrails/gitignore-traversal-enrichment.ts` | Optional secondary `.gitignore` enrichment surface |
+| 13 | `src/domain/shared/guardrails/traversal-runtime-budget.ts` | Canonical traversal runtime-budget refusal surface |
+| 14 | `README.md` | Public developer-facing explanation of the traversal hardening model |
+| 15 | `DESCRIPTION.md` | Final-state architecture reference for autonomous agents and maintainers |
 
 ---
 
@@ -163,6 +200,9 @@ When describing or modifying the system:
 - keep contract ownership with the domain that owns the behavior,
 - keep server-scope concerns in the application shell,
 - keep path guarding and logging in infrastructure boundaries,
+- describe the shared traversal hardening model as the default recursive-inspection policy,
+- explain that `.gitignore` participation is optional and secondary,
+- explain that traversal budgets intentionally refuse oversized scans before runtime stability degrades,
 - avoid reintroducing flat per-tool or monolithic registration narratives,
 - avoid historical migration framing when describing the architecture.
 

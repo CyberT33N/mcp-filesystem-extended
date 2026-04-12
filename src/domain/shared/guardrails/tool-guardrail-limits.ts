@@ -529,6 +529,45 @@ export const CONTENT_MUTATION_TOTAL_INPUT_CHARS = 400_000;
 export const LINE_REPLACEMENT_TOTAL_INPUT_CHARS = 300_000;
 
 /**
+ * Maximum number of filesystem entries that one guarded traversal may visit before the shared
+ * runtime-budget layer must refuse further fan-out.
+ *
+ * @remarks
+ * This ceiling is tuned for high-scale local traversal while still failing deterministically before
+ * broad-root directory walks collapse into environment timeouts.
+ *
+ * @example
+ * `assertTraversalRuntimeBudget(toolName, state)`
+ */
+export const TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES = 250_000;
+
+/**
+ * Maximum number of directories that one guarded traversal may descend into before the shared
+ * runtime-budget layer must refuse further traversal.
+ *
+ * @remarks
+ * The directory ceiling stays intentionally lower than the entry ceiling so wide fan-out across
+ * nested directory trees can fail deterministically before downstream endpoint work explodes.
+ *
+ * @example
+ * `assertTraversalRuntimeBudget(toolName, state)`
+ */
+export const TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES = 25_000;
+
+/**
+ * Soft wall-clock runtime budget for one guarded traversal before deterministic refusal takes over.
+ *
+ * @remarks
+ * This soft budget exists to fail traversal-heavy workloads before the surrounding environment must
+ * terminate the request. The limit remains high enough for legitimate large local inspection while
+ * still protecting the shared guardrail model from timeout-shaped behavior.
+ *
+ * @example
+ * `assertTraversalRuntimeBudget(toolName, state)`
+ */
+export const TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS = 5_000;
+
+/**
  * Canonical runtime budgets grouped by endpoint family and server-shell enforcement surface.
  *
  * @remarks
@@ -553,4 +592,7 @@ export const ENDPOINT_FAMILY_GUARDRAIL_LIMITS = Object.freeze({
   PATH_MUTATION_SUMMARY_CAP_CHARS,
   CONTENT_MUTATION_TOTAL_INPUT_CHARS,
   LINE_REPLACEMENT_TOTAL_INPUT_CHARS,
+  TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
+  TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
+  TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
 });
