@@ -8,12 +8,13 @@
  * response fuse as the last safety floor.
  */
 import {
+  createToolGuardrailMetricValue,
   createMetadataPreflightRejectedFailure,
   createRuntimeBudgetExceededFailure,
   formatToolGuardrailFailureAsText,
 } from "./tool-guardrail-error-contract";
+import { GUARDRAIL_BYTES_PER_TOKEN_ASSUMPTION } from "./tool-guardrail-limits";
 
-const BYTES_PER_TOKEN = 3;
 const LINE_NUMBERED_RESPONSE_CHAR_MULTIPLIER = 1.35;
 const LINE_NUMBERED_RESPONSE_CHAR_OVERHEAD = 64;
 const DIFF_RESPONSE_CHAR_MULTIPLIER = 1.6;
@@ -28,8 +29,8 @@ function throwRuntimeBudgetExceededFailure(
   const failure = createRuntimeBudgetExceededFailure({
     toolName,
     budgetSurface,
-    measuredValue,
-    limitValue,
+    measuredValue: createToolGuardrailMetricValue(measuredValue, "characters"),
+    limitValue: createToolGuardrailMetricValue(limitValue, "characters"),
   });
 
   throw new Error(formatToolGuardrailFailureAsText(failure));
@@ -47,15 +48,15 @@ function throwMetadataPreflightRejectedFailure(
     ? createMetadataPreflightRejectedFailure({
         toolName,
         preflightTarget,
-        measuredValue,
-        limitValue,
+        measuredValue: createToolGuardrailMetricValue(measuredValue, "characters"),
+        limitValue: createToolGuardrailMetricValue(limitValue, "characters"),
         reason,
       })
     : createMetadataPreflightRejectedFailure({
         toolName,
         preflightTarget,
-        measuredValue,
-        limitValue,
+        measuredValue: createToolGuardrailMetricValue(measuredValue, "characters"),
+        limitValue: createToolGuardrailMetricValue(limitValue, "characters"),
         reason,
         recommendedAction,
       });
@@ -70,7 +71,7 @@ function throwMetadataPreflightRejectedFailure(
  * @returns The projected token load derived from the shared byte-to-token ratio.
  */
 export function estimateTokenLoadFromBytes(byteSize: number): number {
-  return Math.ceil(byteSize / BYTES_PER_TOKEN);
+  return Math.ceil(byteSize / GUARDRAIL_BYTES_PER_TOKEN_ASSUMPTION);
 }
 
 /**

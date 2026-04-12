@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  DISCOVERY_MAX_RESULTS_HARD_CAP,
   GLOB_PATTERN_MAX_CHARS,
   LABEL_MAX_CHARS,
   MAX_DISCOVERY_ROOTS_PER_REQUEST,
@@ -83,7 +84,12 @@ export const FindPathsByNameArgsSchema = z.object({
    * }
    * ```
    */
-  maxResults: z.number().max(500).optional().default(500).describe("Maximum number of results to return"),
+  maxResults: z
+    .number()
+    .max(DISCOVERY_MAX_RESULTS_HARD_CAP)
+    .optional()
+    .default(DISCOVERY_MAX_RESULTS_HARD_CAP)
+    .describe("Maximum number of path results to return before truncation."),
 });
 
 export const FindPathsByNameResultSchema = z.object({

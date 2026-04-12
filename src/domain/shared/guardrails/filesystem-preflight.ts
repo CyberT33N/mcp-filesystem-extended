@@ -13,6 +13,7 @@ import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesyste
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 import {
+  createToolGuardrailMetricValue,
   createMetadataPreflightRejectedFailure,
   formatToolGuardrailFailureAsText,
 } from "./tool-guardrail-error-contract";
@@ -46,15 +47,21 @@ export interface FilesystemPreflightEntry {
 function throwMetadataPreflightRejectedFailure(
   toolName: string,
   preflightTarget: string,
-  measuredValue: string | number,
-  limitValue: string | number,
+  measuredValue: string | number | { value: number; unit: string },
+  limitValue: string | number | { value: number; unit: string },
   reason: string,
 ): never {
   const failure = createMetadataPreflightRejectedFailure({
     toolName,
     preflightTarget,
-    measuredValue,
-    limitValue,
+    measuredValue:
+      typeof measuredValue === "number"
+        ? createToolGuardrailMetricValue(measuredValue, "paths")
+        : measuredValue,
+    limitValue:
+      typeof limitValue === "number"
+        ? createToolGuardrailMetricValue(limitValue, "paths")
+        : limitValue,
     reason,
   });
 
@@ -92,8 +99,8 @@ export async function collectValidatedFilesystemPreflightEntries(
       throwMetadataPreflightRejectedFailure(
         toolName,
         requestedPath,
-        requestedPath.length,
-        PATH_MAX_CHARS,
+        createToolGuardrailMetricValue(requestedPath.length, "characters"),
+        createToolGuardrailMetricValue(PATH_MAX_CHARS, "characters"),
         "Requested path length exceeds the shared metadata preflight ceiling.",
       );
     }
@@ -156,8 +163,8 @@ export function assertCandidateByteBudget(
   throwMetadataPreflightRejectedFailure(
     toolName,
     summary,
-    totalBytes,
-    hardCapBytes,
+    createToolGuardrailMetricValue(totalBytes, "bytes"),
+    createToolGuardrailMetricValue(hardCapBytes, "bytes"),
     "Candidate byte budget exceeds the preflight ceiling before content execution begins.",
   );
 }

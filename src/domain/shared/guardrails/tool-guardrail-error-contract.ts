@@ -20,6 +20,218 @@ export type ToolGuardrailFailureCode =
   | "global_response_fuse_triggered";
 
 /**
+ * Canonical numeric guardrail value rendered with an explicit unit for developer-facing refusals.
+ *
+ * @remarks
+ * Guardrail refusals must state the unit immediately after the number so callers can distinguish
+ * between counts, characters, bytes, lines, or other bounded surfaces without reading endpoint
+ * documentation first.
+ */
+export interface ToolGuardrailMetricValue {
+  /**
+   * Raw numeric value that crossed or defined the guardrail.
+   */
+  readonly value: number;
+
+  /**
+   * Human-readable unit label rendered directly after the formatted number.
+   */
+  readonly unit: string;
+}
+
+type ToolGuardrailValue = string | number | ToolGuardrailMetricValue;
+
+const GUARDRAIL_NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
+
+/**
+ * Creates the canonical numeric display surface for guardrail refusal values.
+ *
+ * @param value - Raw numeric value that should appear in the refusal payload.
+ * @param unit - Explicit unit label rendered directly after the formatted number.
+ * @returns Canonical guardrail metric value used by the refusal builders.
+ */
+export function createToolGuardrailMetricValue(
+  value: number,
+  unit: string,
+): ToolGuardrailMetricValue {
+  return {
+    value,
+    unit,
+  };
+}
+
+function formatToolGuardrailValue(
+  value: ToolGuardrailValue,
+  inferredUnit?: string,
+): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return inferredUnit === undefined
+      ? GUARDRAIL_NUMBER_FORMATTER.format(value)
+      : `${GUARDRAIL_NUMBER_FORMATTER.format(value)} ${inferredUnit}`;
+  }
+
+  return `${GUARDRAIL_NUMBER_FORMATTER.format(value.value)} ${value.unit}`;
+}
+
+function inferUnitFromLimitName(limitName: string): string | undefined {
+  const normalizedLimitName = limitName.toLowerCase();
+
+  if (normalizedLimitName.includes("results")) {
+    return "results";
+  }
+
+  if (normalizedLimitName.includes("files")) {
+    return "files";
+  }
+
+  if (normalizedLimitName.includes("chars")) {
+    return "characters";
+  }
+
+  if (normalizedLimitName.includes("bytes")) {
+    return "bytes";
+  }
+
+  if (normalizedLimitName.includes("paths")) {
+    return "paths";
+  }
+
+  if (normalizedLimitName.includes("roots")) {
+    return "roots";
+  }
+
+  if (normalizedLimitName.includes("globs")) {
+    return "glob patterns";
+  }
+
+  if (normalizedLimitName.includes("operations")) {
+    return "operations";
+  }
+
+  if (normalizedLimitName.includes("pairs")) {
+    return "pairs";
+  }
+
+  if (normalizedLimitName.includes("replacements")) {
+    return "replacements";
+  }
+
+  return undefined;
+}
+
+function inferMetadataPreflightUnit(
+  preflightTarget: string,
+  reason: string,
+): string | undefined {
+  const normalizedSurface = `${preflightTarget} ${reason}`.toLowerCase();
+
+  if (
+    normalizedSurface.includes("byte") ||
+    normalizedSurface.includes("bytes")
+  ) {
+    return "bytes";
+  }
+
+  if (
+    normalizedSurface.includes("character") ||
+    normalizedSurface.includes("characters") ||
+    normalizedSurface.includes("chars") ||
+    normalizedSurface.includes("text budget") ||
+    normalizedSurface.includes("path length") ||
+    normalizedSurface.includes("raw-text") ||
+    normalizedSurface.includes("raw text")
+  ) {
+    return "characters";
+  }
+
+  if (normalizedSurface.includes("match location")) {
+    return "match locations";
+  }
+
+  if (normalizedSurface.includes("operation")) {
+    return "operations";
+  }
+
+  if (normalizedSurface.includes("root")) {
+    return "roots";
+  }
+
+  if (normalizedSurface.includes("glob")) {
+    return "glob patterns";
+  }
+
+  if (normalizedSurface.includes("path")) {
+    return "paths";
+  }
+
+  return undefined;
+}
+
+function inferRuntimeBudgetUnit(budgetSurface: string): string | undefined {
+  const normalizedSurface = budgetSurface.toLowerCase();
+
+  if (
+    normalizedSurface.includes("replacementtext") ||
+    normalizedSurface.includes("text budget")
+  ) {
+    return "characters";
+  }
+
+  if (
+    normalizedSurface.includes("byte") ||
+    normalizedSurface.includes("bytes")
+  ) {
+    return "bytes";
+  }
+
+  if (
+    normalizedSurface.includes("character") ||
+    normalizedSurface.includes("characters") ||
+    normalizedSurface.includes("chars") ||
+    normalizedSurface.includes("output") ||
+    normalizedSurface.includes("response") ||
+    normalizedSurface.includes("summary") ||
+    normalizedSurface.includes("content")
+  ) {
+    return "characters";
+  }
+
+  if (normalizedSurface.includes("match location")) {
+    return "match locations";
+  }
+
+  if (normalizedSurface.includes("results")) {
+    return "results";
+  }
+
+  if (normalizedSurface.includes("files")) {
+    return "files";
+  }
+
+  if (normalizedSurface.includes("operation")) {
+    return "operations";
+  }
+
+  if (normalizedSurface.includes("root")) {
+    return "roots";
+  }
+
+  if (normalizedSurface.includes("glob")) {
+    return "glob patterns";
+  }
+
+  if (normalizedSurface.includes("path")) {
+    return "paths";
+  }
+
+  return undefined;
+}
+
+/**
  * Describes the canonical refusal payload shared by schemas, handlers, and the global response fuse.
  */
 export interface ToolGuardrailFailure {
@@ -86,17 +298,19 @@ export function createSchemaLimitExceededFailure(params: {
   toolName: string;
   requestSurface: string;
   limitName: string;
-  limitValue: string | number;
-  actualValue: string | number;
+  limitValue: ToolGuardrailValue;
+  actualValue: ToolGuardrailValue;
 }): ToolGuardrailFailure {
+  const inferredUnit = inferUnitFromLimitName(params.limitName);
+
   return createToolGuardrailFailure(
     "schema_limit_exceeded",
     params.toolName,
     "Request validation rejected because the request exceeds a hard schema guardrail.",
     [
       `Rejected request surface: ${params.requestSurface}.`,
-      `Configured limit (${params.limitName}): ${String(params.limitValue)}.`,
-      `Received value: ${String(params.actualValue)}.`,
+      `Configured limit (${params.limitName}): ${formatToolGuardrailValue(params.limitValue, inferredUnit)}.`,
+      `Received value: ${formatToolGuardrailValue(params.actualValue, inferredUnit)}.`,
     ],
     "Reduce the request size or split the work into smaller batches before retrying.",
   );
@@ -111,19 +325,21 @@ export function createSchemaLimitExceededFailure(params: {
 export function createMetadataPreflightRejectedFailure(params: {
   toolName: string;
   preflightTarget: string;
-  measuredValue: string | number;
-  limitValue: string | number;
+  measuredValue: ToolGuardrailValue;
+  limitValue: ToolGuardrailValue;
   reason: string;
   recommendedAction?: string;
 }): ToolGuardrailFailure {
+  const inferredUnit = inferMetadataPreflightUnit(params.preflightTarget, params.reason);
+
   return createToolGuardrailFailure(
     "metadata_preflight_rejected",
     params.toolName,
     "Request rejected during metadata preflight before content execution began.",
     [
       `Preflight target: ${params.preflightTarget}.`,
-      `Measured or projected value: ${String(params.measuredValue)}.`,
-      `Configured limit: ${String(params.limitValue)}.`,
+      `Measured or projected value: ${formatToolGuardrailValue(params.measuredValue, inferredUnit)}.`,
+      `Configured limit: ${formatToolGuardrailValue(params.limitValue, inferredUnit)}.`,
       `Reason: ${params.reason}.`,
     ],
     params.recommendedAction ?? "Narrow the target set or reduce the expected payload before retrying.",
@@ -140,7 +356,7 @@ export function createRegexRuntimeRejectedFailure(params: {
   toolName: string;
   patternSummary: string;
   reason: string;
-  candidateBytes: string | number;
+  candidateBytes: ToolGuardrailValue;
 }): ToolGuardrailFailure {
   return createToolGuardrailFailure(
     "regex_runtime_rejected",
@@ -149,7 +365,7 @@ export function createRegexRuntimeRejectedFailure(params: {
     [
       `Pattern summary: ${params.patternSummary}.`,
       `Runtime reason: ${params.reason}.`,
-      `Candidate bytes considered before refusal: ${String(params.candidateBytes)}.`,
+      `Candidate bytes considered before refusal: ${formatToolGuardrailValue(params.candidateBytes, "bytes")}.`,
     ],
     "Tighten the regex scope or simplify the pattern before retrying.",
   );
@@ -164,17 +380,19 @@ export function createRegexRuntimeRejectedFailure(params: {
 export function createRuntimeBudgetExceededFailure(params: {
   toolName: string;
   budgetSurface: string;
-  measuredValue: string | number;
-  limitValue: string | number;
+  measuredValue: ToolGuardrailValue;
+  limitValue: ToolGuardrailValue;
 }): ToolGuardrailFailure {
+  const inferredUnit = inferRuntimeBudgetUnit(params.budgetSurface);
+
   return createToolGuardrailFailure(
     "runtime_budget_exceeded",
     params.toolName,
     "Request execution exceeded a runtime guardrail budget before a safe result could be returned.",
     [
       `Budget surface: ${params.budgetSurface}.`,
-      `Measured or projected value: ${String(params.measuredValue)}.`,
-      `Configured limit: ${String(params.limitValue)}.`,
+      `Measured or projected value: ${formatToolGuardrailValue(params.measuredValue, inferredUnit)}.`,
+      `Configured limit: ${formatToolGuardrailValue(params.limitValue, inferredUnit)}.`,
     ],
     "Reduce the result scope or split the operation into smaller units before retrying.",
   );
@@ -188,16 +406,16 @@ export function createRuntimeBudgetExceededFailure(params: {
  */
 export function createGlobalResponseFuseTriggeredFailure(params: {
   toolName: string;
-  projectedResponseChars: string | number;
-  globalLimitChars: string | number;
+  projectedResponseChars: ToolGuardrailValue;
+  globalLimitChars: ToolGuardrailValue;
 }): ToolGuardrailFailure {
   return createToolGuardrailFailure(
     "global_response_fuse_triggered",
     params.toolName,
     "The global response fuse rejected the tool result because it exceeded the non-bypassable server cap.",
     [
-      `Projected response size: ${String(params.projectedResponseChars)} characters.`,
-      `Global response cap: ${String(params.globalLimitChars)} characters.`,
+      `Projected response size: ${formatToolGuardrailValue(params.projectedResponseChars, "characters")}.`,
+      `Global response cap: ${formatToolGuardrailValue(params.globalLimitChars, "characters")}.`,
       `The response was blocked after endpoint execution to protect the server-wide contract.`,
     ],
     "Request a smaller result set or tighten the operation scope before retrying.",

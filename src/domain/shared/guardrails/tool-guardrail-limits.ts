@@ -12,6 +12,36 @@
  */
 
 /**
+ * Default model context window used to calibrate portable MCP hardgap ceilings.
+ *
+ * @remarks
+ * The MCP server cannot inspect live caller context occupancy, so hardgaps are calibrated against
+ * one stable default model budget instead of a runtime-specific session snapshot. Orchestrators
+ * still decide whether a concrete request is appropriate for the currently remaining context.
+ */
+export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 1_000_000;
+
+/**
+ * Shared byte-to-token approximation used when translating hardgap ceilings into prompt-budget
+ * percentages.
+ *
+ * @remarks
+ * This value is intentionally conservative and exists only for architectural calibration of
+ * portable hard ceilings, not for live token accounting.
+ */
+export const GUARDRAIL_BYTES_PER_TOKEN_ASSUMPTION = 3;
+
+/**
+ * Approximate character budget implied by the default model context window.
+ *
+ * @remarks
+ * This surface is used only for documenting why family ceilings are proportioned the way they are.
+ * It is not a live-context measurement and must never be treated as one.
+ */
+export const DEFAULT_MODEL_CONTEXT_WINDOW_APPROX_CHARS =
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS * GUARDRAIL_BYTES_PER_TOKEN_ASSUMPTION;
+
+/**
  * Maximum identifier length for stable request-contract tokens.
  *
  * @remarks
@@ -100,24 +130,28 @@ export const SHORT_TEXT_MAX_CHARS = 2_048;
  *
  * @remarks
  * Apply this ceiling to content-bearing request properties before cumulative request budgets are
- * evaluated across the broader operation.
+ * evaluated across the broader operation. The cap remains large enough for single-file creation or
+ * append payloads in a one-million-token default environment, but still low enough to prevent one
+ * caller-controlled field from monopolizing the full mutation request budget.
  *
  * @example
  * `z.string().max(RAW_CONTENT_MAX_CHARS)`
  */
-export const RAW_CONTENT_MAX_CHARS = 100_000;
+export const RAW_CONTENT_MAX_CHARS = 150_000;
 
 /**
  * Maximum length for one canonical `replacementText` payload.
  *
  * @remarks
  * This constant preserves the single same-concept limit surface for line-range replacement text
- * and must remain aligned with the canonical `replacementText` property name.
+ * and must remain aligned with the canonical `replacementText` property name. The cap is lower than
+ * the raw-content ceiling because line-range replacement should stay targeted even when large
+ * contiguous blocks are being replaced.
  *
  * @example
  * `z.string().max(REPLACEMENT_TEXT_MAX_CHARS)`
  */
-export const REPLACEMENT_TEXT_MAX_CHARS = 50_000;
+export const REPLACEMENT_TEXT_MAX_CHARS = 100_000;
 
 /**
  * Maximum number of include globs allowed in one request.
@@ -240,16 +274,32 @@ export const MAX_RAW_TEXT_DIFF_PAIRS_PER_REQUEST = 10;
 export const MAX_REPLACEMENTS_PER_FILE = 25;
 
 /**
+ * Maximum number of discovery results a caller may request before formatted response budgeting
+ * becomes the dominant guardrail.
+ *
+ * @remarks
+ * Path-only discovery surfaces are semantically lighter than full reads and regex snippets, so the
+ * request cap can be broader. The limit still remains bounded because path enumeration beyond this
+ * range usually creates orchestration noise instead of additional prompting value.
+ *
+ * @example
+ * `z.number().max(DISCOVERY_MAX_RESULTS_HARD_CAP)`
+ */
+export const DISCOVERY_MAX_RESULTS_HARD_CAP = 1_000;
+
+/**
  * Maximum aggregate raw-text input budget across one request.
  *
  * @remarks
  * Apply this ceiling after per-field text caps so multi-item requests cannot combine many locally
- * valid content fields into one oversized raw-text workload.
+ * valid content fields into one oversized raw-text workload. The ceiling is deliberately larger
+ * than a single per-field payload because legitimate multi-pair and multi-file operations should be
+ * able to batch work inside a fresh one-million-token context window without forced micro-splitting.
  *
  * @example
  * `if (totalChars > MAX_TOTAL_RAW_TEXT_REQUEST_CHARS) rejectRequest()`
  */
-export const MAX_TOTAL_RAW_TEXT_REQUEST_CHARS = 200_000;
+export const MAX_TOTAL_RAW_TEXT_REQUEST_CHARS = 400_000;
 
 /**
  * Canonical request-surface ceilings grouped by semantic property class.
@@ -282,6 +332,7 @@ export const TOOL_GUARDRAIL_LIMITS = Object.freeze({
   MAX_COMPARISON_PAIRS_PER_REQUEST,
   MAX_RAW_TEXT_DIFF_PAIRS_PER_REQUEST,
   MAX_REPLACEMENTS_PER_FILE,
+  DISCOVERY_MAX_RESULTS_HARD_CAP,
   MAX_TOTAL_RAW_TEXT_REQUEST_CHARS,
 });
 
@@ -299,156 +350,183 @@ export const TOOL_GUARDRAIL_LIMITS = Object.freeze({
  *
  * @remarks
  * This ceiling is the last non-bypassable safety floor after every endpoint-specific guardrail has
- * already had the chance to fail earlier with family-aware refusal messaging.
+ * already had the chance to fail earlier with family-aware refusal messaging. At 600,000
+ * characters, the fuse represents roughly twenty percent of the default 1,000,000-token context
+ * window using the shared three-bytes-per-token assumption. This keeps the server-level fallback
+ * broad enough for legitimate large outputs while still stopping pathological responses.
  *
  * @example
  * `assertActualTextBudget(toolName, actualChars, GLOBAL_RESPONSE_HARD_CAP_CHARS, "server response")`
  */
-export const GLOBAL_RESPONSE_HARD_CAP_CHARS = 200_000;
+export const GLOBAL_RESPONSE_HARD_CAP_CHARS = 600_000;
 
 /**
  * Family-specific response cap for direct file-read output.
  *
  * @remarks
  * Read-file endpoints use this ceiling to refuse projected or actual oversized line-numbered file
- * content before the global fuse becomes the only protection layer.
+ * content before the global fuse becomes the only protection layer. Direct file reads receive the
+ * largest family budget because forcing an agent to split one legitimate multi-file read into many
+ * sequential retries increases reasoning churn, repeated orchestration cost, and context-drift
+ * risk. At 450,000 characters, this ceiling represents roughly fifteen percent of the default
+ * one-million-token context window.
  *
  * @example
  * `assertProjectedTextBudget(toolName, projectedChars, READ_FILES_RESPONSE_CAP_CHARS, "line-numbered read response")`
  */
-export const READ_FILES_RESPONSE_CAP_CHARS = 180_000;
+export const READ_FILES_RESPONSE_CAP_CHARS = 450_000;
 
 /**
  * Family-specific response cap for regex-search output.
  *
  * @remarks
  * Regex endpoints keep a lower formatted-output ceiling because search results can grow rapidly
- * even when individual matches remain small.
+ * even when individual matches remain small. Search snippets are semantically sparser than full
+ * reads, so the output ceiling stays lower to encourage narrowing before the caller spends a large
+ * portion of context on repetitive match listings.
  *
  * @example
  * `assertActualTextBudget(toolName, actualChars, REGEX_SEARCH_RESPONSE_CAP_CHARS, "regex search response")`
  */
-export const REGEX_SEARCH_RESPONSE_CAP_CHARS = 60_000;
+export const REGEX_SEARCH_RESPONSE_CAP_CHARS = 120_000;
 
 /**
  * Maximum number of regex match locations that may be collected successfully.
  *
  * @remarks
  * This runtime ceiling stops high-density search results before result shaping turns one valid
- * query into an oversized response surface.
+ * query into an oversized response surface. The value is intentionally lower than discovery-style
+ * path enumeration because regex results carry per-match line context and therefore consume more
+ * prompt budget per returned item.
  *
  * @example
  * `assertRegexRuntimeBudget(toolName, collectedLocations, totalBytesScanned)`
  */
-export const REGEX_SEARCH_MAX_RESULTS_HARD_CAP = 200;
+export const REGEX_SEARCH_MAX_RESULTS_HARD_CAP = 400;
 
 /**
  * Maximum number of candidate bytes that regex runtime scanning may inspect.
  *
  * @remarks
  * Apply this ceiling during regex execution so legitimate broad roots still terminate safely when
- * the candidate surface becomes too large.
+ * the candidate surface becomes too large. Candidate-byte scanning is a server-side CPU and I/O
+ * hardgap rather than a caller-context hardgap, so it can be materially broader than the final
+ * response cap without increasing model-context pressure directly.
  *
  * @example
  * `assertRegexRuntimeBudget(toolName, collectedLocations, totalBytesScanned)`
  */
-export const REGEX_SEARCH_MAX_CANDIDATE_BYTES = 8_388_608;
+export const REGEX_SEARCH_MAX_CANDIDATE_BYTES = 33_554_432;
 
 /**
  * Maximum length of one formatted regex match excerpt.
  *
  * @remarks
  * This ceiling keeps individual match snippets concise while preserving the matched text whenever
- * possible.
+ * possible. The slightly larger excerpt budget improves local reasoning quality for regex hits
+ * without turning one match into a mini full-file read.
  *
  * @example
  * `const excerpt = line.slice(0, REGEX_SEARCH_EXCERPT_MAX_CHARS)`
  */
-export const REGEX_SEARCH_EXCERPT_MAX_CHARS = 240;
+export const REGEX_SEARCH_EXCERPT_MAX_CHARS = 320;
 
 /**
  * Family-specific response cap for discovery-style structured output.
  *
  * @remarks
  * Discovery endpoints can fan out across many filesystem entries, so they use a dedicated output
- * ceiling below the global fuse.
+ * ceiling below the global fuse. Discovery output is cheaper than full reads but still lower value
+ * per character than canonical file content, so the ceiling stays meaningfully below the direct
+ * read family while remaining broad enough for legitimate batched path exploration.
  *
  * @example
  * `assertActualTextBudget(toolName, actualChars, DISCOVERY_RESPONSE_CAP_CHARS, "discovery response")`
  */
-export const DISCOVERY_RESPONSE_CAP_CHARS = 80_000;
+export const DISCOVERY_RESPONSE_CAP_CHARS = 150_000;
 
 /**
  * Family-specific response cap for metadata and listing output.
  *
  * @remarks
  * Metadata-heavy endpoints usually return structured summaries rather than raw content, but still
- * need a dedicated output ceiling to control breadth.
+ * need a dedicated output ceiling to control breadth. The ceiling remains below discovery output
+ * because metadata surfaces often repeat similar keys and therefore deliver less incremental
+ * reasoning value per character than direct content reads.
  *
  * @example
  * `assertActualTextBudget(toolName, actualChars, METADATA_RESPONSE_CAP_CHARS, "metadata response")`
  */
-export const METADATA_RESPONSE_CAP_CHARS = 60_000;
+export const METADATA_RESPONSE_CAP_CHARS = 100_000;
 
 /**
  * Family-specific response cap for file-backed diff output.
  *
  * @remarks
  * File-based diff endpoints can emit larger responses than raw-text diffs because their inputs are
- * constrained by file metadata rather than full caller-controlled text payloads.
+ * constrained by file metadata rather than full caller-controlled text payloads. File-backed diffs
+ * therefore receive a higher cap than raw-text diffs because they more often support legitimate
+ * repository review workflows rather than arbitrary caller-injected payload expansion.
  *
  * @example
  * `assertProjectedTextBudget(toolName, projectedChars, FILE_DIFF_RESPONSE_CAP_CHARS, "file diff response")`
  */
-export const FILE_DIFF_RESPONSE_CAP_CHARS = 120_000;
+export const FILE_DIFF_RESPONSE_CAP_CHARS = 300_000;
 
 /**
  * Family-specific response cap for in-memory raw-text diff output.
  *
  * @remarks
  * Raw-text diff endpoints use a stricter ceiling because callers directly control both diff inputs
- * and can amplify memory and response growth more aggressively.
+ * and can amplify memory and response growth more aggressively. The ceiling is still materially
+ * larger than the previous baseline so callers can compare substantial in-memory artifacts without
+ * being forced into unnecessary multi-step orchestration.
  *
  * @example
  * `assertProjectedTextBudget(toolName, projectedChars, TEXT_DIFF_RESPONSE_CAP_CHARS, "raw-text diff response")`
  */
-export const TEXT_DIFF_RESPONSE_CAP_CHARS = 80_000;
+export const TEXT_DIFF_RESPONSE_CAP_CHARS = 240_000;
 
 /**
  * Maximum formatted summary size for path-mutation success output.
  *
  * @remarks
  * Mutation endpoints should acknowledge work concisely and must not echo a broad destructive batch
- * back to the caller as a large content payload.
+ * back to the caller as a large content payload. The ceiling is intentionally modest because path
+ * mutation summaries are low-density confirmation surfaces, not primary reasoning context.
  *
  * @example
  * `assertActualTextBudget(toolName, actualChars, PATH_MUTATION_SUMMARY_CAP_CHARS, "path mutation summary")`
  */
-export const PATH_MUTATION_SUMMARY_CAP_CHARS = 40_000;
+export const PATH_MUTATION_SUMMARY_CAP_CHARS = 60_000;
 
 /**
  * Maximum aggregate raw-content input budget for content-bearing mutation requests.
  *
  * @remarks
  * This ceiling protects create and append workflows before writes begin by bounding the cumulative
- * text payload carried across all content items in one request.
+ * text payload carried across all content items in one request. The cap is large enough for a
+ * handful of substantial file-creation operations in a fresh one-million-token environment, while
+ * still preventing a single request from collapsing into an unbounded write surface.
  *
  * @example
  * `if (totalChars > CONTENT_MUTATION_TOTAL_INPUT_CHARS) rejectRequest()`
  */
-export const CONTENT_MUTATION_TOTAL_INPUT_CHARS = 200_000;
+export const CONTENT_MUTATION_TOTAL_INPUT_CHARS = 400_000;
 
 /**
  * Maximum aggregate replacement-text input budget for one line-range replacement request.
  *
  * @remarks
  * This ceiling keeps multi-replacement operations inside a bounded text budget before preview and
- * diff shaping begin.
+ * diff shaping begin. It remains below the broader content-mutation ceiling because line-range
+ * replacement should preserve targeted edit semantics rather than acting as a disguised full-file
+ * write surface.
  *
  * @example
  * `if (totalReplacementChars > LINE_REPLACEMENT_TOTAL_INPUT_CHARS) rejectRequest()`
  */
-export const LINE_REPLACEMENT_TOTAL_INPUT_CHARS = 200_000;
+export const LINE_REPLACEMENT_TOTAL_INPUT_CHARS = 300_000;
 
 /**
  * Canonical runtime budgets grouped by endpoint family and server-shell enforcement surface.

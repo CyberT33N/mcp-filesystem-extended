@@ -1,4 +1,7 @@
-import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  DISCOVERY_MAX_RESULTS_HARD_CAP,
+  DISCOVERY_RESPONSE_CAP_CHARS,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
@@ -109,7 +112,7 @@ export async function getFindPathsByNameResult(
   pattern: string,
   excludePatterns: string[],
   allowedDirectories: string[],
-  maxResults = 500,
+  maxResults = DISCOVERY_MAX_RESULTS_HARD_CAP,
 ): Promise<FindPathsByNameResult> {
   const roots = await Promise.all(
     directoryPaths.map((directoryPath) =>
@@ -150,7 +153,7 @@ export async function handleSearchFiles(
   pattern: string,
   excludePatterns: string[],
   allowedDirectories: string[],
-  maxResults = 500,
+  maxResults = DISCOVERY_MAX_RESULTS_HARD_CAP,
 ): Promise<string> {
   if (directoryPaths.length === 1) {
     const firstDirectoryPath = directoryPaths[0];

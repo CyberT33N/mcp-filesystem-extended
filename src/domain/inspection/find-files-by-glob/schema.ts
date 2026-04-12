@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  DISCOVERY_MAX_RESULTS_HARD_CAP,
   GLOB_PATTERN_MAX_CHARS,
   MAX_DISCOVERY_ROOTS_PER_REQUEST,
   MAX_EXCLUDE_GLOBS_PER_REQUEST,
@@ -82,7 +83,12 @@ export const FindFilesByGlobArgsSchema = z.object({
    * }
    * ```
    */
-  maxResults: z.number().max(500).optional().default(500).describe("Maximum number of results to return"),
+  maxResults: z
+    .number()
+    .max(DISCOVERY_MAX_RESULTS_HARD_CAP)
+    .optional()
+    .default(DISCOVERY_MAX_RESULTS_HARD_CAP)
+    .describe("Maximum number of path results to return before truncation."),
 });
 
 export const FindFilesByGlobResultSchema = z.object({
