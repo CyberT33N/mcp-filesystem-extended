@@ -106,15 +106,27 @@ async function getValidatedPreflightEntry(
   return firstEntry;
 }
 
-async function getValidatedRootPath(
+/**
+ * Resolves one regex search scope after shared filesystem preflight succeeds.
+ *
+ * @remarks
+ * The shared filesystem preflight remains intentionally generic. This helper owns the regex
+ * endpoint decision to accept both explicit file scopes and directory scopes without pushing that
+ * mixed-scope contract down into the shared guardrail core.
+ *
+ * @param searchPath - Caller-supplied file or directory scope.
+ * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
+ * @returns One validated file or directory entry ready for endpoint-specific execution.
+ */
+async function getValidatedSearchScopeEntry(
   searchPath: string,
   allowedDirectories: string[],
-): Promise<string> {
+): Promise<FilesystemPreflightEntry> {
   const rootEntry = await getValidatedPreflightEntry(searchPath, allowedDirectories);
 
-  assertExpectedFileTypes(SEARCH_REGEX_TOOL_NAME, [rootEntry], ["directory"]);
+  assertExpectedFileTypes(SEARCH_REGEX_TOOL_NAME, [rootEntry], ["file", "directory"]);
 
-  return rootEntry.validPath;
+  return rootEntry;
 }
 
 function formatSearchRegexPathOutput(
@@ -169,16 +181,120 @@ function assertFormattedRegexResponseBudget(formattedOutput: string): string {
 }
 
 /**
- * Describes the structured regex-search result for one validated search root.
+ * Executes guarded regex matching against one validated file entry.
  *
  * @remarks
- * This contract captures the runtime-shaped search surface after the regex
- * pipeline applies a tiny structural reject layer, candidate-byte preflights,
- * result-count budgets, and final response-size protection.
+ * Explicit file scopes intentionally skip traversal-only guardrails because the caller already
+ * targeted one concrete file. Candidate-byte budgets, regex runtime budgets, and final response
+ * budgets still remain fully active for this direct-file search path.
+ *
+ * @param candidateEntry - Validated file entry selected for regex evaluation.
+ * @param filePatterns - Include globs that may still narrow the validated file scope.
+ * @param regex - Compiled regex instance that already passed the shared runtime-safety gate.
+ * @param maxAdditionalResults - Maximum number of additional match locations that may still be collected.
+ * @param totalBytesScannedBeforeRead - Candidate-byte total accumulated before this file is considered.
+ * @param collectedLocationsBeforeRead - Match-location total accumulated before this file is considered.
+ * @returns Match data, byte accounting, and truncation state for the validated file entry.
+ */
+async function collectRegexMatchesFromFileEntry(
+  candidateEntry: FilesystemPreflightEntry,
+  filePatterns: string[],
+  regex: RegExp,
+  maxAdditionalResults: number,
+  totalBytesScannedBeforeRead: number,
+  collectedLocationsBeforeRead: number,
+): Promise<{
+  matches: SearchResult[];
+  fileSearched: boolean;
+  totalMatches: number;
+  totalBytesScanned: number;
+  truncated: boolean;
+}> {
+  if (!matchesIncludedFilePatterns(candidateEntry.validPath, filePatterns)) {
+    return {
+      matches: [],
+      fileSearched: false,
+      totalMatches: 0,
+      totalBytesScanned: totalBytesScannedBeforeRead,
+      truncated: false,
+    };
+  }
+
+  const nextTotalBytesScanned = totalBytesScannedBeforeRead + candidateEntry.size;
+
+  assertCandidateByteBudget(
+    SEARCH_REGEX_TOOL_NAME,
+    nextTotalBytesScanned,
+    REGEX_SEARCH_MAX_CANDIDATE_BYTES,
+    `regex candidate bytes before reading ${candidateEntry.requestedPath}`,
+  );
+
+  let content: string;
+
+  try {
+    content = await fs.readFile(candidateEntry.validPath, "utf-8");
+  } catch {
+    return {
+      matches: [],
+      fileSearched: true,
+      totalMatches: 0,
+      totalBytesScanned: nextTotalBytesScanned,
+      truncated: false,
+    };
+  }
+
+  const lines = content.split("\n");
+  const matches: SearchResult[] = [];
+  let totalMatches = 0;
+  let match: RegExpExecArray | null;
+  let truncated = false;
+
+  resetRegexLastIndex(regex);
+
+  while ((match = regex.exec(content)) !== null) {
+    totalMatches++;
+
+    const { lineNumber, lineContent } = getLineMatchContext(lines, match.index);
+
+    matches.push({
+      file: candidateEntry.validPath,
+      line: lineNumber,
+      content: normalizeRegexMatchExcerpt(lineContent, match[0]),
+      match: match[0],
+    });
+
+    assertRegexRuntimeBudget(
+      SEARCH_REGEX_TOOL_NAME,
+      collectedLocationsBeforeRead + matches.length,
+      nextTotalBytesScanned,
+    );
+
+    if (matches.length >= maxAdditionalResults) {
+      truncated = true;
+      break;
+    }
+  }
+
+  return {
+    matches,
+    fileSearched: true,
+    totalMatches,
+    totalBytesScanned: nextTotalBytesScanned,
+    truncated,
+  };
+}
+
+/**
+ * Describes the structured regex-search result for one validated search scope.
+ *
+ * @remarks
+ * This contract captures the runtime-shaped search surface after the regex pipeline applies a tiny
+ * structural reject layer, endpoint-specific file-versus-directory scope normalization,
+ * candidate-byte preflights, result-count budgets, and final response-size protection.
  */
 export interface SearchRegexPathResult {
   /**
-   * Original root path supplied by the caller.
+   * Original search scope path supplied by the caller.
    */
   root: string;
 
@@ -207,8 +323,8 @@ export interface SearchRegexPathResult {
  * Describes the structured regex-search result across all requested roots.
  *
  * @remarks
- * The batch result preserves per-root runtime fuse outcomes so callers can see
- * where traversal stopped without implying that broad blacklists or caller
+ * The batch result preserves per-scope runtime fuse outcomes so callers can see where direct file
+ * search or guarded directory traversal stopped without implying that broad blacklists or caller
  * overrides exist for the regex safety model.
  */
 export interface SearchRegexResult {
@@ -244,7 +360,30 @@ async function getSearchRegexPathResult(
   caseSensitive: boolean,
   allowedDirectories: string[],
 ): Promise<SearchRegexPathResult> {
-  const validRootPath = await getValidatedRootPath(searchPath, allowedDirectories);
+  const searchScopeEntry = await getValidatedSearchScopeEntry(searchPath, allowedDirectories);
+  const regex = compileGuardrailedSearchRegex(SEARCH_REGEX_TOOL_NAME, pattern, caseSensitive);
+  const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
+
+  if (searchScopeEntry.type === "file") {
+    const fileSearchResult = await collectRegexMatchesFromFileEntry(
+      searchScopeEntry,
+      filePatterns,
+      regex,
+      effectiveMaxResults,
+      0,
+      0,
+    );
+
+    return {
+      root: searchPath,
+      matches: fileSearchResult.matches,
+      filesSearched: fileSearchResult.fileSearched ? 1 : 0,
+      totalMatches: fileSearchResult.totalMatches,
+      truncated: fileSearchResult.truncated,
+    };
+  }
+
+  const validRootPath = searchScopeEntry.validPath;
   const gitIgnoreTraversalEnrichment = respectGitIgnore
     ? await readGitIgnoreTraversalEnrichmentForRoot(validRootPath)
     : null;
@@ -258,8 +397,6 @@ async function getSearchRegexPathResult(
     },
   );
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
-  const regex = compileGuardrailedSearchRegex(SEARCH_REGEX_TOOL_NAME, pattern, caseSensitive);
-  const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
 
   const results: SearchResult[] = [];
   let filesSearched = 0;
@@ -335,50 +472,26 @@ async function getSearchRegexPathResult(
         continue;
       }
 
-      filesSearched++;
-
-      const nextTotalBytesScanned = totalBytesScanned + candidateEntry.size;
-
-      assertCandidateByteBudget(
-        SEARCH_REGEX_TOOL_NAME,
-        nextTotalBytesScanned,
-        REGEX_SEARCH_MAX_CANDIDATE_BYTES,
-        `regex candidate bytes before reading ${candidateEntry.requestedPath}`,
+      const fileSearchResult = await collectRegexMatchesFromFileEntry(
+        candidateEntry,
+        filePatterns,
+        regex,
+        effectiveMaxResults - results.length,
+        totalBytesScanned,
+        results.length,
       );
 
-      totalBytesScanned = nextTotalBytesScanned;
-
-      let content: string;
-
-      try {
-        content = await fs.readFile(candidateEntry.validPath, "utf-8");
-      } catch {
-        continue;
+      if (fileSearchResult.fileSearched) {
+        filesSearched++;
       }
 
-      const lines = content.split("\n");
-      let match: RegExpExecArray | null;
+      totalBytesScanned = fileSearchResult.totalBytesScanned;
+      matchesFound += fileSearchResult.totalMatches;
+      results.push(...fileSearchResult.matches);
 
-      resetRegexLastIndex(regex);
-
-      while ((match = regex.exec(content)) !== null) {
-        matchesFound++;
-
-        const { lineNumber, lineContent } = getLineMatchContext(lines, match.index);
-
-        results.push({
-          file: candidateEntry.validPath,
-          line: lineNumber,
-          content: normalizeRegexMatchExcerpt(lineContent, match[0]),
-          match: match[0],
-        });
-
-        assertRegexRuntimeBudget(SEARCH_REGEX_TOOL_NAME, results.length, totalBytesScanned);
-
-        if (results.length >= effectiveMaxResults) {
-          searchAborted = true;
-          break;
-        }
+      if (fileSearchResult.truncated) {
+        searchAborted = true;
+        break;
       }
     }
   }
@@ -398,12 +511,12 @@ async function getSearchRegexPathResult(
  * Executes regex search across one or more roots and returns the formatted text response surface.
  *
  * @remarks
- * This entrypoint keeps regex safety layered: schema caps narrow the request,
- * the shared runtime helper rejects only structurally unsafe patterns, and the
- * handler then enforces candidate-byte, match-count, and final response-budget
- * limits instead of relying on a broad semantic blacklist.
+ * This entrypoint keeps regex safety layered: schema caps narrow the request, the shared runtime
+ * helper rejects only structurally unsafe patterns, the endpoint-specific scope normalizer accepts
+ * both explicit file scopes and directory scopes, and the handler then enforces candidate-byte,
+ * match-count, and final response-budget limits instead of relying on a broad semantic blacklist.
  *
- * @param searchPaths - Root directories to search in caller-supplied order.
+ * @param searchPaths - File or directory search scopes in caller-supplied order.
  * @param pattern - Raw regex pattern supplied by the caller.
  * @param filePatterns - Include globs that narrow candidate file names before content scanning.
  * @param excludePatterns - Exclude globs that remove candidate paths from traversal.
@@ -490,11 +603,11 @@ export async function handleSearchRegex(
  * Executes regex search across one or more roots and returns the structured result surface.
  *
  * @remarks
- * Use this surface when callers need machine-readable regex output while still
- * inheriting the same structural reject layer, runtime budgets, and non-bypassable
- * response-cap behavior as the formatted handler entrypoint.
+ * Use this surface when callers need machine-readable regex output while still inheriting the same
+ * structural reject layer, hybrid file-versus-directory scope normalization, runtime budgets, and
+ * non-bypassable response-cap behavior as the formatted handler entrypoint.
  *
- * @param searchPaths - Root directories to search in caller-supplied order.
+ * @param searchPaths - File or directory search scopes in caller-supplied order.
  * @param pattern - Raw regex pattern supplied by the caller.
  * @param filePatterns - Include globs that narrow candidate file names before content scanning.
  * @param excludePatterns - Exclude globs that remove candidate paths from traversal.

@@ -10,13 +10,23 @@ import {
   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 
+/**
+ * Canonical request contract for guarded regex content search.
+ *
+ * @remarks
+ * The regex endpoint intentionally accepts both explicit file scopes and directory scopes.
+ * Shared guardrails still own path validation, traversal hardening, regex runtime safety, and
+ * response-budget enforcement, while the endpoint contract owns the architectural decision to
+ * normalize mixed file-versus-directory search scopes instead of rejecting explicit file inputs.
+ */
 export const SearchFileContentsByRegexArgsSchema = z.object({
   /**
-   * Search roots.
+   * Search scopes.
    *
    * @remarks
-   * Use this property to define the root directories whose file contents may be
-   * scanned by the regex search pipeline.
+   * Use this property to define the file or directory scopes whose file contents may be scanned by
+   * the regex search pipeline. Explicit file scopes are searched directly, while directory scopes
+   * continue through the guarded traversal pipeline.
    *
    * @example
    * ```ts
@@ -30,7 +40,7 @@ export const SearchFileContentsByRegexArgsSchema = z.object({
     .min(1)
     .max(MAX_REGEX_ROOTS_PER_REQUEST)
     .describe(
-      "Root directories to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Pass one path for a single regex search scope or multiple paths for batch regex searches."
+      "File or directory scopes to search in. Explicit file scopes are searched directly, while directory scopes exclude default vendor/cache trees by default unless explicitly reopened through the shared traversal policy. Pass one scope for a single regex search target or multiple scopes for batch regex searches."
     ),
   /**
    * Regex pattern.
@@ -183,8 +193,9 @@ export const SearchFileContentsByRegexResultSchema = z.object({
    * Per-root regex results.
    *
    * @remarks
-   * This property preserves one structured search result per requested root so
-   * callers can inspect root-local traversal output.
+   * This property preserves one structured search result per requested file or directory scope so
+   * callers can inspect direct-file results and traversal-backed directory results through one
+   * unified response surface.
    *
    * @example
    * ```ts
