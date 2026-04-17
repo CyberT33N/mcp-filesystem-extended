@@ -35,9 +35,11 @@ const LOG_LEVEL_MAP: Record<LoggingLevel, number> = {
  * final global response fuse.
  *
  * @remarks
- * This layer is intentionally the last safety floor in the guardrail stack. Schema caps and
- * handler-level preflights remain the primary control planes, while the server shell converts only
- * oversize successful responses into a canonical refusal when earlier layers still allow execution.
+ * This layer is intentionally the last non-bypassable safety floor in the guardrail stack.
+ * Family-specific guardrails should already prefer preview-first, range/cursor, or task-backed
+ * handling for large valid workloads before a request reaches this shell-level refusal surface,
+ * while the server shell converts only still-oversize successful responses into the canonical final
+ * refusal.
  */
 export class FilesystemServer {
   private readonly server: McpServer;
@@ -153,7 +155,7 @@ export class FilesystemServer {
       }
 
       // This global fuse is intentionally the last server-shell safety floor.
-      // Schema caps and handler preflights remain the primary guardrail layers.
+      // Family guardrails own preview-first, range/cursor, or task-backed fallback first.
       const successfulResponseChars = this.measureSuccessfulResponseChars(result);
 
       try {

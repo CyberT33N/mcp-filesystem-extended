@@ -102,8 +102,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       title: "Read files with line numbers",
       description:
         "Reads one or more text files and returns line-numbered content blocks. " +
-        "Use this tool for direct file reading, not for metadata lookup or content search. " +
-        "Projected oversized reads are refused by server-side safety caps, so reduce file count or narrow scope for constrained results.",
+        "Use this tool for direct bounded batch reading, not for metadata lookup or content search. " +
+        "This surface remains the inline multi-file reader for smaller workloads; reduce file count or switch to `read_file_content` for larger single-file access.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ReadFilesWithLineNumbersArgsSchema,
     },
@@ -118,7 +118,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Reads one text file through explicit full, line-range, byte-range, or chunk-cursor modes while large-file access stays bounded by shared runtime policy and response budgets. " +
         "Use this tool for single-file content access, not for metadata lookup, multi-file batch reads, or content search. " +
-        "Oversized inline full reads are refused, so switch to range or cursor modes for larger files.",
+        "Full mode remains limited to smaller files; valid larger access must switch to range or cursor modes, while unsupported or over-hard-gap workloads still refuse.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ReadFileContentArgsSchema,
       outputSchema: ReadFileContentResultSchema,
@@ -270,7 +270,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Searches text file contents with a regular expression while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for content matching, not for file-name or glob matching. " +
-        "Structurally unsafe patterns and oversized search scopes are refused, so narrow roots, globs, or `maxResults` for constrained searches.",
+        "Valid large text workloads may degrade into preview-first or task-backed results under the shared runtime policy, while structurally unsafe patterns, unsupported surfaces, and over-hard-gap workloads still refuse.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByRegexArgsSchema,
       outputSchema: SearchFileContentsByRegexResultSchema,
@@ -319,7 +319,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Searches text file contents with an exact fixed string while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for literal content matching, not for regex content matching, file-name matching, or glob matching. " +
-        "Structurally oversized search scopes are refused, so narrow roots, globs, or `maxResults` for constrained searches.",
+        "Valid large text workloads may degrade into preview-first or task-backed results under the shared literal-search policy, while unsupported or over-hard-gap workloads still refuse.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByFixedStringArgsSchema,
       outputSchema: SearchFileContentsByFixedStringResultSchema,
@@ -368,7 +368,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Counts lines in files or traversed directory trees while broad directory roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for totals and filtered line counting, not for reading full file content. " +
-        "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
+        "Total-only counts use a large-file-safe streaming path, pattern-aware counts reuse the shared native-search lane, and only unsupported or over-hard-gap workloads refuse.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: CountLinesArgsSchema,
       outputSchema: CountLinesResultSchema,

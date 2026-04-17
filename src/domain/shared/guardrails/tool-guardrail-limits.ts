@@ -377,6 +377,20 @@ export const GLOBAL_RESPONSE_HARD_CAP_CHARS = 600_000;
 export const READ_FILES_RESPONSE_CAP_CHARS = 450_000;
 
 /**
+ * Family-specific response cap for inline single-file content reads.
+ *
+ * @remarks
+ * The dedicated `read_file_content` endpoint shares the direct-read response family whenever it
+ * returns inline full, line-range, or byte-range content. Mode-specific thresholds still decide
+ * whether an inline response is allowed at all, but successful inline payloads remain governed by
+ * the same caller-context envelope as the canonical direct-read family.
+ *
+ * @example
+ * `assertProjectedTextBudget(toolName, projectedChars, READ_FILE_CONTENT_RESPONSE_CAP_CHARS, "inline content-read response")`
+ */
+export const READ_FILE_CONTENT_RESPONSE_CAP_CHARS = READ_FILES_RESPONSE_CAP_CHARS;
+
+/**
  * Family-specific response cap for regex-search output.
  *
  * @remarks
@@ -389,6 +403,20 @@ export const READ_FILES_RESPONSE_CAP_CHARS = 450_000;
  * `assertActualTextBudget(toolName, actualChars, REGEX_SEARCH_RESPONSE_CAP_CHARS, "regex search response")`
  */
 export const REGEX_SEARCH_RESPONSE_CAP_CHARS = 120_000;
+
+/**
+ * Family-specific response cap for fixed-string search output.
+ *
+ * @remarks
+ * The fixed-string endpoint stays inside the same successful-response envelope as regex search
+ * even when its runtime scan presets are tuned more generously for literal search. This keeps one
+ * shared caller-facing search response budget while allowing backend-specific runtime policy to
+ * differentiate scan cost before a successful response is shaped.
+ *
+ * @example
+ * `assertActualTextBudget(toolName, actualChars, FIXED_STRING_SEARCH_RESPONSE_CAP_CHARS, "fixed-string search response")`
+ */
+export const FIXED_STRING_SEARCH_RESPONSE_CAP_CHARS = REGEX_SEARCH_RESPONSE_CAP_CHARS;
 
 /**
  * Maximum number of regex match locations that may be collected successfully.
@@ -458,6 +486,19 @@ export const DISCOVERY_RESPONSE_CAP_CHARS = 150_000;
  * `assertActualTextBudget(toolName, actualChars, METADATA_RESPONSE_CAP_CHARS, "metadata response")`
  */
 export const METADATA_RESPONSE_CAP_CHARS = 100_000;
+
+/**
+ * Family-specific response cap for structured `count_lines` output.
+ *
+ * @remarks
+ * The modernized `count_lines` endpoint may stream or query large files internally, but its public
+ * result surface remains a compact structured summary. The count family therefore stays aligned to
+ * the metadata-style response envelope rather than borrowing the larger direct-read family cap.
+ *
+ * @example
+ * `assertActualTextBudget(toolName, actualChars, COUNT_LINES_RESPONSE_CAP_CHARS, "count-lines response")`
+ */
+export const COUNT_LINES_RESPONSE_CAP_CHARS = METADATA_RESPONSE_CAP_CHARS;
 
 /**
  * Family-specific response cap for file-backed diff output.
@@ -581,12 +622,15 @@ export const TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS = 5_000;
 export const ENDPOINT_FAMILY_GUARDRAIL_LIMITS = Object.freeze({
   GLOBAL_RESPONSE_HARD_CAP_CHARS,
   READ_FILES_RESPONSE_CAP_CHARS,
+  READ_FILE_CONTENT_RESPONSE_CAP_CHARS,
   REGEX_SEARCH_RESPONSE_CAP_CHARS,
+  FIXED_STRING_SEARCH_RESPONSE_CAP_CHARS,
   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
   REGEX_SEARCH_MAX_CANDIDATE_BYTES,
   REGEX_SEARCH_EXCERPT_MAX_CHARS,
   DISCOVERY_RESPONSE_CAP_CHARS,
   METADATA_RESPONSE_CAP_CHARS,
+  COUNT_LINES_RESPONSE_CAP_CHARS,
   FILE_DIFF_RESPONSE_CAP_CHARS,
   TEXT_DIFF_RESPONSE_CAP_CHARS,
   PATH_MUTATION_SUMMARY_CAP_CHARS,

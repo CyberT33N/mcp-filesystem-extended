@@ -4,13 +4,13 @@ file_id: "5"
 unit_name: "Contracts, Validation, and Documentation"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+ unit_status: "in_progress"
 total_tasks: 2
-completed_tasks: 0
+ completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "5.1"
-next_frontier_task: "5.2"
+ resume_frontier_task: "5.2"
+ next_frontier_task: "5.2"
 todo_window_mode_override: "inherit"
 ---
 
@@ -23,13 +23,13 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/5-contracts-and-validation/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/2 tasks
+- **Unit Status:** in_progress
+- **Progress:** 1/2 tasks
 
 ## Execution Frontier
 [INTENT: REFERENZ]
 
-- **Resume Frontier Task:** `5.1`
+- **Resume Frontier Task:** `5.2`
 - **Next Frontier Task:** `5.2`
 - **Todo Window Mode:** `inherit`
 - **Read Scope Rule:** Read the frontier task first and then its upstream task references, because both tasks in this unit depend on finalized implementation contracts from earlier units.
@@ -37,9 +37,9 @@ todo_window_mode_override: "inherit"
 ## Tasks
 [INTENT: REFERENZ]
 
-- [ ] **5.1 Harmonize shared guardrail constants, failure semantics, and server descriptions** → [`5.1-harmonize-guardrails-failure-semantics-and-server-descriptions.md`](./5.1-harmonize-guardrails-failure-semantics-and-server-descriptions.md)
+- [x] **5.1 Harmonize shared guardrail constants, failure semantics, and server descriptions** → [`5.1-harmonize-guardrails-failure-semantics-and-server-descriptions.md`](./5.1-harmonize-guardrails-failure-semantics-and-server-descriptions.md)
   - Classification: `WAITING`
-  - Status: `pending`
+  - Status: `done`
   - Complexity: `HIGH`
   - Execution Surface Band: `YELLOW`
   - Primary Split Axis: `none`
@@ -53,7 +53,7 @@ todo_window_mode_override: "inherit"
   - Execution Surface Band: `YELLOW`
   - Primary Split Axis: `none`
   - Files Modified: `test/unit/**`, `test/regression/**`, `src/domain/**`, `src/infrastructure/**`, `src/application/server/**`
-  - Blocked By: `5.1`
+  - Blocked By: `none`
   - Summary: Add automated coverage for the new runtime behavior and make the architectural TSDoc rationale explicit in the touched TypeScript surfaces.
 
 ## Internal Dependencies (This Level)
@@ -61,7 +61,7 @@ todo_window_mode_override: "inherit"
 
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
-| D5.1 | 5.2 | 5.1 | SEQUENTIAL | UNRESOLVED | Tests and TSDoc updates must validate the finalized guardrail registry and public contract wording. | `src/domain/shared/guardrails/tool-guardrail-limits.ts`, `src/application/server/**` |
+| D5.1 | 5.2 | 5.1 | SEQUENTIAL | RESOLVED | Tests and TSDoc updates must validate the finalized guardrail registry and public contract wording. | `src/domain/shared/guardrails/tool-guardrail-limits.ts`, `src/application/server/**` |
 
 ## Execution Order
 [INTENT: ANWEISUNG]
