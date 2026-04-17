@@ -4,9 +4,9 @@ file_id: "2"
 unit_name: "Search Platform Refactoring"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "in_progress"
+unit_status: "done"
 total_tasks: 3
-completed_tasks: 2
+completed_tasks: 3
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "2.3"
@@ -23,8 +23,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/2-search-platform/`
 - **Hierarchy Level:** 1
-- **Unit Status:** in_progress
-- **Progress:** 2/3 tasks
+- **Unit Status:** done
+- **Progress:** 3/3 tasks
 
 ## Execution Frontier
 [INTENT: REFERENZ]
@@ -55,9 +55,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: `src/domain/inspection/search-file-contents-by-regex/handler.ts`, `src/domain/inspection/search-file-contents-by-regex/schema.ts`
   - Blocked By: `none`
   - Summary: Preserve the public regex contract while replacing the internal execution model with the shared native lane and preview/task semantics.
-- [ ] **2.3 Add the new fixed-string search endpoint and register it** → [`2.3-add-fixed-string-search-endpoint-and-registration.md`](./2.3-add-fixed-string-search-endpoint-and-registration.md)
+- [x] **2.3 Add the new fixed-string search endpoint and register it** → [`2.3-add-fixed-string-search-endpoint-and-registration.md`](./2.3-add-fixed-string-search-endpoint-and-registration.md)
   - Classification: `SEQUENTIAL`
-  - Status: `pending`
+  - Status: `DONE`
   - Complexity: `HIGH`
   - Execution Surface Band: `YELLOW`
   - Primary Split Axis: `none`

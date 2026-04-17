@@ -6,15 +6,15 @@ created: "2026-04-16T21:30:00Z"
 last_updated: "2026-04-16T21:30:00Z"
 status: "in_progress"
 total_units: 5
-completed_units: 1
+completed_units: 3
 total_tasks_all_levels: 8
-completed_tasks_all_levels: 3
+completed_tasks_all_levels: 5
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-resume_frontier_unit: "2"
-resume_frontier_task: "2.3"
-next_frontier_task: "2.3"
+resume_frontier_unit: "4"
+resume_frontier_task: "4.1"
+next_frontier_task: "4.1"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -34,14 +34,14 @@ The plan preserves the existing public regex endpoint surface while replacing it
 - **Total Units:** 5
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 3/8 tasks completed
+- **Progress:** 5/8 tasks completed
 
 ## Execution Frontier
 [INTENT: REFERENZ]
 
-- **Resume Frontier Unit:** `2`
-- **Resume Frontier Task:** `2.3`
-- **Next Frontier Task:** `2.3`
+- **Resume Frontier Unit:** `4`
+- **Resume Frontier Task:** `4.1`
+- **Next Frontier Task:** `4.1`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
 - **Frontier Rule:** The execution entrypoint starts with runtime governance foundations and only advances to endpoint implementation after the shared execution policy is bound.
 
@@ -52,13 +52,13 @@ The plan preserves the existing public regex endpoint surface while replacing it
   - Classification: Mixed
   - Status: done | Tasks: 1 | Completed: 1
   - Summary: Establish the reusable runtime capability profile and the execution policy thresholds that all large-text workloads must consume.
-- [~] **2. Search Platform Refactoring** → [`.plan/2-search-platform/orchestration.md`](.plan/2-search-platform/orchestration.md)
+- [x] **2. Search Platform Refactoring** → [`.plan/2-search-platform/orchestration.md`](.plan/2-search-platform/orchestration.md)
   - Classification: Mixed
-  - Status: in_progress | Tasks: 3 | Completed: 2
+  - Status: done | Tasks: 3 | Completed: 3
   - Summary: Centralize search on the shared `ugrep` adapter, preserve the public regex endpoint, and add the new fixed-string endpoint.
-- [ ] **3. Read Content Architecture** → [`.plan/3-read-content/orchestration.md`](.plan/3-read-content/orchestration.md)
+- [x] **3. Read Content Architecture** → [`.plan/3-read-content/orchestration.md`](.plan/3-read-content/orchestration.md)
   - Classification: WAITING
-  - Status: pending | Tasks: 1 | Completed: 0
+  - Status: done | Tasks: 1 | Completed: 1
   - Summary: Add the new `read_file_content` endpoint with bounded full-read, line-range, byte-range, and cursor-based streaming modes.
 - [ ] **4. Count-Lines Modernization** → [`.plan/4-count-lines/orchestration.md`](.plan/4-count-lines/orchestration.md)
   - Classification: WAITING
@@ -79,8 +79,8 @@ The plan preserves the existing public regex endpoint surface while replacing it
 | D3 | 4.1 | 1.1 | WAITING | RESOLVED | Large-file count-lines behavior must reuse the same I/O capability and execution-threshold vocabulary. | `none` |
 | D4 | 4.1 | 2.1 | WAITING | RESOLVED | Pattern-based counting depends on the shared native-search adapter contract. | `none` |
 | D5 | 5.1 | 2.2 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the final regex endpoint behavior. | `src/application/server/register-inspection-tool-catalog.ts` |
-| D6 | 5.1 | 2.3 | WAITING | UNRESOLVED | Shared descriptions and guardrail registry changes must reflect the new fixed-string endpoint. | `src/application/server/register-inspection-tool-catalog.ts` |
-| D7 | 5.1 | 3.1 | WAITING | UNRESOLVED | Shared descriptions and guardrail registry changes must reflect the new content-read endpoint contract. | `src/application/server/register-inspection-tool-catalog.ts` |
+| D6 | 5.1 | 2.3 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the new fixed-string endpoint. | `src/application/server/register-inspection-tool-catalog.ts` |
+| D7 | 5.1 | 3.1 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the new content-read endpoint contract. | `src/application/server/register-inspection-tool-catalog.ts` |
 | D8 | 5.1 | 4.1 | WAITING | UNRESOLVED | Shared descriptions and guardrail registry changes must reflect the modernized count-lines behavior. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
 | D9 | 5.2 | 5.1 | WAITING | UNRESOLVED | Tests, regression fixtures, and TSDoc updates must validate the finalized contract and guardrail surfaces. | `test/**`, `src/**` |
 

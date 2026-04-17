@@ -17,6 +17,14 @@ import {
 import { handleReadFiles } from "@domain/inspection/read-files-with-line-numbers/handler";
 import { ReadFilesWithLineNumbersArgsSchema } from "@domain/inspection/read-files-with-line-numbers/schema";
 import {
+  getReadFileContentResult,
+  handleReadFileContent,
+} from "@domain/inspection/read-file-content/handler";
+import {
+  ReadFileContentArgsSchema,
+  ReadFileContentResultSchema,
+} from "@domain/inspection/read-file-content/schema";
+import {
   getFindPathsByNameResult,
   handleSearchFiles,
 } from "@domain/inspection/find-paths-by-name/handler";
@@ -40,6 +48,14 @@ import {
   SearchFileContentsByRegexArgsSchema,
   SearchFileContentsByRegexResultSchema,
 } from "@domain/inspection/search-file-contents-by-regex/schema";
+import {
+  getSearchFixedStringResult,
+  handleSearchFixedString,
+} from "@domain/inspection/search-file-contents-by-fixed-string/handler";
+import {
+  SearchFileContentsByFixedStringArgsSchema,
+  SearchFileContentsByFixedStringResultSchema,
+} from "@domain/inspection/search-file-contents-by-fixed-string/schema";
 import {
   getCountLinesResult,
   handleCountLines,
@@ -93,6 +109,30 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     },
     async ({ paths }) =>
       executeTool("read_files_with_line_numbers", () => handleReadFiles(paths, allowedDirectories)),
+  );
+
+  server.registerTool(
+    "read_file_content",
+    {
+      title: "Read file content",
+      description:
+        "Reads one text file through explicit full, line-range, byte-range, or chunk-cursor modes while large-file access stays bounded by shared runtime policy and response budgets. " +
+        "Use this tool for single-file content access, not for metadata lookup, multi-file batch reads, or content search. " +
+        "Oversized inline full reads are refused, so switch to range or cursor modes for larger files.",
+      annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
+      inputSchema: ReadFileContentArgsSchema,
+      outputSchema: ReadFileContentResultSchema,
+    },
+    async (args) =>
+      executeTool("read_file_content", async () => {
+        const result = await getReadFileContentResult(args, allowedDirectories);
+        const text = await handleReadFileContent(args, allowedDirectories);
+
+        return {
+          content: [{ type: "text", text }],
+          structuredContent: result,
+        };
+      }),
   );
 
   server.registerTool(
@@ -251,6 +291,55 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         const text = await handleSearchRegex(
           roots,
           regex,
+          includeGlobs,
+          excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
+          maxResults,
+          caseSensitive,
+          allowedDirectories,
+        );
+
+        return {
+          content: [{ type: "text", text }],
+          structuredContent: {
+            roots: result.roots,
+            totalLocations: result.totalLocations,
+            totalMatches: result.totalMatches,
+            truncated: result.truncated,
+          },
+        };
+      }),
+  );
+
+  server.registerTool(
+    "search_file_contents_by_fixed_string",
+    {
+      title: "Search file contents by fixed string",
+      description:
+        "Searches text file contents with an exact fixed string while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
+        "Use this tool for literal content matching, not for regex content matching, file-name matching, or glob matching. " +
+        "Structurally oversized search scopes are refused, so narrow roots, globs, or `maxResults` for constrained searches.",
+      annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
+      inputSchema: SearchFileContentsByFixedStringArgsSchema,
+      outputSchema: SearchFileContentsByFixedStringResultSchema,
+    },
+    async ({ roots, fixedString, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults, caseSensitive }) =>
+      executeTool("search_file_contents_by_fixed_string", async () => {
+        const result = await getSearchFixedStringResult(
+          roots,
+          fixedString,
+          includeGlobs,
+          excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
+          maxResults,
+          caseSensitive,
+          allowedDirectories,
+        );
+        const text = await handleSearchFixedString(
+          roots,
+          fixedString,
           includeGlobs,
           excludeGlobs,
           includeExcludedGlobs,

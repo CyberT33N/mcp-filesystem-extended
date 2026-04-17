@@ -4,9 +4,9 @@ file_id: "3"
 unit_name: "Read Content Architecture"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "done"
 total_tasks: 1
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "3.1"
@@ -23,8 +23,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/3-read-content/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/1 tasks
+- **Unit Status:** done
+- **Progress:** 1/1 tasks
 
 ## Execution Frontier
 [INTENT: REFERENZ]
@@ -37,9 +37,9 @@ todo_window_mode_override: "inherit"
 ## Tasks
 [INTENT: REFERENZ]
 
-- [ ] **3.1 Add the new `read_file_content` endpoint with streaming range and cursor modes** → [`3.1-add-read-file-content-endpoint-with-streaming-ranges.md`](./3.1-add-read-file-content-endpoint-with-streaming-ranges.md)
+- [x] **3.1 Add the new `read_file_content` endpoint with streaming range and cursor modes** → [`3.1-add-read-file-content-endpoint-with-streaming-ranges.md`](./3.1-add-read-file-content-endpoint-with-streaming-ranges.md)
   - Classification: `WAITING`
-  - Status: `pending`
+  - Status: `DONE`
   - Complexity: `HIGH`
   - Execution Surface Band: `YELLOW`
   - Primary Split Axis: `none`
