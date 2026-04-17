@@ -46,9 +46,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: `src/domain/shared/guardrails/tool-guardrail-limits.ts`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts`, `src/application/server/filesystem-server.ts`
   - Blocked By: `2.2, 2.3, 3.1, 4.1`
   - Summary: Align the public contract text, refusal semantics, and shared limits with the finalized runtime architecture.
-- [ ] **5.2 Add tests, regression coverage, and architecture-grade TSDoc surfaces** → [`5.2-add-tests-regression-coverage-and-architecture-tsdocs.md`](./5.2-add-tests-regression-coverage-and-architecture-tsdocs.md)
+- [~] **5.2 Add tests, regression coverage, and architecture-grade TSDoc surfaces** → [`5.2-add-tests-regression-coverage-and-architecture-tsdocs.md`](./5.2-add-tests-regression-coverage-and-architecture-tsdocs.md)
   - Classification: `SEQUENTIAL`
-  - Status: `pending`
+  - Status: `IN_PROGRESS`
   - Complexity: `HIGH`
   - Execution Surface Band: `YELLOW`
   - Primary Split Axis: `none`
