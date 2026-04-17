@@ -4,9 +4,9 @@ file_id: "1"
 unit_name: "Runtime Governance Foundations"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "done"
 total_tasks: 1
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "1.1"
@@ -23,8 +23,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-governance/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/1 tasks
+- **Unit Status:** done
+- **Progress:** 1/1 tasks
 
 ## Execution Frontier
 [INTENT: REFERENZ]
@@ -37,9 +37,9 @@ todo_window_mode_override: "inherit"
 ## Tasks
 [INTENT: REFERENZ]
 
-- [ ] **1.1 Define the runtime I/O capability profile and execution policy registry** → [`1.1-io-capability-profile-and-execution-policy-registry.md`](./1.1-io-capability-profile-and-execution-policy-registry.md)
+- [x] **1.1 Define the runtime I/O capability profile and execution policy registry** → [`1.1-io-capability-profile-and-execution-policy-registry.md`](./1.1-io-capability-profile-and-execution-policy-registry.md)
   - Classification: `ISOLATED`
-  - Status: `pending`
+  - Status: `DONE`
   - Complexity: `MEDIUM`
   - Execution Surface Band: `GREEN`
   - Primary Split Axis: `none`

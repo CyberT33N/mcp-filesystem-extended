@@ -4,12 +4,12 @@ file_id: "2"
 unit_name: "Search Platform Refactoring"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "in_progress"
 total_tasks: 3
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "2.1"
+resume_frontier_task: "2.2"
 next_frontier_task: "2.2"
 todo_window_mode_override: "inherit"
 ---
@@ -23,8 +23,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/2-search-platform/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/3 tasks
+- **Unit Status:** in_progress
+- **Progress:** 1/3 tasks
 
 ## Execution Frontier
 [INTENT: REFERENZ]
@@ -37,18 +37,18 @@ todo_window_mode_override: "inherit"
 ## Tasks
 [INTENT: REFERENZ]
 
-- [ ] **2.1 Introduce the shared ugrep adapter and classification surfaces** → [`2.1-ugrep-adapter-and-classification-surfaces.md`](./2.1-ugrep-adapter-and-classification-surfaces.md)
+- [x] **2.1 Introduce the shared ugrep adapter and classification surfaces** → [`2.1-ugrep-adapter-and-classification-surfaces.md`](./2.1-ugrep-adapter-and-classification-surfaces.md)
   - Classification: `ISOLATED`
-  - Status: `pending`
+  - Status: `DONE`
   - Complexity: `HIGH`
   - Execution Surface Band: `YELLOW`
   - Primary Split Axis: `none`
   - Files Modified: `src/infrastructure/search/ugrep-runner.ts`, `src/infrastructure/search/ugrep-command-builder.ts`, `src/domain/shared/search/text-binary-classifier.ts`, `src/domain/shared/search/pattern-classifier.ts`
   - Blocked By: `none`
   - Summary: Introduce the native search adapter and the classification primitives required by every later search consumer.
-- [ ] **2.2 Refactor the regex endpoint to the shared native search lane** → [`2.2-refactor-regex-endpoint-to-native-search.md`](./2.2-refactor-regex-endpoint-to-native-search.md)
+- [~] **2.2 Refactor the regex endpoint to the shared native search lane** → [`2.2-refactor-regex-endpoint-to-native-search.md`](./2.2-refactor-regex-endpoint-to-native-search.md)
   - Classification: `WAITING`
-  - Status: `pending`
+  - Status: `IN_PROGRESS`
   - Complexity: `HIGH`
   - Execution Surface Band: `YELLOW`
   - Primary Split Axis: `none`
