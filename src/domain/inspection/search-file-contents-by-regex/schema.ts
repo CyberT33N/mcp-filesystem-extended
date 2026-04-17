@@ -343,6 +343,21 @@ export const SearchFileContentsByRegexResultSchema = z.object({
        * ```
        */
       truncated: z.boolean(),
+      /**
+       * Root-local failure surface.
+       *
+       * @remarks
+       * This property carries one root-local operational failure without collapsing
+       * the whole multi-root response surface.
+       *
+       * @example
+       * ```ts
+       * {
+       *   error: "Native search runner timed out before completion."
+       * }
+       * ```
+       */
+      error: z.string().nullable(),
     }),
   ),
   /**
