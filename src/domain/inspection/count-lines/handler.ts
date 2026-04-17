@@ -4,12 +4,24 @@ import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-gua
 import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
+  CountQueryExecutionLane,
+  buildPatternAwareCountCommand,
+  resolveCountQueryPolicy,
+} from "@domain/shared/search/count-query-policy";
+import {
+  classifyPattern,
+  type PatternClassification,
+} from "@domain/shared/search/pattern-classifier";
+import {
   resolveTraversalScopePolicy,
   shouldExcludeTraversalScopePath,
   shouldTraverseTraversalScopeDirectoryPath,
 } from "@domain/shared/guardrails/traversal-scope-policy";
+import { countTotalLinesInFile } from "@infrastructure/filesystem/streaming-line-counter";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
+import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
+import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
 
 import { minimatch } from "minimatch";
 
@@ -65,22 +77,14 @@ async function getCountLinesPathResult(
   allowedDirectories: string[]
 ): Promise<CountLinesPathResult> {
   const validPath = await validatePath(filePath, allowedDirectories);
-
-  let regex: RegExp | undefined;
-  if (pattern) {
-    try {
-      regex = new RegExp(pattern);
-    } catch {
-      throw new Error(`Invalid regular expression: ${pattern}`);
-    }
-  }
+  const classifiedPattern = pattern === undefined ? undefined : classifyPattern(pattern);
 
   const stats = await fs.stat(validPath);
 
   let files: FileLineCount[] = [];
 
   if (stats.isFile()) {
-    files.push(await countLinesInFile(validPath, regex, ignoreEmptyLines));
+    files.push(await countLinesInFile(validPath, pattern, classifiedPattern, ignoreEmptyLines));
   } else if (stats.isDirectory() && recursive) {
     files = await countLinesInDirectory(
       validPath,
@@ -89,7 +93,8 @@ async function getCountLinesPathResult(
       excludePatterns,
       includeExcludedGlobs,
       respectGitIgnore,
-      regex,
+      pattern,
+      classifiedPattern,
       ignoreEmptyLines,
       allowedDirectories
     );
@@ -117,7 +122,9 @@ async function getCountLinesPathResult(
  * Formats count-lines output for one or more requested paths.
  *
  * @remarks
- * This handler keeps statically expressible request limits in schema, then
+ * This handler keeps statically expressible request limits in schema, routes
+ * total-only counting through the streaming line counter, routes
+ * pattern-aware counting through the shared native-search lane, and finally
  * enforces response-size protection at formatting time so recursive discovery
  * output is refused instead of silently escaping the family budget.
  *
@@ -130,7 +137,7 @@ async function getCountLinesPathResult(
  * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
  * @param ignoreEmptyLines - Whether blank lines should be excluded from totals.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
- * @returns Human-readable count-lines output that respects the discovery-family text budget.
+ * @returns Human-readable count-lines output that respects the discovery-family text budget while preserving the split counting architecture.
  */
 export async function handleCountLines(
   filePaths: string[],
@@ -312,37 +319,83 @@ export async function getCountLinesResult(
 
 async function countLinesInFile(
   filePath: string,
-  regex: RegExp | undefined,
+  pattern: string | undefined,
+  patternClassification: PatternClassification | undefined,
   ignoreEmptyLines: boolean
 ): Promise<FileLineCount> {
-  // Read file content
-  const content = await fs.readFile(filePath, 'utf-8');
-  
-  // Split into lines
-  const lines = content.split('\n');
-  
-  let count = lines.length;
-  let matchingCount: number | undefined;
-  
-  // Handle empty lines if needed
-  if (ignoreEmptyLines) {
-    count = lines.filter(line => line.trim() !== '').length;
+  const count = await countTotalLinesInFile(filePath, { ignoreEmptyLines });
+
+  if (pattern === undefined) {
+    return {
+      file: filePath,
+      count,
+    };
   }
-  
-  // Count matching lines if regex is provided
-  if (regex) {
-    matchingCount = lines.filter(line => {
-      if (ignoreEmptyLines && line.trim() === '') {
-        return false;
-      }
-      return regex.test(line);
-    }).length;
+
+  if (patternClassification === undefined) {
+    throw new Error("Pattern-aware line counting requires a shared pattern classification.");
   }
-  
+
+  const ioCapabilityProfile = detectIoCapabilityProfile();
+  const countQueryPolicy = resolveCountQueryPolicy({
+    ioCapabilityProfile,
+    pattern,
+  });
+
+  if (countQueryPolicy.executionLane !== CountQueryExecutionLane.NATIVE_PATTERN_AWARE) {
+    throw new Error("Pattern-aware line counting must stay on the shared native-search lane.");
+  }
+
+  if (countQueryPolicy.patternClassification?.classification !== patternClassification.classification) {
+    throw new Error("Pattern-aware line counting resolved an inconsistent classification surface.");
+  }
+
+  const command = buildPatternAwareCountCommand({
+    candidatePath: filePath,
+    caseSensitive: true,
+    ioCapabilityProfile,
+    pattern,
+  });
+  const result = await runUgrepSearch(command);
+
+  if (result.spawnErrorMessage !== null) {
+    throw new Error(`Failed to start native pattern-aware line counting: ${result.spawnErrorMessage}`);
+  }
+
+  if (result.timedOut) {
+    throw new Error("Native pattern-aware line counting timed out before completion.");
+  }
+
+  if (result.exitCode !== 0 && result.exitCode !== 1) {
+    const failureReason = result.stderr.trim();
+
+    throw new Error(
+      failureReason === ""
+        ? "Native pattern-aware line counting failed unexpectedly."
+        : failureReason,
+    );
+  }
+
+  const matchingCount = (() => {
+    const trimmedOutput = result.stdout.trim();
+
+    if (trimmedOutput === "") {
+      return 0;
+    }
+
+    const trailingCountMatch = trimmedOutput.match(/:(\d+)\s*$/);
+
+    if (trailingCountMatch === null) {
+      throw new Error("Native pattern-aware line counting returned an unreadable count surface.");
+    }
+
+    return Number(trailingCountMatch[1]);
+  })();
+
   return {
     file: filePath,
     count,
-    matchingCount
+    matchingCount,
   };
 }
 
@@ -353,7 +406,8 @@ async function countLinesInDirectory(
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
-  regex: RegExp | undefined,
+  pattern: string | undefined,
+  patternClassification: PatternClassification | undefined,
   ignoreEmptyLines: boolean,
   allowedDirectories: string[]
 ): Promise<FileLineCount[]> {
@@ -406,9 +460,18 @@ async function countLinesInDirectory(
             if (minimatch(entry.name, filePattern, { dot: true }) ||
                 minimatch(relativePath, filePattern, { dot: true })) {
               try {
-                const count = await countLinesInFile(fullPath, regex, ignoreEmptyLines);
+                const count = await countLinesInFile(
+                  fullPath,
+                  pattern,
+                  patternClassification,
+                  ignoreEmptyLines,
+                );
                 results.push(count);
               } catch (error) {
+                if (pattern !== undefined) {
+                  throw error;
+                }
+
                 // Skip files that can't be read as text
                 continue;
               }

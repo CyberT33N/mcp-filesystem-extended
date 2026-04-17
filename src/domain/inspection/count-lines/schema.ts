@@ -14,8 +14,11 @@ import {
  * @remarks
  * This schema keeps statically expressible limits at the contract layer so path
  * fan-out, regex length, and glob breadth are rejected before recursive
- * traversal begins. Dynamic output growth is still enforced later by the
- * handler-level text budget and the global response fuse.
+ * traversal begins. The public request surface stays stable while the handler
+ * now routes total-only counting through the streaming line counter and
+ * pattern-aware counting through the shared native-search lane. Dynamic output
+ * growth is still enforced later by the handler-level text budget and the
+ * global response fuse.
  */
 export const CountLinesArgsSchema = z.object({
   /**

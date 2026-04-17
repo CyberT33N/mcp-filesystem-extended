@@ -4,9 +4,9 @@ file_id: "4"
 unit_name: "Count Lines Modernization"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "done"
 total_tasks: 1
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "4.1"
@@ -23,8 +23,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/4-count-lines/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/1 tasks
+- **Unit Status:** done
+- **Progress:** 1/1 tasks
 
 ## Execution Frontier
 [INTENT: REFERENZ]
@@ -37,9 +37,9 @@ todo_window_mode_override: "inherit"
 ## Tasks
 [INTENT: REFERENZ]
 
-- [ ] **4.1 Modernize `count_lines` for large-file-safe total and pattern-aware counting** → [`4.1-modernize-count-lines-for-large-file-workloads.md`](./4.1-modernize-count-lines-for-large-file-workloads.md)
+- [x] **4.1 Modernize `count_lines` for large-file-safe total and pattern-aware counting** → [`4.1-modernize-count-lines-for-large-file-workloads.md`](./4.1-modernize-count-lines-for-large-file-workloads.md)
   - Classification: `WAITING`
-  - Status: `pending`
+  - Status: `DONE`
   - Complexity: `HIGH`
   - Execution Surface Band: `YELLOW`
   - Primary Split Axis: `none`

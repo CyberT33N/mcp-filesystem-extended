@@ -6,15 +6,15 @@ created: "2026-04-16T21:30:00Z"
 last_updated: "2026-04-16T21:30:00Z"
 status: "in_progress"
 total_units: 5
-completed_units: 3
+completed_units: 4
 total_tasks_all_levels: 8
-completed_tasks_all_levels: 5
+completed_tasks_all_levels: 6
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-resume_frontier_unit: "4"
-resume_frontier_task: "4.1"
-next_frontier_task: "4.1"
+resume_frontier_unit: "5"
+resume_frontier_task: "5.1"
+next_frontier_task: "5.1"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -34,7 +34,7 @@ The plan preserves the existing public regex endpoint surface while replacing it
 - **Total Units:** 5
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 5/8 tasks completed
+- **Progress:** 6/8 tasks completed
 
 ## Execution Frontier
 [INTENT: REFERENZ]
@@ -60,9 +60,9 @@ The plan preserves the existing public regex endpoint surface while replacing it
   - Classification: WAITING
   - Status: done | Tasks: 1 | Completed: 1
   - Summary: Add the new `read_file_content` endpoint with bounded full-read, line-range, byte-range, and cursor-based streaming modes.
-- [ ] **4. Count-Lines Modernization** → [`.plan/4-count-lines/orchestration.md`](.plan/4-count-lines/orchestration.md)
+- [x] **4. Count-Lines Modernization** → [`.plan/4-count-lines/orchestration.md`](.plan/4-count-lines/orchestration.md)
   - Classification: WAITING
-  - Status: pending | Tasks: 1 | Completed: 0
+  - Status: done | Tasks: 1 | Completed: 1
   - Summary: Extend `count_lines` to support large-file-safe total and pattern-aware counting without full in-process reads.
 - [ ] **5. Contracts, Validation, and Documentation** → [`.plan/5-contracts-and-validation/orchestration.md`](.plan/5-contracts-and-validation/orchestration.md)
   - Classification: Mixed
@@ -81,7 +81,7 @@ The plan preserves the existing public regex endpoint surface while replacing it
 | D5 | 5.1 | 2.2 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the final regex endpoint behavior. | `src/application/server/register-inspection-tool-catalog.ts` |
 | D6 | 5.1 | 2.3 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the new fixed-string endpoint. | `src/application/server/register-inspection-tool-catalog.ts` |
 | D7 | 5.1 | 3.1 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the new content-read endpoint contract. | `src/application/server/register-inspection-tool-catalog.ts` |
-| D8 | 5.1 | 4.1 | WAITING | UNRESOLVED | Shared descriptions and guardrail registry changes must reflect the modernized count-lines behavior. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
+| D8 | 5.1 | 4.1 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the modernized count-lines behavior. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
 | D9 | 5.2 | 5.1 | WAITING | UNRESOLVED | Tests, regression fixtures, and TSDoc updates must validate the finalized contract and guardrail surfaces. | `test/**`, `src/**` |
 
 ## Legend
