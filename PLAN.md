@@ -8,13 +8,13 @@ status: "in_progress"
 total_units: 5
 completed_units: 4
 total_tasks_all_levels: 8
-completed_tasks_all_levels: 6
+ completed_tasks_all_levels: 7
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
 resume_frontier_unit: "5"
-resume_frontier_task: "5.1"
-next_frontier_task: "5.1"
+ resume_frontier_task: "5.2"
+ next_frontier_task: "5.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -34,14 +34,14 @@ The plan preserves the existing public regex endpoint surface while replacing it
 - **Total Units:** 5
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 6/8 tasks completed
+- **Progress:** 7/8 tasks completed
 
 ## Execution Frontier
 [INTENT: REFERENZ]
 
-- **Resume Frontier Unit:** `4`
-- **Resume Frontier Task:** `4.1`
-- **Next Frontier Task:** `4.1`
+- **Resume Frontier Unit:** `5`
+- **Resume Frontier Task:** `5.2`
+- **Next Frontier Task:** `5.2`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
 - **Frontier Rule:** The execution entrypoint starts with runtime governance foundations and only advances to endpoint implementation after the shared execution policy is bound.
 
@@ -66,7 +66,7 @@ The plan preserves the existing public regex endpoint surface while replacing it
   - Summary: Extend `count_lines` to support large-file-safe total and pattern-aware counting without full in-process reads.
 - [ ] **5. Contracts, Validation, and Documentation** → [`.plan/5-contracts-and-validation/orchestration.md`](.plan/5-contracts-and-validation/orchestration.md)
   - Classification: Mixed
-  - Status: pending | Tasks: 2 | Completed: 0
+  - Status: in_progress | Tasks: 2 | Completed: 1
   - Summary: Harmonize shared guardrail constants and public server descriptions, then add tests, regression coverage, and architecture-grade TSDocs.
 
 ## Cross-Unit Dependencies
@@ -82,7 +82,7 @@ The plan preserves the existing public regex endpoint surface while replacing it
 | D6 | 5.1 | 2.3 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the new fixed-string endpoint. | `src/application/server/register-inspection-tool-catalog.ts` |
 | D7 | 5.1 | 3.1 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the new content-read endpoint contract. | `src/application/server/register-inspection-tool-catalog.ts` |
 | D8 | 5.1 | 4.1 | WAITING | RESOLVED | Shared descriptions and guardrail registry changes must reflect the modernized count-lines behavior. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
-| D9 | 5.2 | 5.1 | WAITING | UNRESOLVED | Tests, regression fixtures, and TSDoc updates must validate the finalized contract and guardrail surfaces. | `test/**`, `src/**` |
+| D9 | 5.2 | 5.1 | WAITING | RESOLVED | Tests, regression fixtures, and TSDoc updates must validate the finalized contract and guardrail surfaces. | `test/**`, `src/**` |
 
 ## Legend
 [INTENT: REFERENZ]
