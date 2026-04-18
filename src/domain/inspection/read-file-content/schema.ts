@@ -176,14 +176,7 @@ const ReadFileContentChunkCursorResultSchema = ReadFileContentCommonResultSchema
   endByteExclusive: z.number().int().min(0),
 });
 
-/**
- * Structured result contract for explicit full, line-range, byte-range, and cursor reads.
- *
- * @remarks
- * The result surface carries explicit continuation metadata so callers do not
- * need to reconstruct hidden state between range or cursor reads.
- */
-export const ReadFileContentResultSchema = z.discriminatedUnion("mode", [
+const ReadFileContentModeSpecificResultSchema = z.discriminatedUnion("mode", [
   ReadFileContentFullResultSchema,
   ReadFileContentLineRangeResultSchema,
   ReadFileContentByteRangeResultSchema,
@@ -191,6 +184,29 @@ export const ReadFileContentResultSchema = z.discriminatedUnion("mode", [
 ]);
 
 /**
+ * Structured result contract for explicit full, line-range, byte-range, and cursor reads.
+ *
+ * @remarks
+ * The public output schema intentionally stays on one object surface because the current MCP SDK
+ * validates output schemas through object normalization before parsing structured content. The
+ * mode-specific TypeScript union stays separate so the handler can still return a strongly typed
+ * discriminated result while MCP output validation receives an object-compatible schema.
+ */
+export const ReadFileContentResultSchema = ReadFileContentCommonResultSchema.extend({
+  mode: z.enum(["full", "line_range", "byte_range", "chunk_cursor"]),
+  encoding: z.literal("utf-8").optional(),
+  startLine: z.number().int().min(1).optional(),
+  endLine: z.number().int().min(0).optional(),
+  returnedLineCount: z.number().int().min(0).optional(),
+  nextLine: z.number().int().min(1).nullable().optional(),
+  startByte: z.number().int().min(0).optional(),
+  endByteExclusive: z.number().int().min(0).optional(),
+  nextByteOffset: z.number().int().min(0).nullable().optional(),
+  cursor: z.string().max(READ_FILE_CONTENT_CURSOR_MAX_CHARS).nullable().optional(),
+  nextCursor: z.string().max(READ_FILE_CONTENT_CURSOR_MAX_CHARS).nullable().optional(),
+});
+
+/**
  * Type-level structured result contract inferred from the canonical schema surface.
  */
-export type ReadFileContentResult = z.infer<typeof ReadFileContentResultSchema>;
+export type ReadFileContentResult = z.infer<typeof ReadFileContentModeSpecificResultSchema>;
