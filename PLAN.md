@@ -4,11 +4,11 @@ file_id: "workspace-search-platform-hcoa-plan"
 plan_version: 1
 created: "2026-04-16T21:30:00Z"
 last_updated: "2026-04-16T21:30:00Z"
-status: "in_progress"
+status: "done"
 total_units: 5
-completed_units: 4
+completed_units: 5
 total_tasks_all_levels: 8
- completed_tasks_all_levels: 7
+ completed_tasks_all_levels: 8
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
@@ -33,8 +33,8 @@ The plan preserves the existing public regex endpoint surface while replacing it
 - **Plan Directory:** `.plan/`
 - **Total Units:** 5
 - **Hierarchy Depth:** 2 levels
-- **Overall Status:** in_progress
-- **Progress:** 7/8 tasks completed
+- **Overall Status:** done
+- **Progress:** 8/8 tasks completed
 
 ## Execution Frontier
 [INTENT: REFERENZ]
@@ -64,9 +64,9 @@ The plan preserves the existing public regex endpoint surface while replacing it
   - Classification: WAITING
   - Status: done | Tasks: 1 | Completed: 1
   - Summary: Extend `count_lines` to support large-file-safe total and pattern-aware counting without full in-process reads.
-- [ ] **5. Contracts, Validation, and Documentation** → [`.plan/5-contracts-and-validation/orchestration.md`](.plan/5-contracts-and-validation/orchestration.md)
+- [x] **5. Contracts, Validation, and Documentation** → [`.plan/5-contracts-and-validation/orchestration.md`](.plan/5-contracts-and-validation/orchestration.md)
   - Classification: Mixed
-  - Status: in_progress | Tasks: 2 | Completed: 1
+  - Status: done | Tasks: 2 | Completed: 2
   - Summary: Harmonize shared guardrail constants and public server descriptions, then add tests, regression coverage, and architecture-grade TSDocs.
 
 ## Cross-Unit Dependencies
