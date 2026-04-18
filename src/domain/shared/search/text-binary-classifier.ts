@@ -208,8 +208,8 @@ export function classifyTextBinarySurface(
   if (input.contentSample === undefined) {
     if (usedAssistList) {
       return {
-        classificationReason: "Text assist list accepted the candidate before probe execution.",
-        isTextEligible: true,
+        classificationReason: "Text assist list matched, but a content probe is still required before text execution.",
+        isTextEligible: false,
         usedAssistList,
         usedContentProbe: false,
       };
