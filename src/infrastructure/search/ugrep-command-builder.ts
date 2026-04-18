@@ -95,15 +95,15 @@ export function buildUgrepCommand(input: BuildUgrepCommandInput): UgrepCommand {
   }
 
   if (input.beforeContextLines !== undefined && input.beforeContextLines > 0) {
-    args.push("--before-context", String(input.beforeContextLines));
+    args.push(`--before-context=${input.beforeContextLines}`);
   }
 
   if (input.afterContextLines !== undefined && input.afterContextLines > 0) {
-    args.push("--after-context", String(input.afterContextLines));
+    args.push(`--after-context=${input.afterContextLines}`);
   }
 
   if (input.maxCount !== undefined && input.maxCount > 0) {
-    args.push("--max-count", String(input.maxCount));
+    args.push(`--max-count=${input.maxCount}`);
   }
 
   if (input.patternClassification.supportsLiteralFastPath) {

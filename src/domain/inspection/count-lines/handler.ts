@@ -65,11 +65,107 @@ function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
 
+function formatCountLinesPathOutput(
+  result: CountLinesPathResult,
+  pattern: string | undefined,
+): string {
+  if (result.files.length === 0) {
+    return "No files found matching the criteria.";
+  }
+
+  let output = "Line counts:\n\n";
+  const sortedFiles = [...result.files].sort((leftFile, rightFile) => rightFile.count - leftFile.count);
+
+  for (const file of sortedFiles) {
+    if (pattern !== undefined) {
+      output += `${file.file}: ${file.count} lines total, ${file.matchingCount} matching lines\n`;
+    } else {
+      output += `${file.file}: ${file.count} lines\n`;
+    }
+  }
+
+  output += "\n";
+  output += `Total: ${result.files.length} files, ${result.totalLines} lines`;
+
+  if (pattern !== undefined) {
+    output += `, ${result.totalMatchingLines} matching lines`;
+  }
+
+  return output;
+}
+
+/**
+ * Formats the structured count-lines result into the public text response surface.
+ *
+ * @param result - Structured per-path and aggregate line-count totals.
+ * @param pattern - Optional regex used to count matching lines in addition to total lines.
+ * @returns Human-readable count-lines output that respects the discovery-family text budget.
+ */
+export function formatCountLinesResultOutput(
+  result: CountLinesResult,
+  pattern: string | undefined,
+): string {
+  if (result.paths.length === 1) {
+    const firstPathResult = result.paths[0];
+
+    if (firstPathResult === undefined) {
+      throw new Error("Expected one path result for count-lines formatting.");
+    }
+
+    const output = formatCountLinesPathOutput(firstPathResult, pattern);
+
+    assertActualTextBudget(
+      "count_lines",
+      output.length,
+      DISCOVERY_RESPONSE_CAP_CHARS,
+      "formatted count-lines output",
+    );
+
+    return output;
+  }
+
+  const output = formatBatchTextOperationResults(
+    "count lines",
+    result.paths.map((pathResult) => ({
+      label: pathResult.path,
+      output: formatCountLinesPathOutput(pathResult, pattern),
+    })),
+  );
+
+  assertActualTextBudget(
+    "count_lines",
+    output.length,
+    DISCOVERY_RESPONSE_CAP_CHARS,
+    "formatted batched count-lines output",
+  );
+
+  return output;
+}
+
+function matchesIncludedFilePatterns(relativePath: string, filePatterns: string[]): boolean {
+  if (filePatterns.length === 0) {
+    return true;
+  }
+
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+  const fileName = path.basename(normalizedRelativePath);
+
+  return filePatterns.some((filePattern) => {
+    const normalizedFilePattern = normalizeRelativePath(filePattern);
+
+    if (normalizedFilePattern.includes("/")) {
+      return minimatch(normalizedRelativePath, normalizedFilePattern, { dot: true });
+    }
+
+    return minimatch(fileName, normalizedFilePattern, { dot: true });
+  });
+}
+
 async function getCountLinesPathResult(
   filePath: string,
   recursive: boolean,
   pattern: string | undefined,
-  filePattern: string,
+  filePatterns: string[],
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
@@ -89,7 +185,7 @@ async function getCountLinesPathResult(
     files = await countLinesInDirectory(
       validPath,
       filePath,
-      filePattern,
+      filePatterns,
       excludePatterns,
       includeExcludedGlobs,
       respectGitIgnore,
@@ -131,7 +227,7 @@ async function getCountLinesPathResult(
  * @param filePaths - Requested file or directory scopes in caller-supplied order.
  * @param recursive - Whether directory inputs may traverse nested files.
  * @param pattern - Optional regex used to count matching lines in addition to total lines.
- * @param filePattern - Glob-like file filter applied during recursive traversal.
+ * @param filePatterns - Glob-like file filters applied during recursive traversal.
  * @param excludePatterns - Glob-like exclusions removed before counting proceeds.
  * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
  * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
@@ -143,122 +239,26 @@ export async function handleCountLines(
   filePaths: string[],
   recursive: boolean,
   pattern: string | undefined,
-  filePattern: string,
+  filePatterns: string[],
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   ignoreEmptyLines: boolean,
   allowedDirectories: string[]
 ): Promise<string> {
-  async function getFormattedCountLinesResult(filePath: string): Promise<string> {
-    const result = await getCountLinesPathResult(
-      filePath,
-      recursive,
-      pattern,
-      filePattern,
-      excludePatterns,
-      includeExcludedGlobs,
-      respectGitIgnore,
-      ignoreEmptyLines,
-      allowedDirectories
-    );
-
-    if (result.files.length === 0) {
-      return `No files found matching the criteria.`;
-    }
-
-    let output = "Line counts:\n\n";
-    result.files.sort((leftFile, rightFile) => rightFile.count - leftFile.count);
-
-    for (const file of result.files) {
-      if (pattern) {
-        output += `${file.file}: ${file.count} lines total, ${file.matchingCount} matching lines\n`;
-      } else {
-        output += `${file.file}: ${file.count} lines\n`;
-      }
-    }
-
-    output += "\n";
-    output += `Total: ${result.files.length} files, ${result.totalLines} lines`;
-
-    if (pattern) {
-      output += `, ${result.totalMatchingLines} matching lines`;
-    }
-
-    assertActualTextBudget(
-      "count_lines",
-      output.length,
-      DISCOVERY_RESPONSE_CAP_CHARS,
-      "formatted count-lines output",
-    );
-
-    return output;
-  }
-
-  if (filePaths.length === 1) {
-    const firstPath = filePaths[0];
-
-    if (firstPath === undefined) {
-      throw new Error("Expected one path for count-lines execution.");
-    }
-
-    return getFormattedCountLinesResult(firstPath);
-  }
-
-  const pathResults = await Promise.all(
-    filePaths.map((filePath) =>
-      getCountLinesPathResult(
-        filePath,
-        recursive,
-        pattern,
-        filePattern,
-        excludePatterns,
-        includeExcludedGlobs,
-        respectGitIgnore,
-        ignoreEmptyLines,
-        allowedDirectories
-      )
-    )
+  const structuredResult = await getCountLinesResult(
+    filePaths,
+    recursive,
+    pattern,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    ignoreEmptyLines,
+    allowedDirectories,
   );
 
-  const structuredResult: CountLinesResult = {
-    paths: pathResults,
-    totalFiles: pathResults.reduce((total, result) => total + result.files.length, 0),
-    totalLines: pathResults.reduce((total, result) => total + result.totalLines, 0),
-    totalMatchingLines: pathResults.reduce(
-      (total, result) => total + result.totalMatchingLines,
-      0
-    ),
-  };
-
-  const results = await Promise.all(
-    filePaths.map(async (filePath) => {
-      try {
-        const output = await getFormattedCountLinesResult(filePath);
-        return {
-          label: filePath,
-          output,
-        };
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        return {
-          label: filePath,
-          error: errorMessage,
-        };
-      }
-    })
-  );
-
-  const output = formatBatchTextOperationResults("count lines", results);
-
-  assertActualTextBudget(
-    "count_lines",
-    output.length,
-    DISCOVERY_RESPONSE_CAP_CHARS,
-    "formatted batched count-lines output",
-  );
-
-  return output;
+  return formatCountLinesResultOutput(structuredResult, pattern);
 }
 
 /**
@@ -271,7 +271,7 @@ export async function handleCountLines(
  * @param filePaths - Requested file or directory scopes in caller-supplied order.
  * @param recursive - Whether directory inputs may traverse nested files.
  * @param pattern - Optional regex used to count matching lines in addition to total lines.
- * @param filePattern - Glob-like file filter applied during recursive traversal.
+ * @param filePatterns - Glob-like file filters applied during recursive traversal.
  * @param excludePatterns - Glob-like exclusions removed before counting proceeds.
  * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
  * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
@@ -283,7 +283,7 @@ export async function getCountLinesResult(
   filePaths: string[],
   recursive: boolean,
   pattern: string | undefined,
-  filePattern: string,
+  filePatterns: string[],
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
@@ -296,7 +296,7 @@ export async function getCountLinesResult(
         filePath,
         recursive,
         pattern,
-        filePattern,
+        filePatterns,
         excludePatterns,
         includeExcludedGlobs,
         respectGitIgnore,
@@ -402,7 +402,7 @@ async function countLinesInFile(
 async function countLinesInDirectory(
   dirPath: string,
   requestedRootPath: string,
-  filePattern: string,
+  filePatterns: string[],
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
@@ -456,9 +456,7 @@ async function countLinesInDirectory(
             // Recursively process subdirectories
             await processDirectory(fullPath);
           } else if (entry.isFile()) {
-            // Check if file matches the file pattern
-            if (minimatch(entry.name, filePattern, { dot: true }) ||
-                minimatch(relativePath, filePattern, { dot: true })) {
+            if (matchesIncludedFilePatterns(relativePath, filePatterns)) {
               try {
                 const count = await countLinesInFile(
                   fullPath,

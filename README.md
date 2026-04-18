@@ -2,6 +2,47 @@
 
 TypeScript implementation of a local filesystem Model Context Protocol (MCP) server with a final target-state architecture split into `application`, `domain`, and `infrastructure` boundaries. The public MCP surface is composed once at the application layer, while tool behavior and contract ownership stay inside the domains that own them.
 
+## Dependencies
+
+### ugrep
+
+#### Installation
+- ugrep installs on
+```
+MacOS: brew install ugrep
+MacOS: port install ugrep
+Windows: winget install Genivia.ugrep
+
+
+Alpine: apk add ugrep ugrep-doc
+Android Termux: pkg install ugrep
+Arch: pacman -S ugrep
+CentOS: dnf install ugrep
+Debian: apt-get install ugrep
+Fedora: dnf install ugrep
+FreeBSD: pkg install ugrep
+Gentoo: emerge sys-apps/ugrep
+NetBSD: download textproc/ugrep
+OpenBSD: pkg_add ugrep
+OpenSUSE: zypper install ugrep
+RHEL: dnf install ugrep
+Other Linux: download static builds
+Other:
+git clone https://github.com/Genivia/ugrep
+cd ugrep
+./build.sh # build ug and ugrep in ugrep/bin
+sudo make install # install as desired
+```
+
+### Windows
+- Powershell as admin
+```
+choco install ugrep
+
+# Restart vs code terminal after installation, then verify:
+ugrep --version
+```
+
 ## Final Architecture at a Glance
 
 | Layer | Responsibility | Representative files |

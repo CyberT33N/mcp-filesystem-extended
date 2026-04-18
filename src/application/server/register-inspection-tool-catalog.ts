@@ -41,29 +41,32 @@ import {
   FindFilesByGlobResultSchema,
 } from "@domain/inspection/find-files-by-glob/schema";
 import {
-  getSearchRegexResult,
-  handleSearchRegex,
-} from "@domain/inspection/search-file-contents-by-regex/handler";
+  assertFormattedRegexResponseBudget,
+  formatSearchRegexResultOutput,
+} from "@domain/inspection/search-file-contents-by-regex/search-regex-result";
 import {
   SearchFileContentsByRegexArgsSchema,
   SearchFileContentsByRegexResultSchema,
 } from "@domain/inspection/search-file-contents-by-regex/schema";
+import { getSearchRegexResult as getSearchRegexStructuredResult } from "@domain/inspection/search-file-contents-by-regex/handler";
 import {
-  getSearchFixedStringResult,
-  handleSearchFixedString,
-} from "@domain/inspection/search-file-contents-by-fixed-string/handler";
+  assertFormattedFixedStringResponseBudget,
+  formatSearchFixedStringResultOutput,
+} from "@domain/inspection/search-file-contents-by-fixed-string/search-fixed-string-result";
 import {
   SearchFileContentsByFixedStringArgsSchema,
   SearchFileContentsByFixedStringResultSchema,
 } from "@domain/inspection/search-file-contents-by-fixed-string/schema";
+import { getSearchFixedStringResult as getSearchFixedStringStructuredResult } from "@domain/inspection/search-file-contents-by-fixed-string/handler";
 import {
+  formatCountLinesResultOutput,
   getCountLinesResult,
-  handleCountLines,
 } from "@domain/inspection/count-lines/handler";
 import {
   CountLinesArgsSchema,
   CountLinesResultSchema,
 } from "@domain/inspection/count-lines/schema";
+import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
   getFileChecksumsResult,
   handleChecksumFiles,
@@ -277,7 +280,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     },
     async ({ roots, regex, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults, caseSensitive }) =>
       executeTool("search_file_contents_by_regex", async () => {
-        const result = await getSearchRegexResult(
+        const result = await getSearchRegexStructuredResult(
           roots,
           regex,
           includeGlobs,
@@ -288,16 +291,10 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           caseSensitive,
           allowedDirectories,
         );
-        const text = await handleSearchRegex(
-          roots,
-          regex,
-          includeGlobs,
-          excludeGlobs,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          maxResults,
-          caseSensitive,
-          allowedDirectories,
+        const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
+        const text = assertFormattedRegexResponseBudget(
+          "search_file_contents_by_regex",
+          formatSearchRegexResultOutput(result, regex, effectiveMaxResults),
         );
 
         return {
@@ -326,7 +323,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     },
     async ({ roots, fixedString, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults, caseSensitive }) =>
       executeTool("search_file_contents_by_fixed_string", async () => {
-        const result = await getSearchFixedStringResult(
+        const result = await getSearchFixedStringStructuredResult(
           roots,
           fixedString,
           includeGlobs,
@@ -337,16 +334,10 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           caseSensitive,
           allowedDirectories,
         );
-        const text = await handleSearchFixedString(
-          roots,
-          fixedString,
-          includeGlobs,
-          excludeGlobs,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          maxResults,
-          caseSensitive,
-          allowedDirectories,
+        const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
+        const text = assertFormattedFixedStringResponseBudget(
+          "search_file_contents_by_fixed_string",
+          formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults),
         );
 
         return {
@@ -379,24 +370,14 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           paths,
           recursive,
           regex,
-          includeGlobs[0] ?? "**",
+          includeGlobs,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
           ignoreEmptyLines,
           allowedDirectories,
         );
-        const text = await handleCountLines(
-          paths,
-          recursive,
-          regex,
-          includeGlobs[0] ?? "**",
-          excludeGlobs,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          ignoreEmptyLines,
-          allowedDirectories,
-        );
+        const text = formatCountLinesResultOutput(result, regex);
 
         return {
           content: [{ type: "text", text }],

@@ -139,6 +139,34 @@ export function formatSearchFixedStringPathOutput(
 }
 
 /**
+ * Formats the structured fixed-string search result into the public text response surface.
+ *
+ * @param result - Structured fixed-string search result across all requested roots.
+ * @param fixedString - Exact literal string supplied by the caller.
+ * @param effectiveMaxResults - Effective hard-capped result limit applied by the handler.
+ * @returns Human-readable text output for the full fixed-string request.
+ */
+export function formatSearchFixedStringResultOutput(
+  result: SearchFixedStringResult,
+  fixedString: string,
+  effectiveMaxResults: number,
+): string {
+  if (result.roots.length === 1) {
+    const firstRootResult = result.roots[0];
+
+    if (firstRootResult === undefined) {
+      throw new Error("Expected one root result for fixed-string formatting.");
+    }
+
+    return formatSearchFixedStringPathOutput(firstRootResult, fixedString, effectiveMaxResults);
+  }
+
+  return result.roots
+    .map((rootResult) => formatSearchFixedStringPathOutput(rootResult, fixedString, effectiveMaxResults))
+    .join("\n\n");
+}
+
+/**
  * Enforces the formatted text-response budget for the fixed-string search family surface.
  *
  * @param toolName - Exact MCP tool name that owns the formatted response.

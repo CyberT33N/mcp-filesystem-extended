@@ -151,6 +151,34 @@ export function formatSearchRegexPathOutput(
 }
 
 /**
+ * Formats the structured regex-search result into the public text response surface.
+ *
+ * @param result - Structured regex-search result across all requested roots.
+ * @param pattern - Raw regex pattern supplied by the caller.
+ * @param effectiveMaxResults - Effective hard-capped result limit applied by the handler.
+ * @returns Human-readable text output for the full regex request.
+ */
+export function formatSearchRegexResultOutput(
+  result: SearchRegexResult,
+  pattern: string,
+  effectiveMaxResults: number,
+): string {
+  if (result.roots.length === 1) {
+    const firstRootResult = result.roots[0];
+
+    if (firstRootResult === undefined) {
+      throw new Error("Expected one root result for regex-search formatting.");
+    }
+
+    return formatSearchRegexPathOutput(firstRootResult, pattern, effectiveMaxResults);
+  }
+
+  return result.roots
+    .map((rootResult) => formatSearchRegexPathOutput(rootResult, pattern, effectiveMaxResults))
+    .join("\n\n");
+}
+
+/**
  * Enforces the formatted text-response budget for the regex-search family.
  *
  * @param toolName - Exact MCP tool name that owns the formatted response.

@@ -70,14 +70,26 @@ function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
 
-function matchesIncludedFilePatterns(candidatePath: string, filePatterns: string[]): boolean {
+function matchesIncludedFilePatterns(candidateRelativePath: string, filePatterns: string[]): boolean {
   if (filePatterns.length === 0) {
     return true;
   }
 
-  const fileName = path.basename(candidatePath);
+  const normalizedCandidateRelativePath = normalizeRelativePath(candidateRelativePath);
+  const fileName = path.basename(normalizedCandidateRelativePath);
 
-  return filePatterns.some((filePattern) => minimatch(fileName, filePattern, { nocase: true }));
+  return filePatterns.some((filePattern) => {
+    const normalizedFilePattern = normalizeRelativePath(filePattern);
+
+    if (normalizedFilePattern.includes("/")) {
+      return minimatch(normalizedCandidateRelativePath, normalizedFilePattern, {
+        dot: true,
+        nocase: true,
+      });
+    }
+
+    return minimatch(fileName, normalizedFilePattern, { dot: true, nocase: true });
+  });
 }
 
 function getLineMatchContext(
@@ -212,6 +224,7 @@ async function getValidatedSearchScopeEntry(
 async function collectRegexMatchesFromFileEntry(
   toolName: string,
   candidateEntry: FilesystemPreflightEntry,
+  candidateRelativePath: string,
   filePatterns: string[],
   regex: RegExp,
   pattern: string,
@@ -229,7 +242,7 @@ async function collectRegexMatchesFromFileEntry(
   totalBytesScanned: number;
   truncated: boolean;
 }> {
-  if (!matchesIncludedFilePatterns(candidateEntry.validPath, filePatterns)) {
+  if (!matchesIncludedFilePatterns(candidateRelativePath, filePatterns)) {
     return {
       matches: [],
       fileSearched: false,
@@ -433,6 +446,7 @@ export async function getSearchRegexPathResult(
     const fileSearchResult = await collectRegexMatchesFromFileEntry(
       toolName,
       searchScopeEntry,
+      searchPath,
       filePatterns,
       regex,
       pattern,
@@ -538,13 +552,10 @@ export async function getSearchRegexPathResult(
         continue;
       }
 
-      if (!matchesIncludedFilePatterns(candidateEntry.validPath, filePatterns)) {
-        continue;
-      }
-
       const fileSearchResult = await collectRegexMatchesFromFileEntry(
         toolName,
         candidateEntry,
+        relativePath,
         filePatterns,
         regex,
         pattern,

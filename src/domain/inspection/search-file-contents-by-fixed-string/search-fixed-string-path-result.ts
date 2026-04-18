@@ -77,14 +77,26 @@ function createFixedStringPatternClassification(fixedString: string): PatternCla
   };
 }
 
-function matchesIncludedFilePatterns(candidatePath: string, filePatterns: string[]): boolean {
+function matchesIncludedFilePatterns(candidateRelativePath: string, filePatterns: string[]): boolean {
   if (filePatterns.length === 0) {
     return true;
   }
 
-  const fileName = path.basename(candidatePath);
+  const normalizedCandidateRelativePath = candidateRelativePath.split(path.sep).join("/");
+  const fileName = path.basename(normalizedCandidateRelativePath);
 
-  return filePatterns.some((filePattern) => minimatch(fileName, filePattern, { nocase: true }));
+  return filePatterns.some((filePattern) => {
+    const normalizedFilePattern = filePattern.split(path.sep).join("/");
+
+    if (normalizedFilePattern.includes("/")) {
+      return minimatch(normalizedCandidateRelativePath, normalizedFilePattern, {
+        dot: true,
+        nocase: true,
+      });
+    }
+
+    return minimatch(fileName, normalizedFilePattern, { dot: true, nocase: true });
+  });
 }
 
 async function readTextBinaryProbeSample(candidatePath: string): Promise<Uint8Array | null> {
@@ -232,6 +244,7 @@ async function getValidatedSearchScopeEntry(
 
 async function collectFixedStringMatchesFromFileEntry(
   candidateEntry: FilesystemPreflightEntry,
+  candidateRelativePath: string,
   fixedString: string,
   filePatterns: string[],
   caseSensitive: boolean,
@@ -247,7 +260,7 @@ async function collectFixedStringMatchesFromFileEntry(
   totalBytesScanned: number;
   truncated: boolean;
 }> {
-  if (!matchesIncludedFilePatterns(candidateEntry.validPath, filePatterns)) {
+  if (!matchesIncludedFilePatterns(candidateRelativePath, filePatterns)) {
     return {
       matches: [],
       fileSearched: false,
@@ -429,6 +442,7 @@ export async function getSearchFixedStringPathResult(
   if (searchScopeEntry.type === "file") {
     const fileSearchResult = await collectFixedStringMatchesFromFileEntry(
       searchScopeEntry,
+      searchPath,
       fixedString,
       filePatterns,
       caseSensitive,
@@ -530,6 +544,7 @@ export async function getSearchFixedStringPathResult(
 
       const fileSearchResult = await collectFixedStringMatchesFromFileEntry(
         candidateEntry,
+        relativePath,
         fixedString,
         filePatterns,
         caseSensitive,
