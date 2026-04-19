@@ -288,6 +288,47 @@ export const MAX_REPLACEMENTS_PER_FILE = 25;
 export const DISCOVERY_MAX_RESULTS_HARD_CAP = 1_000;
 
 /**
+ * Canonical per-window byte budget for bounded inspection content-state sampling.
+ *
+ * @remarks
+ * The shared inspection-state classifier samples bounded head, middle, and tail windows instead of
+ * relying on one local first-window probe. This constant is the single source of truth for one
+ * sampling window budget across the shared state contract and its compatibility bridge.
+ *
+ * @example
+ * `Buffer.alloc(INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES)`
+ */
+export const INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES = 4_096;
+
+/**
+ * Canonical sample-window positions used by bounded inspection content-state sampling.
+ *
+ * @remarks
+ * The shared classifier uses one bounded head, middle, and tail sampling model so large ambiguous
+ * surfaces never collapse back into a first-window-only heuristic.
+ */
+export const INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS = [
+  "head",
+  "middle",
+  "tail",
+] as const;
+
+/**
+ * Minimum file size treated as a large surface under the bounded inspection-state sampling model.
+ *
+ * @remarks
+ * Surfaces above the total three-window sample capacity can no longer be treated as wholly
+ * observed from bounded evidence alone, so ambiguous classification must stay conservative.
+ *
+ * @example
+ * `if (candidateFileBytes >= INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES) { ... }`
+ */
+export const INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES =
+  INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES
+  * INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS.length
+  + 1;
+
+/**
  * Maximum aggregate raw-text input budget across one request.
  *
  * @remarks
@@ -333,6 +374,9 @@ export const TOOL_GUARDRAIL_LIMITS = Object.freeze({
   MAX_RAW_TEXT_DIFF_PAIRS_PER_REQUEST,
   MAX_REPLACEMENTS_PER_FILE,
   DISCOVERY_MAX_RESULTS_HARD_CAP,
+  INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES,
+  INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS,
+  INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES,
   MAX_TOTAL_RAW_TEXT_REQUEST_CHARS,
 });
 

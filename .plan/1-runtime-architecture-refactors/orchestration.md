@@ -4,13 +4,13 @@ file_id: "1"
 unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "in_progress"
 total_tasks: 5
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "1.1"
-next_frontier_task: "1.2"
+resume_frontier_task: "1.2"
+next_frontier_task: "1.3"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,18 +20,18 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/5 tasks
+- **Unit Status:** in_progress
+- **Progress:** 1/5 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.1`
-- **Next Frontier Task:** `1.2`
+- **Resume Frontier Task:** `1.2`
+- **Next Frontier Task:** `1.3`
 - **Todo Window Mode:** `inherit`
 
 ## Tasks
-- [ ] **1.1 Shared inspection state taxonomy and sampling policy** → [`1.1-shared-inspection-state-taxonomy-and-sampling-policy.md`](./1.1-shared-inspection-state-taxonomy-and-sampling-policy.md)
+- [x] **1.1 Shared inspection state taxonomy and sampling policy** → [`1.1-shared-inspection-state-taxonomy-and-sampling-policy.md`](./1.1-shared-inspection-state-taxonomy-and-sampling-policy.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: shared search-state contracts
@@ -43,7 +43,7 @@ todo_window_mode_override: "inherit"
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: fixed-string search lane and shared `ugrep` argument planning
-  - Blocked By: 1.1
+  - Blocked By: none
   - Summary: Make literal search hybrid-aware without collapsing unsupported pure-binary surfaces into normal text search.
 - [ ] **1.3 Regex and count state-gating alignment** → [`1.3-regex-and-count-state-gating-alignment.md`](./1.3-regex-and-count-state-gating-alignment.md)
   - Classification: SEQUENTIAL
@@ -73,7 +73,7 @@ todo_window_mode_override: "inherit"
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
-| D1 | 1.2 | 1.1 | SEQUENTIAL | UNRESOLVED | Fixed-string hybrid search depends on the shared inspection-state vocabulary. | `src/domain/shared/search/text-binary-classifier.ts` |
+| D1 | 1.2 | 1.1 | SEQUENTIAL | RESOLVED | Fixed-string hybrid search depends on the shared inspection-state vocabulary. | `src/domain/shared/search/text-binary-classifier.ts` |
 | D2 | 1.3 | 1.2 | SEQUENTIAL | UNRESOLVED | Regex/count alignment assumes the fixed-string lane and shared state semantics are already bound. | `src/domain/shared/search/search-execution-policy.ts` |
 | D3 | 1.4 | 1.3 | SEQUENTIAL | UNRESOLVED | Read-core SSOT refactor depends on the finalized inspection-state and execution-lane rules. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
 | D4 | 1.5 | 1.4 | SEQUENTIAL | UNRESOLVED | Traversal governance refactor should land after state and read-core semantics are stabilized. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
