@@ -1,5 +1,3 @@
-import fs from "fs/promises";
-
 import {
   assertExpectedFileTypes,
   collectValidatedFilesystemPreflightEntries,
@@ -10,17 +8,14 @@ import {
   assertProjectedTextBudget,
   estimateLineNumberedResponseCharsFromBytes,
 } from "@domain/shared/guardrails/text-response-budget";
+import {
+  formatLineNumberedTextContent,
+  readValidatedFullTextFile,
+} from "@infrastructure/filesystem/text-read-core";
 
 const READ_FILES_TOOL_NAME = "read_files_with_line_numbers";
 const PROJECTED_READ_RECOMMENDED_ACTION =
   "Reduce the number of files, target smaller files, or split the read into narrower batches.";
-
-function formatLineNumberedContent(content: string): string {
-  return content
-    .split("\n")
-    .map((line, index) => `${index + 1}: ${line}`)
-    .join("\n");
-}
 
 /**
  * Reads one or more validated text files and returns one line-numbered text block.
@@ -63,8 +58,15 @@ export async function handleReadFiles(filePaths: string[], allowedDirectories: s
   const results = await Promise.all(
     entries.map(async (entry) => {
       try {
-        const content = await fs.readFile(entry.validPath, "utf-8");
-        const numberedContent = formatLineNumberedContent(content);
+        const { content } = await readValidatedFullTextFile(
+          {
+            requestedPath: entry.requestedPath,
+            validPath: entry.validPath,
+            totalFileBytes: entry.size,
+          },
+          READ_FILES_TOOL_NAME,
+        );
+        const numberedContent = formatLineNumberedTextContent(content);
 
         return `${entry.requestedPath}:\n${numberedContent}\n`;
       } catch (error) {

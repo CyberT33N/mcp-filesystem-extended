@@ -53,9 +53,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: regex and count execution lanes
   - Blocked By: none
   - Summary: Bind regex and pattern-aware count behavior to the same shared inspection-state semantics and execution lanes.
-- [ ] **1.4 Read endpoint internal SSOT refactor** → [`1.4-read-endpoint-internal-ssot-refactor.md`](./1.4-read-endpoint-internal-ssot-refactor.md)
+- [x] **1.4 Read endpoint internal SSOT refactor** → [`1.4-read-endpoint-internal-ssot-refactor.md`](./1.4-read-endpoint-internal-ssot-refactor.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: DONE
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: read handlers and shared read core
@@ -67,7 +67,7 @@ todo_window_mode_override: "inherit"
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: traversal guardrails and recursive discovery/search surfaces
-  - Blocked By: 1.4
+  - Blocked By: none
   - Summary: Demote timeout-first traversal refusal into a deeper safeguard and introduce preflight-driven scope handling for broad valid workloads.
 
 ## Internal Dependencies (This Level)
@@ -76,7 +76,7 @@ todo_window_mode_override: "inherit"
 | D1 | 1.2 | 1.1 | SEQUENTIAL | RESOLVED | Fixed-string hybrid search depends on the shared inspection-state vocabulary. | `src/domain/shared/search/text-binary-classifier.ts` |
 | D2 | 1.3 | 1.2 | SEQUENTIAL | RESOLVED | Regex/count alignment assumes the fixed-string lane and shared state semantics are already bound. | `src/domain/shared/search/search-execution-policy.ts` |
 | D3 | 1.4 | 1.3 | SEQUENTIAL | RESOLVED | Read-core SSOT refactor depends on the finalized inspection-state and execution-lane rules. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
-| D4 | 1.5 | 1.4 | SEQUENTIAL | UNRESOLVED | Traversal governance refactor should land after state and read-core semantics are stabilized. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
+| D4 | 1.5 | 1.4 | SEQUENTIAL | RESOLVED | Traversal governance refactor should land after state and read-core semantics are stabilized. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
 
 ## Execution Order
 1. 1.1

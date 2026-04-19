@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 import {
   assertExpectedFileTypes,
   collectValidatedFilesystemPreflightEntries,
@@ -10,6 +8,7 @@ import {
   assertProjectedTextBudget,
 } from "@domain/shared/guardrails/text-response-budget";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
+import { readValidatedFullTextFile } from "@infrastructure/filesystem/text-read-core";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import {
   readFileContentByteRange,
@@ -148,7 +147,14 @@ export async function getReadFileContentResult(
   switch (args.mode) {
     case "full": {
       assertProjectedInlineFullReadBudget(entry.size);
-      const content = await readFile(entry.validPath, "utf8");
+      const { content, returnedByteCount } = await readValidatedFullTextFile(
+        {
+          requestedPath: entry.requestedPath,
+          validPath: entry.validPath,
+          totalFileBytes: entry.size,
+        },
+        READ_FILE_CONTENT_TOOL_NAME,
+      );
 
       return {
         mode: "full",
@@ -156,7 +162,7 @@ export async function getReadFileContentResult(
         content,
         encoding: "utf-8",
         totalFileBytes: entry.size,
-        returnedByteCount: Buffer.byteLength(content, "utf8"),
+        returnedByteCount,
         hasMore: false,
       };
     }
