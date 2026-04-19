@@ -8,26 +8,11 @@ import {
   type SearchFixedStringPathResult,
   type SearchFixedStringResult,
 } from "./search-fixed-string-result";
-import {
-  createFixedStringSearchAggregateBudgetState,
-  getSearchFixedStringPathResult,
-} from "./search-fixed-string-path-result";
+import { createFixedStringSearchAggregateBudgetState } from "./fixed-string-search-aggregate-budget-state";
+import { getSearchFixedStringPathResult } from "./search-fixed-string-path-result";
+import { createFixedStringRootErrorResult } from "./fixed-string-search-support";
 
 const SEARCH_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string";
-
-function createFixedStringRootErrorResult(
-  searchPath: string,
-  errorMessage: string,
-): SearchFixedStringPathResult {
-  return {
-    root: searchPath,
-    matches: [],
-    filesSearched: 0,
-    totalMatches: 0,
-    truncated: false,
-    error: errorMessage,
-  };
-}
 
 /**
  * Executes fixed-string search across one or more roots and returns the formatted text response surface.

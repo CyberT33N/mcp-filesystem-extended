@@ -21,6 +21,11 @@ export interface BuildUgrepCommandInput {
   candidatePath: string;
 
   /**
+   * Indicates whether literal search intentionally targets a hybrid-searchable surface.
+   */
+  hybridLiteralSearchLane?: boolean;
+
+  /**
    * Whether matching should remain case-sensitive.
    */
   caseSensitive?: boolean;
@@ -61,6 +66,11 @@ export interface UgrepCommand {
   fixedStringMode: boolean;
 
   /**
+   * Indicates whether the command intentionally uses the hybrid literal-search lane.
+   */
+  hybridLiteralSearchLane: boolean;
+
+  /**
    * Indicates whether the command requires a PCRE2-capable execution lane.
    */
   requiresPcre2: boolean;
@@ -83,8 +93,12 @@ export interface UgrepCommand {
  * @returns One structured native-search command plan.
  */
 export function buildUgrepCommand(input: BuildUgrepCommandInput): UgrepCommand {
+  const hybridLiteralSearchLane =
+    input.patternClassification.supportsLiteralFastPath
+    && input.hybridLiteralSearchLane === true;
+
   const args = [
-    "--binary-files=without-match",
+    `--binary-files=${hybridLiteralSearchLane ? "text" : "without-match"}`,
     "--color=never",
     "--line-number",
     "--with-filename",
@@ -120,6 +134,7 @@ export function buildUgrepCommand(input: BuildUgrepCommandInput): UgrepCommand {
     args,
     executable: "ugrep",
     fixedStringMode: input.patternClassification.supportsLiteralFastPath,
+    hybridLiteralSearchLane,
     requiresPcre2: input.patternClassification.requiresPcre2,
     syncCandidateBytesCap: input.patternClassification.supportsLiteralFastPath
       ? input.executionPolicy.fixedStringSyncCandidateBytesCap

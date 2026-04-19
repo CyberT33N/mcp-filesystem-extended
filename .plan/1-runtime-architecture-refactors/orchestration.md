@@ -6,11 +6,11 @@ parent_orchestration: "PLAN.md"
 hierarchy_level: 1
 unit_status: "in_progress"
 total_tasks: 5
-completed_tasks: 1
+ completed_tasks: 2
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "1.2"
-next_frontier_task: "1.3"
+ resume_frontier_task: "1.3"
+ next_frontier_task: "1.4"
 todo_window_mode_override: "inherit"
 ---
 
@@ -37,9 +37,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared search-state contracts
   - Blocked By: none
   - Summary: Replace the current boolean text/binary model with an operation-aware inspection-state taxonomy and bounded sampling policy.
-- [ ] **1.2 Fixed-string hybrid search lane** → [`1.2-fixed-string-hybrid-search-lane.md`](./1.2-fixed-string-hybrid-search-lane.md)
+- [x] **1.2 Fixed-string hybrid search lane** → [`1.2-fixed-string-hybrid-search-lane.md`](./1.2-fixed-string-hybrid-search-lane.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: done
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: fixed-string search lane and shared `ugrep` argument planning
@@ -51,7 +51,7 @@ todo_window_mode_override: "inherit"
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: regex and count execution lanes
-  - Blocked By: 1.2
+  - Blocked By: none
   - Summary: Bind regex and pattern-aware count behavior to the same shared inspection-state semantics and execution lanes.
 - [ ] **1.4 Read endpoint internal SSOT refactor** → [`1.4-read-endpoint-internal-ssot-refactor.md`](./1.4-read-endpoint-internal-ssot-refactor.md)
   - Classification: SEQUENTIAL
@@ -74,7 +74,7 @@ todo_window_mode_override: "inherit"
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
 | D1 | 1.2 | 1.1 | SEQUENTIAL | RESOLVED | Fixed-string hybrid search depends on the shared inspection-state vocabulary. | `src/domain/shared/search/text-binary-classifier.ts` |
-| D2 | 1.3 | 1.2 | SEQUENTIAL | UNRESOLVED | Regex/count alignment assumes the fixed-string lane and shared state semantics are already bound. | `src/domain/shared/search/search-execution-policy.ts` |
+| D2 | 1.3 | 1.2 | SEQUENTIAL | RESOLVED | Regex/count alignment assumes the fixed-string lane and shared state semantics are already bound. | `src/domain/shared/search/search-execution-policy.ts` |
 | D3 | 1.4 | 1.3 | SEQUENTIAL | UNRESOLVED | Read-core SSOT refactor depends on the finalized inspection-state and execution-lane rules. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
 | D4 | 1.5 | 1.4 | SEQUENTIAL | UNRESOLVED | Traversal governance refactor should land after state and read-core semantics are stabilized. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
 
