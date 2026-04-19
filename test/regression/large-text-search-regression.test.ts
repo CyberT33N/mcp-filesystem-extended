@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ReadFileContentArgsSchema,
   READ_FILE_CONTENT_TOOL_NAME,
+  normalizeReadFileContentArgs,
 } from "@domain/inspection/read-file-content/schema";
 import {
   DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE,
@@ -66,27 +67,51 @@ describe("large-text search regression contract", () => {
 
     expect(
       ReadFileContentArgsSchema.safeParse({
-        mode: "line_range",
+        line_range: {
+          end: 34,
+          start: 10,
+        },
+        mode: "line-range",
         path: "docs/notes.txt",
-        startLine: 10,
-        lineCount: 25,
+      }).success,
+    ).toBe(true);
+
+    expect(
+      normalizeReadFileContentArgs(
+        ReadFileContentArgsSchema.parse({
+          line_range: {
+            end: 34,
+            start: 10,
+          },
+          mode: "line-range",
+          path: "docs/notes.txt",
+        }),
+      ),
+    ).toEqual({
+      lineCount: 25,
+      mode: "line_range",
+      path: "docs/notes.txt",
+      startLine: 10,
+    });
+
+    expect(
+      ReadFileContentArgsSchema.safeParse({
+        byte_range: {
+          byteCount: 1024,
+          start: 0,
+        },
+        mode: "byte-range",
+        path: "docs/notes.txt",
       }).success,
     ).toBe(true);
 
     expect(
       ReadFileContentArgsSchema.safeParse({
-        byteCount: 1024,
-        mode: "byte_range",
-        path: "docs/notes.txt",
-        startByte: 0,
-      }).success,
-    ).toBe(true);
-
-    expect(
-      ReadFileContentArgsSchema.safeParse({
-        byteCount: 2048,
-        cursor: null,
-        mode: "chunk_cursor",
+        chunk_cursor: {
+          byteCount: 2048,
+          cursor: null,
+        },
+        mode: "chunk-cursor",
         path: "docs/notes.txt",
       }).success,
     ).toBe(true);

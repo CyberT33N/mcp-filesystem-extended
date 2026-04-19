@@ -74,71 +74,247 @@ const byteCountSchema = z
     "Maximum number of bytes to return for `byte_range` or `chunk_cursor` mode. Defaults to 256 KiB and is hard-capped at 1 MiB."
   );
 
-const ReadFileContentFullRequestSchema = z.object({
+const lineRangeStartSchema = z
+  .number()
+  .int()
+  .min(1)
+  .describe("1-based line number at which the bounded line-range read begins.");
+
+const byteRangeStartSchema = z
+  .number()
+  .int()
+  .min(0)
+  .describe("Zero-based byte offset at which the bounded byte-range read begins.");
+
+const chunkCursorSchema = z
+  .string()
+  .min(1)
+  .max(READ_FILE_CONTENT_CURSOR_MAX_CHARS)
+  .nullable()
+  .optional()
+  .default(null)
+  .describe(
+    "Opaque continuation cursor returned by a previous `chunk_cursor` response. Omit or pass null to start from the beginning of the file."
+  );
+
+const ReadFileContentCanonicalFullRequestSchema = z.object({
   path: readFileContentPathSchema,
   mode: z.literal("full"),
 });
 
-const ReadFileContentLineRangeRequestSchema = z.object({
+const ReadFileContentCanonicalLineRangeRequestSchema = z.object({
   path: readFileContentPathSchema,
   mode: z.literal("line_range"),
-  startLine: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .default(1)
-    .describe("1-based line number at which the bounded line-range read begins."),
+  startLine: lineRangeStartSchema.optional().default(1),
   lineCount: lineCountSchema.optional().default(READ_FILE_CONTENT_LINE_RANGE_DEFAULT_LINES),
 });
 
-const ReadFileContentByteRangeRequestSchema = z.object({
+const ReadFileContentCanonicalByteRangeRequestSchema = z.object({
   path: readFileContentPathSchema,
   mode: z.literal("byte_range"),
-  startByte: z
-    .number()
-    .int()
-    .min(0)
-    .optional()
-    .default(0)
-    .describe("Zero-based byte offset at which the bounded byte-range read begins."),
+  startByte: byteRangeStartSchema.optional().default(0),
   byteCount: byteCountSchema.optional().default(READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES),
 });
 
-const ReadFileContentChunkCursorRequestSchema = z.object({
+const ReadFileContentCanonicalChunkCursorRequestSchema = z.object({
   path: readFileContentPathSchema,
   mode: z.literal("chunk_cursor"),
-  cursor: z
-    .string()
-    .min(1)
-    .max(READ_FILE_CONTENT_CURSOR_MAX_CHARS)
-    .nullable()
-    .optional()
-    .default(null)
-    .describe(
-      "Opaque continuation cursor returned by a previous `chunk_cursor` response. Omit or pass null to start from the beginning of the file."
-    ),
+  cursor: chunkCursorSchema,
   byteCount: byteCountSchema.optional().default(READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES),
 });
+
+const ReadFileContentPublicLineRangeWindowSchema = z
+  .object({
+    start: lineRangeStartSchema.optional().default(1),
+    end: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe(
+        "Inclusive 1-based line number at which the public `line-range` window ends. When omitted, the default line window is used."
+      ),
+  })
+  .superRefine((value, ctx) => {
+    if (value.end === undefined) {
+      return;
+    }
+
+    if (value.end < value.start) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "`line_range.end` must be greater than or equal to `line_range.start`.",
+        path: ["end"],
+      });
+      return;
+    }
+
+    if (value.end - value.start + 1 > READ_FILE_CONTENT_LINE_RANGE_MAX_LINES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "The inclusive public `line_range` window exceeds the hard maximum line window.",
+        path: ["end"],
+      });
+    }
+  });
+
+const ReadFileContentPublicByteRangeWindowSchema = z
+  .object({
+    start: byteRangeStartSchema.optional().default(0),
+    endExclusive: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe(
+        "Zero-based exclusive byte offset at which the public `byte-range` window ends. When omitted, the bounded byte-count window is used."
+      ),
+    byteCount: byteCountSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.endExclusive !== undefined && value.byteCount !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Specify either `byte_range.endExclusive` or `byte_range.byteCount`, not both.",
+        path: ["byteCount"],
+      });
+    }
+
+    if (value.endExclusive === undefined) {
+      return;
+    }
+
+    if (value.endExclusive <= value.start) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "`byte_range.endExclusive` must be greater than `byte_range.start`.",
+        path: ["endExclusive"],
+      });
+      return;
+    }
+
+    if (value.endExclusive - value.start > READ_FILE_CONTENT_BYTE_RANGE_MAX_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "The public `byte_range` window exceeds the hard maximum byte window.",
+        path: ["endExclusive"],
+      });
+    }
+  });
+
+const ReadFileContentPublicChunkCursorWindowSchema = z.object({
+  cursor: chunkCursorSchema,
+  byteCount: byteCountSchema.optional().default(READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES),
+});
+
+const ReadFileContentPublicFullRequestSchema = ReadFileContentCanonicalFullRequestSchema;
+
+const ReadFileContentPublicLineRangeRequestSchema = z.object({
+  path: readFileContentPathSchema,
+  mode: z.literal("line-range"),
+  line_range: ReadFileContentPublicLineRangeWindowSchema.optional().default({ start: 1 }),
+});
+
+const ReadFileContentPublicByteRangeRequestSchema = z.object({
+  path: readFileContentPathSchema,
+  mode: z.literal("byte-range"),
+  byte_range: ReadFileContentPublicByteRangeWindowSchema.optional().default({ start: 0 }),
+});
+
+const ReadFileContentPublicChunkCursorRequestSchema = z.object({
+  path: readFileContentPathSchema,
+  mode: z.literal("chunk-cursor"),
+  chunk_cursor: ReadFileContentPublicChunkCursorWindowSchema.optional().default({
+    byteCount: READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES,
+    cursor: null,
+  }),
+});
+
+const ReadFileContentCanonicalArgsSchema = z.discriminatedUnion("mode", [
+  ReadFileContentCanonicalFullRequestSchema,
+  ReadFileContentCanonicalLineRangeRequestSchema,
+  ReadFileContentCanonicalByteRangeRequestSchema,
+  ReadFileContentCanonicalChunkCursorRequestSchema,
+]);
 
 /**
  * Public request contract for single-file content reads.
  *
  * @remarks
- * The request surface is an explicit four-mode discriminated union so callers
- * cannot accidentally trigger an implicit unbounded read path.
+ * The public MCP boundary accepts explicit mode-specific option blocks for
+ * ranged and cursor reads so callers can use the visible `line-range`,
+ * `byte-range`, and `chunk-cursor` tool surface without leaking the internal
+ * canonical field topology into transport-facing requests.
  */
 export const ReadFileContentArgsSchema = z.discriminatedUnion("mode", [
-  ReadFileContentFullRequestSchema,
-  ReadFileContentLineRangeRequestSchema,
-  ReadFileContentByteRangeRequestSchema,
-  ReadFileContentChunkCursorRequestSchema,
+  ReadFileContentPublicFullRequestSchema,
+  ReadFileContentPublicLineRangeRequestSchema,
+  ReadFileContentPublicByteRangeRequestSchema,
+  ReadFileContentPublicChunkCursorRequestSchema,
 ]);
 
 /**
- * Type-level request contract inferred from the canonical schema surface.
+ * Type-level normalized request contract used internally after MCP-boundary
+ * normalization.
  */
-export type ReadFileContentArgs = z.infer<typeof ReadFileContentArgsSchema>;
+export type ReadFileContentArgs = z.infer<typeof ReadFileContentCanonicalArgsSchema>;
+
+/**
+ * Normalizes the public MCP request surface into the canonical internal
+ * bounded-read contract.
+ *
+ * @param args - Public `read_file_content` request accepted at the MCP
+ * boundary.
+ * @returns Canonical internal request contract with stable underscore mode
+ * names and flat bounded-range fields.
+ */
+export function normalizeReadFileContentArgs(
+  args: z.infer<typeof ReadFileContentArgsSchema>,
+): ReadFileContentArgs {
+  switch (args.mode) {
+    case "full":
+      return ReadFileContentCanonicalArgsSchema.parse(args);
+    case "line-range": {
+      const startLine = args.line_range.start;
+      const lineCount =
+        args.line_range.end === undefined
+          ? READ_FILE_CONTENT_LINE_RANGE_DEFAULT_LINES
+          : args.line_range.end - startLine + 1;
+
+      return ReadFileContentCanonicalArgsSchema.parse({
+        lineCount,
+        mode: "line_range",
+        path: args.path,
+        startLine,
+      });
+    }
+    case "byte-range": {
+      const startByte = args.byte_range.start;
+      const byteCount =
+        args.byte_range.endExclusive === undefined
+          ? args.byte_range.byteCount ?? READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES
+          : args.byte_range.endExclusive - startByte;
+
+      return ReadFileContentCanonicalArgsSchema.parse({
+        byteCount,
+        mode: "byte_range",
+        path: args.path,
+        startByte,
+      });
+    }
+    case "chunk-cursor":
+      return ReadFileContentCanonicalArgsSchema.parse({
+        byteCount: args.chunk_cursor.byteCount,
+        cursor: args.chunk_cursor.cursor,
+        mode: "chunk_cursor",
+        path: args.path,
+      });
+  }
+}
 
 const ReadFileContentCommonResultSchema = z.object({
   path: z.string(),

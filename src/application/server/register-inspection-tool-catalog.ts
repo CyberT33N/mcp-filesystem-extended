@@ -23,6 +23,7 @@ import {
 import {
   ReadFileContentArgsSchema,
   ReadFileContentResultSchema,
+  normalizeReadFileContentArgs,
 } from "@domain/inspection/read-file-content/schema";
 import {
   getFindPathsByNameResult,
@@ -119,8 +120,9 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Read file content",
       description:
-        "Reads one text file through explicit full, line-range, byte-range, or chunk-cursor modes while large-file access stays bounded by shared runtime policy and response budgets. " +
+        "Reads one text file through explicit `full`, `line-range`, `byte-range`, or `chunk-cursor` modes while large-file access stays bounded by shared runtime policy and response budgets. " +
         "Use this tool for single-file content access, not for metadata lookup, multi-file batch reads, or content search. " +
+        "The ranged and cursor modes accept their mode-specific option blocks (`line_range`, `byte_range`, `chunk_cursor`) and are normalized at the MCP boundary into the canonical bounded-read contract. " +
         "Full mode remains limited to smaller files; valid larger access must switch to range or cursor modes, while unsupported or over-hard-gap workloads still refuse.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ReadFileContentArgsSchema,
@@ -128,8 +130,9 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     },
     async (args) =>
       executeTool("read_file_content", async () => {
-        const result = await getReadFileContentResult(args, allowedDirectories);
-        const text = await handleReadFileContent(args, allowedDirectories);
+        const normalizedArgs = normalizeReadFileContentArgs(args);
+        const result = await getReadFileContentResult(normalizedArgs, allowedDirectories);
+        const text = await handleReadFileContent(normalizedArgs, allowedDirectories);
 
         return {
           content: [{ type: "text", text }],

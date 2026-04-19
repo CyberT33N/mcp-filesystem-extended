@@ -70,6 +70,7 @@ import {
   READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES,
   READ_FILE_CONTENT_LINE_RANGE_DEFAULT_LINES,
   READ_FILE_CONTENT_TOOL_NAME,
+  normalizeReadFileContentArgs,
 } from "@domain/inspection/read-file-content/schema";
 
 const TEST_IO_CAPABILITY_PROFILE = {
@@ -141,12 +142,14 @@ describe("read_file_content", () => {
     });
   });
 
-  it("applies the bound default windows for ranged and cursor request modes", () => {
+  it("normalizes the public ranged and cursor request blocks into the canonical request contract", () => {
     expect(
-      ReadFileContentArgsSchema.parse({
-        mode: "line_range",
-        path: "docs/notes.txt",
-      }),
+      normalizeReadFileContentArgs(
+        ReadFileContentArgsSchema.parse({
+          mode: "line-range",
+          path: "docs/notes.txt",
+        }),
+      ),
     ).toEqual({
       lineCount: READ_FILE_CONTENT_LINE_RANGE_DEFAULT_LINES,
       mode: "line_range",
@@ -155,10 +158,30 @@ describe("read_file_content", () => {
     });
 
     expect(
-      ReadFileContentArgsSchema.parse({
-        mode: "chunk_cursor",
-        path: "docs/notes.txt",
-      }),
+      normalizeReadFileContentArgs(
+        ReadFileContentArgsSchema.parse({
+          mode: "byte-range",
+          path: "docs/notes.txt",
+          byte_range: {
+            endExclusive: 18,
+            start: 6,
+          },
+        }),
+      ),
+    ).toEqual({
+      byteCount: 12,
+      mode: "byte_range",
+      path: "docs/notes.txt",
+      startByte: 6,
+    });
+
+    expect(
+      normalizeReadFileContentArgs(
+        ReadFileContentArgsSchema.parse({
+          mode: "chunk-cursor",
+          path: "docs/notes.txt",
+        }),
+      ),
     ).toEqual({
       byteCount: READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES,
       cursor: null,
