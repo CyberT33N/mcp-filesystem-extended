@@ -9,6 +9,10 @@ import {
 } from "@infrastructure/search/ugrep-command-builder";
 
 import {
+  INSPECTION_CONTENT_STATE_LITERALS,
+  type InspectionContentState,
+} from "./inspection-content-state";
+import {
   classifyPattern,
   type PatternClassification,
 } from "./pattern-classifier";
@@ -24,6 +28,7 @@ import {
 export enum CountQueryExecutionLane {
   NATIVE_PATTERN_AWARE = "NATIVE_PATTERN_AWARE",
   STREAMING_TOTAL_ONLY = "STREAMING_TOTAL_ONLY",
+  UNSUPPORTED_STATE = "UNSUPPORTED_STATE",
 }
 
 /**
@@ -39,6 +44,11 @@ export interface CountQueryPolicy {
    * Selected execution lane for the current request.
    */
   executionLane: CountQueryExecutionLane;
+
+  /**
+   * Shared inspection content state resolved for the current candidate surface.
+   */
+  inspectionContentState: InspectionContentState;
 
   /**
    * Shared pattern-classification output when a pattern is present.
@@ -74,6 +84,16 @@ export interface CountQueryPolicy {
    * Absolute candidate-byte hard gap associated with the selected pattern-aware lane.
    */
   serviceHardGapBytes: number | null;
+
+  /**
+   * Canonical explanation when the current request must refuse or reroute on the resolved state.
+   */
+  unsupportedStateReason: string | null;
+
+  /**
+   * Explicit caller guidance when a pattern-aware request lands on an unsupported non-text state.
+   */
+  rerouteGuidance: string | null;
 }
 
 /**
@@ -89,6 +109,11 @@ export interface ResolveCountQueryPolicyInput {
    * Optional pattern that activates the native-search lane when present.
    */
   pattern: string | undefined;
+
+  /**
+   * Shared inspection content state already resolved for the current candidate surface.
+   */
+  inspectionContentState: InspectionContentState;
 }
 
 /**
@@ -140,6 +165,38 @@ function withoutLineNumberFlag(args: string[]): string[] {
   return args.filter((argument) => argument !== "--line-number");
 }
 
+function createUnsupportedCountQueryPolicy(
+  searchExecutionPolicy: SearchExecutionPolicy,
+  inspectionContentState: InspectionContentState,
+  unsupportedStateReason: string,
+  rerouteGuidance: string | null,
+  patternClassification: PatternClassification | null,
+): CountQueryPolicy {
+  return {
+    executionLane: CountQueryExecutionLane.UNSUPPORTED_STATE,
+    inspectionContentState,
+    patternClassification,
+    previewFirstResponseCapFraction: searchExecutionPolicy.previewFirstResponseCapFraction,
+    rerouteGuidance,
+    searchExecutionPolicy,
+    serviceHardGapBytes: null,
+    syncCandidateBytesCap: null,
+    syncComfortWindowSeconds: searchExecutionPolicy.syncComfortWindowSeconds,
+    taskRecommendedAfterSeconds: searchExecutionPolicy.taskRecommendedAfterSeconds,
+    unsupportedStateReason,
+  };
+}
+
+function resolvePatternAwareRerouteGuidance(
+  inspectionContentState: InspectionContentState,
+): string {
+  if (inspectionContentState === INSPECTION_CONTENT_STATE_LITERALS.BINARY_CONFIDENT) {
+    return "Use byte- or cursor-oriented inspection instead of pattern-aware line counting on binary-confident surfaces.";
+  }
+
+  return "Use search_file_contents_by_fixed_string or byte/cursor inspection instead of pattern-aware line counting on non-text surfaces.";
+}
+
 /**
  * Resolves the shared count-query policy for one `count_lines` request.
  *
@@ -150,21 +207,46 @@ export function resolveCountQueryPolicy(
   input: ResolveCountQueryPolicyInput,
 ): CountQueryPolicy {
   const searchExecutionPolicy = resolveSearchExecutionPolicy(input.ioCapabilityProfile);
+  const { inspectionContentState } = input;
 
   if (input.pattern === undefined) {
+    if (inspectionContentState !== INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT) {
+      return createUnsupportedCountQueryPolicy(
+        searchExecutionPolicy,
+        inspectionContentState,
+        `Total-only line counting is unsupported for ${inspectionContentState} surfaces because the resulting totals would be semantically misleading.`,
+        null,
+        null,
+      );
+    }
+
     return {
       executionLane: CountQueryExecutionLane.STREAMING_TOTAL_ONLY,
+      inspectionContentState,
       patternClassification: null,
       previewFirstResponseCapFraction: searchExecutionPolicy.previewFirstResponseCapFraction,
+      rerouteGuidance: null,
       searchExecutionPolicy,
       serviceHardGapBytes: null,
       syncCandidateBytesCap: null,
       syncComfortWindowSeconds: searchExecutionPolicy.syncComfortWindowSeconds,
       taskRecommendedAfterSeconds: searchExecutionPolicy.taskRecommendedAfterSeconds,
+      unsupportedStateReason: null,
     };
   }
 
   const patternClassification = classifyPattern(input.pattern);
+
+  if (inspectionContentState !== INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT) {
+    return createUnsupportedCountQueryPolicy(
+      searchExecutionPolicy,
+      inspectionContentState,
+      `Pattern-aware line counting is unsupported for ${inspectionContentState} surfaces on the count_lines endpoint.`,
+      resolvePatternAwareRerouteGuidance(inspectionContentState),
+      patternClassification,
+    );
+  }
+
   const { serviceHardGapBytes, syncCandidateBytesCap } = resolvePatternAwareCaps(
     patternClassification,
     searchExecutionPolicy,
@@ -172,13 +254,16 @@ export function resolveCountQueryPolicy(
 
   return {
     executionLane: CountQueryExecutionLane.NATIVE_PATTERN_AWARE,
+    inspectionContentState,
     patternClassification,
     previewFirstResponseCapFraction: searchExecutionPolicy.previewFirstResponseCapFraction,
+    rerouteGuidance: null,
     searchExecutionPolicy,
     serviceHardGapBytes,
     syncCandidateBytesCap,
     syncComfortWindowSeconds: searchExecutionPolicy.syncComfortWindowSeconds,
     taskRecommendedAfterSeconds: searchExecutionPolicy.taskRecommendedAfterSeconds,
+    unsupportedStateReason: null,
   };
 }
 
@@ -198,6 +283,7 @@ export function buildPatternAwareCountCommand(
 ): UgrepCommand {
   const policy = resolveCountQueryPolicy({
     ioCapabilityProfile: input.ioCapabilityProfile,
+    inspectionContentState: INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT,
     pattern: input.pattern,
   });
 
@@ -205,7 +291,10 @@ export function buildPatternAwareCountCommand(
     policy.executionLane !== CountQueryExecutionLane.NATIVE_PATTERN_AWARE
     || policy.patternClassification === null
   ) {
-    throw new Error("Pattern-aware count command requires a bound native-search policy lane.");
+    throw new Error(
+      policy.unsupportedStateReason
+      ?? "Pattern-aware count command requires a bound native-search policy lane.",
+    );
   }
 
   const baseCommand = buildUgrepCommand({

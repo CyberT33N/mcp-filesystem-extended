@@ -20,18 +20,22 @@ import {
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
+ import {
+   resolveTraversalScopePolicy,
+   shouldExcludeTraversalScopePath,
+   shouldTraverseTraversalScopeDirectoryPath,
+ } from "@domain/shared/guardrails/traversal-scope-policy";
+ import { classifyPattern } from "@domain/shared/search/pattern-classifier";
+ import { resolveSearchExecutionPolicy, type SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import {
-  resolveTraversalScopePolicy,
-  shouldExcludeTraversalScopePath,
-  shouldTraverseTraversalScopeDirectoryPath,
-} from "@domain/shared/guardrails/traversal-scope-policy";
-import { classifyPattern } from "@domain/shared/search/pattern-classifier";
-import { resolveSearchExecutionPolicy, type SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
-import { classifyTextBinarySurface } from "@domain/shared/search/text-binary-classifier";
-import {
-  REGEX_SEARCH_MAX_CANDIDATE_BYTES,
-  REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
-} from "@domain/shared/guardrails/tool-guardrail-limits";
+  classifyInspectionContentState,
+  INSPECTION_CONTENT_STATE_LITERALS,
+  type InspectionContentStateClassification,
+} from "@domain/shared/search/inspection-content-state";
+ import {
+   REGEX_SEARCH_MAX_CANDIDATE_BYTES,
+   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
+ } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { buildUgrepCommand } from "@infrastructure/search/ugrep-command-builder";
 import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
@@ -141,11 +145,20 @@ async function readTextBinaryProbeSample(candidatePath: string): Promise<Uint8Ar
   }
 }
 
-async function resolveTextEligibility(candidatePath: string): Promise<{
-  classificationReason: string;
-  isTextEligible: boolean;
-}> {
-  const initialClassification = classifyTextBinarySurface({ candidatePath });
+async function resolveTextEligibility(
+  candidatePath: string,
+  ): Promise<InspectionContentStateClassification & { isTextEligible: boolean }> {
+  const toTextEligibilityResult = (
+    classification: InspectionContentStateClassification,
+  ): InspectionContentStateClassification & { isTextEligible: boolean } => ({
+    ...classification,
+    isTextEligible:
+      classification.resolvedState === INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT,
+  });
+
+  const initialClassification = toTextEligibilityResult(
+    classifyInspectionContentState({ candidatePath }),
+  );
 
   if (initialClassification.isTextEligible) {
     return initialClassification;
@@ -157,10 +170,12 @@ async function resolveTextEligibility(candidatePath: string): Promise<{
     return initialClassification;
   }
 
-  return classifyTextBinarySurface({
-    candidatePath,
-    contentSample,
-  });
+  return toTextEligibilityResult(
+    classifyInspectionContentState({
+      candidatePath,
+      contentSample,
+    }),
+  );
 }
 
 function parseUgrepMatchLine(outputLine: string): {
@@ -241,6 +256,7 @@ async function collectRegexMatchesFromFileEntry(
   totalMatches: number;
   totalBytesScanned: number;
   truncated: boolean;
+  unsupportedStateReason: string | null;
 }> {
   if (!matchesIncludedFilePatterns(candidateRelativePath, filePatterns)) {
     return {
@@ -249,6 +265,7 @@ async function collectRegexMatchesFromFileEntry(
       totalMatches: 0,
       totalBytesScanned: totalBytesScannedBeforeRead,
       truncated: false,
+      unsupportedStateReason: null,
     };
   }
 
@@ -278,6 +295,7 @@ async function collectRegexMatchesFromFileEntry(
       totalMatches: 0,
       totalBytesScanned: nextTotalBytesScanned,
       truncated: false,
+      unsupportedStateReason: textEligibility.classificationReason,
     };
   }
 
@@ -288,6 +306,7 @@ async function collectRegexMatchesFromFileEntry(
       totalMatches: 0,
       totalBytesScanned: nextTotalBytesScanned,
       truncated: true,
+      unsupportedStateReason: null,
     };
   }
 
@@ -339,6 +358,7 @@ async function collectRegexMatchesFromFileEntry(
       totalMatches: 0,
       totalBytesScanned: nextTotalBytesScanned,
       truncated: false,
+      unsupportedStateReason: null,
     };
   }
 
@@ -394,6 +414,7 @@ async function collectRegexMatchesFromFileEntry(
     totalMatches,
     totalBytesScanned: nextTotalBytesScanned,
     truncated,
+    unsupportedStateReason: null,
   };
 }
 
@@ -489,6 +510,7 @@ export async function getSearchRegexPathResult(
   let matchesFound = 0;
   let searchAborted = false;
   let totalBytesScanned = 0;
+  let unsupportedStateReason: string | null = null;
 
   async function searchDirectory(
     dirPath: string,
@@ -576,6 +598,13 @@ export async function getSearchRegexPathResult(
       matchesFound += fileSearchResult.totalMatches;
       results.push(...fileSearchResult.matches);
 
+      if (
+        unsupportedStateReason === null
+        && fileSearchResult.unsupportedStateReason !== null
+      ) {
+        unsupportedStateReason = fileSearchResult.unsupportedStateReason;
+      }
+
       if (fileSearchResult.truncated) {
         searchAborted = true;
         break;
@@ -591,6 +620,6 @@ export async function getSearchRegexPathResult(
     filesSearched,
     totalMatches: matchesFound,
     truncated: searchAborted,
-    error: null,
+    error: results.length === 0 && unsupportedStateReason !== null ? unsupportedStateReason : null,
   };
 }

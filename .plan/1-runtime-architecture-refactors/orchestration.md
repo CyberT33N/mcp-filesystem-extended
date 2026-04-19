@@ -5,12 +5,12 @@ unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
 unit_status: "in_progress"
-total_tasks: 5
- completed_tasks: 2
-has_sub_units: false
-sub_unit_count: 0
- resume_frontier_task: "1.3"
- next_frontier_task: "1.4"
+ total_tasks: 5
+  completed_tasks: 3
+ has_sub_units: false
+ sub_unit_count: 0
+  resume_frontier_task: "1.4"
+  next_frontier_task: "1.5"
 todo_window_mode_override: "inherit"
 ---
 
@@ -21,11 +21,11 @@ todo_window_mode_override: "inherit"
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
 - **Unit Status:** in_progress
-- **Progress:** 1/5 tasks
+- **Progress:** 3/5 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.2`
-- **Next Frontier Task:** `1.3`
+- **Resume Frontier Task:** `1.4`
+- **Next Frontier Task:** `1.5`
 - **Todo Window Mode:** `inherit`
 
 ## Tasks
@@ -45,9 +45,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: fixed-string search lane and shared `ugrep` argument planning
   - Blocked By: none
   - Summary: Make literal search hybrid-aware without collapsing unsupported pure-binary surfaces into normal text search.
-- [ ] **1.3 Regex and count state-gating alignment** → [`1.3-regex-and-count-state-gating-alignment.md`](./1.3-regex-and-count-state-gating-alignment.md)
+- [x] **1.3 Regex and count state-gating alignment** → [`1.3-regex-and-count-state-gating-alignment.md`](./1.3-regex-and-count-state-gating-alignment.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: done
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: regex and count execution lanes
@@ -59,7 +59,7 @@ todo_window_mode_override: "inherit"
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: read handlers and shared read core
-  - Blocked By: 1.3
+  - Blocked By: none
   - Summary: Preserve the two public read endpoints while consolidating their internal read logic and gating on a shared core.
 - [ ] **1.5 Traversal preflight and runtime-budget refactor** → [`1.5-traversal-preflight-and-runtime-budget-refactor.md`](./1.5-traversal-preflight-and-runtime-budget-refactor.md)
   - Classification: SEQUENTIAL
@@ -75,7 +75,7 @@ todo_window_mode_override: "inherit"
 |----|------------|-------------|------|--------|-------------|--------------|
 | D1 | 1.2 | 1.1 | SEQUENTIAL | RESOLVED | Fixed-string hybrid search depends on the shared inspection-state vocabulary. | `src/domain/shared/search/text-binary-classifier.ts` |
 | D2 | 1.3 | 1.2 | SEQUENTIAL | RESOLVED | Regex/count alignment assumes the fixed-string lane and shared state semantics are already bound. | `src/domain/shared/search/search-execution-policy.ts` |
-| D3 | 1.4 | 1.3 | SEQUENTIAL | UNRESOLVED | Read-core SSOT refactor depends on the finalized inspection-state and execution-lane rules. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
+| D3 | 1.4 | 1.3 | SEQUENTIAL | RESOLVED | Read-core SSOT refactor depends on the finalized inspection-state and execution-lane rules. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
 | D4 | 1.5 | 1.4 | SEQUENTIAL | UNRESOLVED | Traversal governance refactor should land after state and read-core semantics are stabilized. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
 
 ## Execution Order

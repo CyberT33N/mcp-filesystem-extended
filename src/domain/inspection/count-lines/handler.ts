@@ -1,6 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
-import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  DISCOVERY_RESPONSE_CAP_CHARS,
+  INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
 import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
@@ -8,6 +11,7 @@ import {
   buildPatternAwareCountCommand,
   resolveCountQueryPolicy,
 } from "@domain/shared/search/count-query-policy";
+import { classifyInspectionContentState } from "@domain/shared/search/inspection-content-state";
 import {
   classifyPattern,
   type PatternClassification,
@@ -59,6 +63,36 @@ export interface CountLinesResult {
   totalFiles: number;
   totalLines: number;
   totalMatchingLines: number;
+}
+
+async function readInspectionContentSample(filePath: string): Promise<Uint8Array | null> {
+  let fileHandle;
+
+  try {
+    fileHandle = await fs.open(filePath, "r");
+  } catch {
+    return null;
+  }
+
+  try {
+    const probeBuffer = Buffer.alloc(INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES);
+    const { bytesRead } = await fileHandle.read(probeBuffer, 0, probeBuffer.length, 0);
+
+    return probeBuffer.subarray(0, bytesRead);
+  } finally {
+    await fileHandle.close();
+  }
+}
+
+function formatUnsupportedCountQueryMessage(
+  unsupportedStateReason: string,
+  rerouteGuidance: string | null,
+): string {
+  if (rerouteGuidance === null) {
+    return unsupportedStateReason;
+  }
+
+  return `${unsupportedStateReason} ${rerouteGuidance}`;
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -323,12 +357,43 @@ async function countLinesInFile(
   patternClassification: PatternClassification | undefined,
   ignoreEmptyLines: boolean
 ): Promise<FileLineCount> {
-  const count = await countTotalLinesInFile(filePath, { ignoreEmptyLines });
+  const fileStats = await fs.stat(filePath);
+  const contentSample = await readInspectionContentSample(filePath);
+  const ioCapabilityProfile = detectIoCapabilityProfile();
+  const inspectionContentState = classifyInspectionContentState(
+    contentSample === null
+      ? {
+          candidatePath: filePath,
+          candidateFileBytes: fileStats.size,
+        }
+      : {
+          candidatePath: filePath,
+          candidateFileBytes: fileStats.size,
+          contentSample,
+        },
+  );
+  const countQueryPolicy = resolveCountQueryPolicy({
+    ioCapabilityProfile,
+    inspectionContentState: inspectionContentState.resolvedState,
+    pattern,
+  });
+
+  if (countQueryPolicy.executionLane === CountQueryExecutionLane.UNSUPPORTED_STATE) {
+    throw new Error(
+      `count_lines unsupported state: ${formatUnsupportedCountQueryMessage(
+        countQueryPolicy.unsupportedStateReason
+          ?? "The resolved inspection state is unsupported for count_lines.",
+        countQueryPolicy.rerouteGuidance,
+      )}`,
+    );
+  }
+
+  const totalLineCount = await countTotalLinesInFile(filePath, { ignoreEmptyLines });
 
   if (pattern === undefined) {
     return {
       file: filePath,
-      count,
+      count: totalLineCount,
     };
   }
 
@@ -336,14 +401,11 @@ async function countLinesInFile(
     throw new Error("Pattern-aware line counting requires a shared pattern classification.");
   }
 
-  const ioCapabilityProfile = detectIoCapabilityProfile();
-  const countQueryPolicy = resolveCountQueryPolicy({
-    ioCapabilityProfile,
-    pattern,
-  });
-
   if (countQueryPolicy.executionLane !== CountQueryExecutionLane.NATIVE_PATTERN_AWARE) {
-    throw new Error("Pattern-aware line counting must stay on the shared native-search lane.");
+    throw new Error(
+      countQueryPolicy.unsupportedStateReason
+      ?? "Pattern-aware line counting must stay on the shared native-search lane.",
+    );
   }
 
   if (countQueryPolicy.patternClassification?.classification !== patternClassification.classification) {
@@ -394,7 +456,7 @@ async function countLinesInFile(
 
   return {
     file: filePath,
-    count,
+    count: totalLineCount,
     matchingCount,
   };
 }
@@ -466,6 +528,13 @@ async function countLinesInDirectory(
                 );
                 results.push(count);
               } catch (error) {
+                if (
+                  error instanceof Error
+                  && error.message.startsWith("count_lines unsupported state:")
+                ) {
+                  throw error;
+                }
+
                 if (pattern !== undefined) {
                   throw error;
                 }
@@ -476,7 +545,18 @@ async function countLinesInDirectory(
             }
           }
         } catch (error) {
-          // Skip invalid paths
+          if (
+            error instanceof Error
+            && error.message.startsWith("count_lines unsupported state:")
+          ) {
+            throw error;
+          }
+
+          if (pattern !== undefined) {
+            throw error;
+          }
+
+          // Skip invalid paths.
           continue;
         }
       }
