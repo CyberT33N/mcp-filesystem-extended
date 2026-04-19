@@ -643,9 +643,10 @@ export const TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES = 25_000;
  * Soft wall-clock runtime budget for one guarded traversal before deterministic refusal takes over.
  *
  * @remarks
- * This soft budget exists to fail traversal-heavy workloads before the surrounding environment must
- * terminate the request. The limit remains high enough for legitimate large local inspection while
- * still protecting the shared guardrail model from timeout-shaped behavior.
+ * This soft budget exists as a deeper emergency safeguard after server-side preflight and
+ * traversal-scope handling have already admitted the workload. The limit remains high enough for
+ * legitimate large local inspection while still protecting the shared guardrail model from
+ * timeout-shaped behavior.
  *
  * @example
  * `assertTraversalRuntimeBudget(toolName, state)`
@@ -658,7 +659,9 @@ export const TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS = 5_000;
  * @remarks
  * Every family-specific runtime budget remains at or below the global hard cap so handlers can
  * fail early with family-aware refusal messaging while the server shell still enforces one final,
- * non-bypassable response fuse across the complete MCP tool surface.
+ * non-bypassable response fuse across the complete MCP tool surface. Traversal budgets operate as
+ * deeper safeguards after root-level preflight admission instead of acting as the primary
+ * caller-facing contract surface.
  *
  * @example
  * `const readCap = ENDPOINT_FAMILY_GUARDRAIL_LIMITS.READ_FILES_RESPONSE_CAP_CHARS`

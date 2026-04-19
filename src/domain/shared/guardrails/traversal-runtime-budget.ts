@@ -33,12 +33,42 @@ export interface TraversalRuntimeBudgetState {
   visitedDirectories: number;
 }
 
+/**
+ * Structured error raised when the shared traversal runtime safeguard aborts one recursive workload.
+ */
+export class TraversalRuntimeBudgetExceededError extends Error {
+  constructor(
+    message: string,
+    readonly toolName: string,
+    readonly budgetSurface: string,
+    readonly measuredValue: number,
+    readonly limitValue: number,
+    readonly unit: string,
+  ) {
+    super(message);
+    this.name = "TraversalRuntimeBudgetExceededError";
+  }
+}
+
+/**
+ * Type guard for traversal runtime safeguard failures.
+ *
+ * @param error - Unknown thrown value that may represent a traversal safeguard refusal.
+ * @returns `true` when the error originated from the shared traversal runtime safeguard.
+ */
+export function isTraversalRuntimeBudgetExceededError(
+  error: unknown,
+): error is TraversalRuntimeBudgetExceededError {
+  return error instanceof TraversalRuntimeBudgetExceededError;
+}
+
 function throwTraversalRuntimeBudgetExceededFailure(
   toolName: string,
   budgetSurface: string,
   measuredValue: number,
   limitValue: number,
   unit: string,
+  narrowingGuidance?: string,
 ): never {
   const failure = createRuntimeBudgetExceededFailure({
     toolName,
@@ -47,7 +77,16 @@ function throwTraversalRuntimeBudgetExceededFailure(
     limitValue: createToolGuardrailMetricValue(limitValue, unit),
   });
 
-  throw new Error(formatToolGuardrailFailureAsText(failure));
+  const guidanceSuffix = narrowingGuidance === undefined ? "" : ` ${narrowingGuidance}`;
+
+  throw new TraversalRuntimeBudgetExceededError(
+    `${formatToolGuardrailFailureAsText(failure)} This traversal runtime budget acts as a deeper emergency safeguard after server-side preflight admission.${guidanceSuffix}`,
+    toolName,
+    budgetSurface,
+    measuredValue,
+    limitValue,
+    unit,
+  );
 }
 
 /**
@@ -128,6 +167,7 @@ export function assertTraversalRuntimeBudget(
   toolName: string,
   state: TraversalRuntimeBudgetState,
   nowMs: number = Date.now(),
+  narrowingGuidance?: string,
 ): void {
   if (state.visitedEntries > TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES) {
     throwTraversalRuntimeBudgetExceededFailure(
@@ -136,6 +176,7 @@ export function assertTraversalRuntimeBudget(
       state.visitedEntries,
       TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
       "entries",
+      narrowingGuidance,
     );
   }
 
@@ -146,6 +187,7 @@ export function assertTraversalRuntimeBudget(
       state.visitedDirectories,
       TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
       "directories",
+      narrowingGuidance,
     );
   }
 
@@ -158,6 +200,7 @@ export function assertTraversalRuntimeBudget(
       elapsedMs,
       TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
       "milliseconds",
+      narrowingGuidance,
     );
   }
 }

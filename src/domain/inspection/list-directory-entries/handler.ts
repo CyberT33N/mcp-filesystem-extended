@@ -1,9 +1,17 @@
 import fs from "fs/promises";
 import path from "path";
 import { encode } from "@toon-format/toon";
-import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import {
-  resolveTraversalScopePolicy,
+  buildTraversalNarrowingGuidance,
+  resolveTraversalPreflightContext,
+} from "@domain/shared/guardrails/filesystem-preflight";
+import {
+  assertTraversalRuntimeBudget,
+  createTraversalRuntimeBudgetState,
+  recordTraversalDirectoryVisit,
+  recordTraversalEntryVisit,
+} from "@domain/shared/guardrails/traversal-runtime-budget";
+import {
   shouldExcludeTraversalScopePath,
   shouldTraverseTraversalScopeDirectoryPath,
   type TraversalScopePolicyResolution,
@@ -16,7 +24,6 @@ import {
   type FileSystemEntryMetadataSelection,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
-import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 /**
  * Structured directory entry returned by the `list_directory_entries` tool.
@@ -73,7 +80,19 @@ async function collectDirectoryEntries(
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection,
   traversalScopePolicyResolution: TraversalScopePolicyResolution,
+  traversalRuntimeBudgetState: ReturnType<typeof createTraversalRuntimeBudgetState>,
+  traversalNarrowingGuidance: string,
 ): Promise<ListedDirectoryEntry[]> {
+  if (recursive) {
+    recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
+    assertTraversalRuntimeBudget(
+      "list_directory_entries",
+      traversalRuntimeBudgetState,
+      Date.now(),
+      traversalNarrowingGuidance,
+    );
+  }
+
   const entries = await fs.readdir(currentPath, { withFileTypes: true });
   const listedEntries: ListedDirectoryEntry[] = [];
 
@@ -84,6 +103,16 @@ async function collectDirectoryEntries(
         ? entry.name
         : path.join(currentRelativePath, entry.name);
     const relativePath = normalizeRelativePath(rawRelativePath);
+
+    if (recursive) {
+      recordTraversalEntryVisit(traversalRuntimeBudgetState);
+      assertTraversalRuntimeBudget(
+        "list_directory_entries",
+        traversalRuntimeBudgetState,
+        Date.now(),
+        traversalNarrowingGuidance,
+      );
+    }
 
     const shouldTraverseExcludedDirectory =
       recursive &&
@@ -115,6 +144,8 @@ async function collectDirectoryEntries(
         recursive,
         metadataSelection,
         traversalScopePolicyResolution,
+        traversalRuntimeBudgetState,
+        traversalNarrowingGuidance,
       );
     }
 
@@ -133,28 +164,28 @@ async function buildListedDirectoryRoot(
   respectGitIgnore: boolean,
   allowedDirectories: string[]
 ): Promise<ListedDirectoryRoot> {
-  const validPath = await validatePath(requestedPath, allowedDirectories);
-  const gitIgnoreTraversalEnrichment = respectGitIgnore
-    ? await readGitIgnoreTraversalEnrichmentForRoot(validPath)
-    : null;
-  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
+  const traversalPreflightContext = await resolveTraversalPreflightContext(
+    "list_directory_entries",
     requestedPath,
     excludePatterns,
-    {
-      includeExcludedGlobs,
-      respectGitIgnore,
-      gitIgnoreTraversalEnrichment,
-    },
+    includeExcludedGlobs,
+    respectGitIgnore,
+    allowedDirectories,
+    ["directory"],
   );
+  const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
+  const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(requestedPath);
 
   return {
     requestedPath,
     entries: await collectDirectoryEntries(
-      validPath,
+      traversalPreflightContext.rootEntry.validPath,
       "",
       recursive,
       metadataSelection,
-      traversalScopePolicyResolution,
+      traversalPreflightContext.traversalScopePolicyResolution,
+      traversalRuntimeBudgetState,
+      traversalNarrowingGuidance,
     ),
   };
 }

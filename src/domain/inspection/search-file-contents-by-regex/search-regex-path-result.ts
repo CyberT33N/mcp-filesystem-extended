@@ -1,11 +1,12 @@
 import fs from "fs/promises";
 import path from "path";
 
-import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import {
   assertCandidateByteBudget,
   assertExpectedFileTypes,
+  buildTraversalNarrowingGuidance,
   collectValidatedFilesystemPreflightEntries,
+  resolveTraversalPreflightContext,
   type FilesystemPreflightEntry,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
@@ -17,6 +18,7 @@ import {
 import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
+  isTraversalRuntimeBudgetExceededError,
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
@@ -222,18 +224,6 @@ async function getValidatedPreflightEntry(
   }
 
   return firstEntry;
-}
-
-async function getValidatedSearchScopeEntry(
-  toolName: string,
-  searchPath: string,
-  allowedDirectories: string[],
-): Promise<FilesystemPreflightEntry> {
-  const rootEntry = await getValidatedPreflightEntry(toolName, searchPath, allowedDirectories);
-
-  assertExpectedFileTypes(toolName, [rootEntry], ["file", "directory"]);
-
-  return rootEntry;
 }
 
 async function collectRegexMatchesFromFileEntry(
@@ -455,13 +445,18 @@ export async function getSearchRegexPathResult(
   ),
   aggregateBudgetState: RegexSearchAggregateBudgetState = createRegexSearchAggregateBudgetState(),
 ): Promise<SearchRegexPathResult> {
-  const searchScopeEntry = await getValidatedSearchScopeEntry(
+  const traversalPreflightContext = await resolveTraversalPreflightContext(
     toolName,
     searchPath,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
     allowedDirectories,
   );
+  const searchScopeEntry = traversalPreflightContext.rootEntry;
   const regex = compileGuardrailedSearchRegex(toolName, pattern, caseSensitive);
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
+  const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(searchPath);
 
   if (searchScopeEntry.type === "file") {
     const fileSearchResult = await collectRegexMatchesFromFileEntry(
@@ -491,18 +486,8 @@ export async function getSearchRegexPathResult(
   }
 
   const validRootPath = searchScopeEntry.validPath;
-  const gitIgnoreTraversalEnrichment = respectGitIgnore
-    ? await readGitIgnoreTraversalEnrichmentForRoot(validRootPath)
-    : null;
-  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
-    searchPath,
-    excludePatterns,
-    {
-      includeExcludedGlobs,
-      respectGitIgnore,
-      gitIgnoreTraversalEnrichment,
-    },
-  );
+  const traversalScopePolicyResolution =
+    traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
 
   const results: RegexSearchMatch[] = [];
@@ -511,6 +496,20 @@ export async function getSearchRegexPathResult(
   let searchAborted = false;
   let totalBytesScanned = 0;
   let unsupportedStateReason: string | null = null;
+
+  function markTraversalBudgetExceeded(error: unknown): boolean {
+    if (!isTraversalRuntimeBudgetExceededError(error)) {
+      return false;
+    }
+
+    searchAborted = true;
+
+    if (unsupportedStateReason === null) {
+      unsupportedStateReason = error.message;
+    }
+
+    return true;
+  }
 
   async function searchDirectory(
     dirPath: string,
@@ -521,7 +520,20 @@ export async function getSearchRegexPathResult(
     }
 
     recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
-    assertTraversalRuntimeBudget(toolName, traversalRuntimeBudgetState);
+    try {
+      assertTraversalRuntimeBudget(
+        toolName,
+        traversalRuntimeBudgetState,
+        Date.now(),
+        traversalNarrowingGuidance,
+      );
+    } catch (error) {
+      if (markTraversalBudgetExceeded(error)) {
+        return;
+      }
+
+      throw error;
+    }
 
     let entryNames: string[];
 
@@ -537,7 +549,20 @@ export async function getSearchRegexPathResult(
       }
 
       recordTraversalEntryVisit(traversalRuntimeBudgetState);
-      assertTraversalRuntimeBudget(toolName, traversalRuntimeBudgetState);
+      try {
+        assertTraversalRuntimeBudget(
+          toolName,
+          traversalRuntimeBudgetState,
+          Date.now(),
+          traversalNarrowingGuidance,
+        );
+      } catch (error) {
+        if (markTraversalBudgetExceeded(error)) {
+          break;
+        }
+
+        throw error;
+      }
 
       const fullPath = path.join(dirPath, entryName);
       let candidateEntry: FilesystemPreflightEntry;

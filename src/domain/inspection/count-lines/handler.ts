@@ -4,8 +4,17 @@ import {
   DISCOVERY_RESPONSE_CAP_CHARS,
   INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
-import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
+import {
+  buildTraversalNarrowingGuidance,
+  resolveTraversalPreflightContext,
+} from "@domain/shared/guardrails/filesystem-preflight";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
+import {
+  assertTraversalRuntimeBudget,
+  createTraversalRuntimeBudgetState,
+  recordTraversalDirectoryVisit,
+  recordTraversalEntryVisit,
+} from "@domain/shared/guardrails/traversal-runtime-budget";
 import {
   CountQueryExecutionLane,
   buildPatternAwareCountCommand,
@@ -17,7 +26,6 @@ import {
   type PatternClassification,
 } from "@domain/shared/search/pattern-classifier";
 import {
-  resolveTraversalScopePolicy,
   shouldExcludeTraversalScopePath,
   shouldTraverseTraversalScopeDirectoryPath,
 } from "@domain/shared/guardrails/traversal-scope-policy";
@@ -474,24 +482,41 @@ async function countLinesInDirectory(
   allowedDirectories: string[]
 ): Promise<FileLineCount[]> {
   const results: FileLineCount[] = [];
-  const gitIgnoreTraversalEnrichment = respectGitIgnore
-    ? await readGitIgnoreTraversalEnrichmentForRoot(dirPath)
-    : null;
-  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
+  const traversalPreflightContext = await resolveTraversalPreflightContext(
+    "count_lines",
     requestedRootPath,
     excludePatterns,
-    {
-      includeExcludedGlobs,
-      respectGitIgnore,
-      gitIgnoreTraversalEnrichment,
-    }
+    includeExcludedGlobs,
+    respectGitIgnore,
+    allowedDirectories,
+    ["directory"],
   );
+  const validatedRootPath = traversalPreflightContext.rootEntry.validPath;
+  const traversalScopePolicyResolution = traversalPreflightContext.traversalScopePolicyResolution;
+  const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
+  const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(requestedRootPath);
   
   async function processDirectory(currentPath: string) {
+    recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
+    assertTraversalRuntimeBudget(
+      "count_lines",
+      traversalRuntimeBudgetState,
+      Date.now(),
+      traversalNarrowingGuidance,
+    );
+
     try {
       const entries = await fs.readdir(currentPath, { withFileTypes: true });
       
       for (const entry of entries) {
+        recordTraversalEntryVisit(traversalRuntimeBudgetState);
+        assertTraversalRuntimeBudget(
+          "count_lines",
+          traversalRuntimeBudgetState,
+          Date.now(),
+          traversalNarrowingGuidance,
+        );
+
         const fullPath = path.join(currentPath, entry.name);
         
         try {
@@ -499,7 +524,7 @@ async function countLinesInDirectory(
           await validatePath(fullPath, allowedDirectories);
           
           // Get relative path for glob matching
-          const relativePath = normalizeRelativePath(path.relative(dirPath, fullPath));
+          const relativePath = normalizeRelativePath(path.relative(validatedRootPath, fullPath));
           const shouldTraverseExcludedDirectory =
             entry.isDirectory() &&
             shouldTraverseTraversalScopeDirectoryPath(
@@ -566,6 +591,6 @@ async function countLinesInDirectory(
     }
   }
   
-  await processDirectory(dirPath);
+  await processDirectory(validatedRootPath);
   return results;
 }

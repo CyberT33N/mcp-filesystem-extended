@@ -12,6 +12,12 @@ import type { FileSystemEntryType } from "@domain/inspection/shared/filesystem-e
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 
+import { readGitIgnoreTraversalEnrichmentForRoot } from "./gitignore-traversal-enrichment";
+import {
+  resolveTraversalScopePolicy,
+  type TraversalScopePolicyResolution,
+} from "./traversal-scope-policy";
+
 import {
   createToolGuardrailMetricValue,
   createMetadataPreflightRejectedFailure,
@@ -42,6 +48,31 @@ export interface FilesystemPreflightEntry {
    * Resolved filesystem entry size in bytes.
    */
   size: number;
+}
+
+/**
+ * Shared root-level traversal preflight context used before broad recursive traversal begins.
+ */
+export interface TraversalPreflightContext {
+  /**
+   * Validated root entry resolved before traversal starts.
+   */
+  rootEntry: FilesystemPreflightEntry;
+
+  /**
+   * Effective traversal-scope policy resolved for the requested root.
+   */
+  traversalScopePolicyResolution: TraversalScopePolicyResolution;
+}
+
+/**
+ * Builds canonical narrowing guidance for traversal-heavy requests.
+ *
+ * @param requestedRoot - Caller-supplied root path that should be narrowed before retry.
+ * @returns Deterministic English guidance for broad-root traversal pressure.
+ */
+export function buildTraversalNarrowingGuidance(requestedRoot: string): string {
+  return `Narrow the requested root '${requestedRoot}', add exclude globs, or target a more specific descendant before retrying broad recursive traversal.`;
 }
 
 function throwMetadataPreflightRejectedFailure(
@@ -129,6 +160,59 @@ export async function collectValidatedFilesystemPreflightEntries(
   }
 
   return entries;
+}
+
+/**
+ * Resolves the canonical root-level traversal preflight context before recursive traversal begins.
+ *
+ * @param toolName - Exact tool name that owns the traversal request.
+ * @param requestedRoot - Caller-supplied root path that anchors the traversal.
+ * @param excludePatterns - Caller-supplied exclude globs used by the traversal policy.
+ * @param includeExcludedGlobs - Additive re-include globs that reopen excluded descendants.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @param allowedTypes - Filesystem entry types that the current traversal surface accepts.
+ * @returns Validated root metadata plus the effective traversal-scope policy.
+ */
+export async function resolveTraversalPreflightContext(
+  toolName: string,
+  requestedRoot: string,
+  excludePatterns: readonly string[],
+  includeExcludedGlobs: readonly string[],
+  respectGitIgnore: boolean,
+  allowedDirectories: string[],
+  allowedTypes: Array<"file" | "directory"> = ["file", "directory"],
+): Promise<TraversalPreflightContext> {
+  const entries = await collectValidatedFilesystemPreflightEntries(
+    toolName,
+    [requestedRoot],
+    allowedDirectories,
+  );
+  const rootEntry = entries[0];
+
+  if (rootEntry === undefined) {
+    throw new Error(`Expected one validated traversal root for path: ${requestedRoot}`);
+  }
+
+  assertExpectedFileTypes(toolName, [rootEntry], allowedTypes);
+
+  const gitIgnoreTraversalEnrichment =
+    rootEntry.type === "directory" && respectGitIgnore
+      ? await readGitIgnoreTraversalEnrichmentForRoot(rootEntry.validPath)
+      : null;
+
+  return {
+    rootEntry,
+    traversalScopePolicyResolution: resolveTraversalScopePolicy(
+      requestedRoot,
+      [...excludePatterns],
+      {
+        includeExcludedGlobs: [...includeExcludedGlobs],
+        respectGitIgnore,
+        gitIgnoreTraversalEnrichment,
+      },
+    ),
+  };
 }
 
 /**

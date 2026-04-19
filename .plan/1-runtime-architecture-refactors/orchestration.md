@@ -4,12 +4,12 @@ file_id: "1"
 unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "in_progress"
+unit_status: "done"
  total_tasks: 5
-  completed_tasks: 3
+  completed_tasks: 5
  has_sub_units: false
  sub_unit_count: 0
-  resume_frontier_task: "1.4"
+  resume_frontier_task: "1.5"
   next_frontier_task: "1.5"
 todo_window_mode_override: "inherit"
 ---
@@ -20,11 +20,11 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** in_progress
-- **Progress:** 3/5 tasks
+- **Unit Status:** done
+- **Progress:** 5/5 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.4`
+- **Resume Frontier Task:** `1.5`
 - **Next Frontier Task:** `1.5`
 - **Todo Window Mode:** `inherit`
 
@@ -61,9 +61,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: read handlers and shared read core
   - Blocked By: none
   - Summary: Preserve the two public read endpoints while consolidating their internal read logic and gating on a shared core.
-- [ ] **1.5 Traversal preflight and runtime-budget refactor** → [`1.5-traversal-preflight-and-runtime-budget-refactor.md`](./1.5-traversal-preflight-and-runtime-budget-refactor.md)
+- [x] **1.5 Traversal preflight and runtime-budget refactor** → [`1.5-traversal-preflight-and-runtime-budget-refactor.md`](./1.5-traversal-preflight-and-runtime-budget-refactor.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: DONE
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: traversal guardrails and recursive discovery/search surfaces

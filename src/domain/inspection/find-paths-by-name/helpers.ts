@@ -1,8 +1,17 @@
 import fs from "fs/promises";
 import path from "path";
-import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import {
-  resolveTraversalScopePolicy,
+  buildTraversalNarrowingGuidance,
+  resolveTraversalPreflightContext,
+} from "@domain/shared/guardrails/filesystem-preflight";
+import {
+  assertTraversalRuntimeBudget,
+  createTraversalRuntimeBudgetState,
+  isTraversalRuntimeBudgetExceededError,
+  recordTraversalDirectoryVisit,
+  recordTraversalEntryVisit,
+} from "@domain/shared/guardrails/traversal-runtime-budget";
+import {
   shouldExcludeTraversalScopePath,
   shouldTraverseTraversalScopeDirectoryPath,
 } from "@domain/shared/guardrails/traversal-scope-policy";
@@ -49,22 +58,44 @@ export async function searchFiles(
 ): Promise<SearchFilesResult> {
   const results: string[] = [];
   let truncated = false;
-  const gitIgnoreTraversalEnrichment = respectGitIgnore
-    ? await readGitIgnoreTraversalEnrichmentForRoot(rootPath)
-    : null;
-  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
+  const traversalPreflightContext = await resolveTraversalPreflightContext(
+    "find_paths_by_name",
     rootPath,
     excludePatterns,
-    {
-      includeExcludedGlobs,
-      respectGitIgnore,
-      gitIgnoreTraversalEnrichment,
-    },
+    includeExcludedGlobs,
+    respectGitIgnore,
+    allowedDirectories,
+    ["directory"],
   );
+  const validatedRootPath = traversalPreflightContext.rootEntry.validPath;
+  const traversalScopePolicyResolution = traversalPreflightContext.traversalScopePolicyResolution;
+  const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
+  const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(rootPath);
 
   async function search(currentPath: string) {
     if (truncated) {
       return;
+    }
+
+    try {
+      recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
+      assertTraversalRuntimeBudget(
+        "find_paths_by_name",
+        traversalRuntimeBudgetState,
+        Date.now(),
+        traversalNarrowingGuidance,
+      );
+    } catch (error) {
+      if (isTraversalRuntimeBudgetExceededError(error)) {
+        if (results.length === 0) {
+          throw error;
+        }
+
+        truncated = true;
+        return;
+      }
+
+      throw error;
     }
 
     const entries = await fs.readdir(currentPath, { withFileTypes: true });
@@ -74,13 +105,34 @@ export async function searchFiles(
         break;
       }
 
+      try {
+        recordTraversalEntryVisit(traversalRuntimeBudgetState);
+        assertTraversalRuntimeBudget(
+          "find_paths_by_name",
+          traversalRuntimeBudgetState,
+          Date.now(),
+          traversalNarrowingGuidance,
+        );
+      } catch (error) {
+        if (isTraversalRuntimeBudgetExceededError(error)) {
+          if (results.length === 0) {
+            throw error;
+          }
+
+          truncated = true;
+          break;
+        }
+
+        throw error;
+      }
+
       const fullPath = path.join(currentPath, entry.name);
 
       try {
         // Validate each path before processing
         await validatePath(fullPath, allowedDirectories);
 
-        const relativePath = path.relative(rootPath, fullPath).split(path.sep).join("/");
+        const relativePath = path.relative(validatedRootPath, fullPath).split(path.sep).join("/");
         const shouldTraverseExcludedDirectory =
           entry.isDirectory() &&
           shouldTraverseTraversalScopeDirectoryPath(
@@ -115,7 +167,7 @@ export async function searchFiles(
     }
   }
 
-  await search(rootPath);
+  await search(validatedRootPath);
   return {
     matches: results,
     truncated,

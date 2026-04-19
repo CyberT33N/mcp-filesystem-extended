@@ -1,13 +1,15 @@
 import fs from "fs/promises";
 import path from "path";
 
-import { readGitIgnoreTraversalEnrichmentForRoot } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import {
+  buildTraversalNarrowingGuidance,
+  resolveTraversalPreflightContext,
   type FilesystemPreflightEntry,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
+  isTraversalRuntimeBudgetExceededError,
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
@@ -32,10 +34,7 @@ import {
   createFixedStringSearchAggregateBudgetState,
 } from "./fixed-string-search-aggregate-budget-state";
 import { collectFixedStringMatchesFromFileEntry } from "./fixed-string-search-file-entry";
-import {
-  getValidatedPreflightEntry,
-  getValidatedSearchScopeEntry,
-} from "./fixed-string-search-support";
+import { getValidatedPreflightEntry } from "./fixed-string-search-support";
 
 const SEARCH_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string";
 
@@ -70,8 +69,17 @@ export async function getSearchFixedStringPathResult(
   ),
   aggregateBudgetState: FixedStringSearchAggregateBudgetState = createFixedStringSearchAggregateBudgetState(),
 ): Promise<SearchFixedStringPathResult> {
-  const searchScopeEntry = await getValidatedSearchScopeEntry(searchPath, allowedDirectories);
+  const traversalPreflightContext = await resolveTraversalPreflightContext(
+    SEARCH_FIXED_STRING_TOOL_NAME,
+    searchPath,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    allowedDirectories,
+  );
+  const searchScopeEntry = traversalPreflightContext.rootEntry;
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
+  const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(searchPath);
 
   if (searchScopeEntry.type === "file") {
     const fileSearchResult = await collectFixedStringMatchesFromFileEntry(
@@ -98,24 +106,29 @@ export async function getSearchFixedStringPathResult(
   }
 
   const validRootPath = searchScopeEntry.validPath;
-  const gitIgnoreTraversalEnrichment = respectGitIgnore
-    ? await readGitIgnoreTraversalEnrichmentForRoot(validRootPath)
-    : null;
-  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
-    searchPath,
-    excludePatterns,
-    {
-      includeExcludedGlobs,
-      respectGitIgnore,
-      gitIgnoreTraversalEnrichment,
-    },
-  );
+  const traversalScopePolicyResolution =
+    traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   const results: FixedStringSearchMatch[] = [];
   let filesSearched = 0;
   let matchesFound = 0;
   let searchAborted = false;
   let totalBytesScanned = 0;
+  let unsupportedStateReason: string | null = null;
+
+  function markTraversalBudgetExceeded(error: unknown): boolean {
+    if (!isTraversalRuntimeBudgetExceededError(error)) {
+      return false;
+    }
+
+    searchAborted = true;
+
+    if (unsupportedStateReason === null) {
+      unsupportedStateReason = error.message;
+    }
+
+    return true;
+  }
 
   async function searchDirectory(dirPath: string, currentRelativePath: string): Promise<void> {
     if (searchAborted) {
@@ -123,7 +136,20 @@ export async function getSearchFixedStringPathResult(
     }
 
     recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
-    assertTraversalRuntimeBudget(SEARCH_FIXED_STRING_TOOL_NAME, traversalRuntimeBudgetState);
+    try {
+      assertTraversalRuntimeBudget(
+        SEARCH_FIXED_STRING_TOOL_NAME,
+        traversalRuntimeBudgetState,
+        Date.now(),
+        traversalNarrowingGuidance,
+      );
+    } catch (error) {
+      if (markTraversalBudgetExceeded(error)) {
+        return;
+      }
+
+      throw error;
+    }
 
     let entryNames: string[];
 
@@ -139,7 +165,20 @@ export async function getSearchFixedStringPathResult(
       }
 
       recordTraversalEntryVisit(traversalRuntimeBudgetState);
-      assertTraversalRuntimeBudget(SEARCH_FIXED_STRING_TOOL_NAME, traversalRuntimeBudgetState);
+      try {
+        assertTraversalRuntimeBudget(
+          SEARCH_FIXED_STRING_TOOL_NAME,
+          traversalRuntimeBudgetState,
+          Date.now(),
+          traversalNarrowingGuidance,
+        );
+      } catch (error) {
+        if (markTraversalBudgetExceeded(error)) {
+          break;
+        }
+
+        throw error;
+      }
 
       const fullPath = path.join(dirPath, entryName);
       let candidateEntry: FilesystemPreflightEntry;
@@ -212,6 +251,6 @@ export async function getSearchFixedStringPathResult(
     filesSearched,
     totalMatches: matchesFound,
     truncated: searchAborted,
-    error: null,
+    error: results.length === 0 && unsupportedStateReason !== null ? unsupportedStateReason : null,
   };
 }
