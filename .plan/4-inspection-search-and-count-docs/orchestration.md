@@ -25,28 +25,28 @@ todo_window_mode_override: "inherit"
 
 ## Tasks
 - [ ] **4.1 `search_file_contents_by_regex` doc set** → [`4.1-search-file-contents-by-regex-doc-set.md`](./4.1-search-file-contents-by-regex-doc-set.md)
-  - Classification: WAITING
+  - Classification: ISOLATED
   - Status: pending
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
-  - Blocked By: 1.5
+  - Blocked By: none
   - Summary: Document the regex-search endpoint after the hybrid/text-state and traversal-governance refactors settle.
 - [ ] **4.2 `search_file_contents_by_fixed_string` doc set** → [`4.2-search-file-contents-by-fixed-string-doc-set.md`](./4.2-search-file-contents-by-fixed-string-doc-set.md)
-  - Classification: WAITING
+  - Classification: SEQUENTIAL
   - Status: pending
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
-  - Blocked By: 1.5
+  - Blocked By: 4.1
   - Summary: Document the fixed-string endpoint as the preferred hybrid-searchable literal lane.
 - [ ] **4.3 `count_lines` doc set** → [`4.3-count-lines-doc-set.md`](./4.3-count-lines-doc-set.md)
-  - Classification: WAITING
+  - Classification: SEQUENTIAL
   - Status: pending
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
-  - Blocked By: 1.5
+  - Blocked By: 4.1
   - Summary: Document the count-lines endpoint after it is aligned to the shared state and preflight model.
 
 ## Internal Dependencies (This Level)

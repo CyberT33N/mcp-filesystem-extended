@@ -25,20 +25,20 @@ todo_window_mode_override: "inherit"
 
 ## Tasks
 - [ ] **5.1 `read_files_with_line_numbers` doc set** → [`5.1-read-files-with-line-numbers-doc-set.md`](./5.1-read-files-with-line-numbers-doc-set.md)
-  - Classification: WAITING
+  - Classification: ISOLATED
   - Status: pending
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
-  - Blocked By: 1.4
+  - Blocked By: none
   - Summary: Document the small multi-file line-numbered reader and its distinct public role.
 - [ ] **5.2 `read_file_content` doc set** → [`5.2-read-file-content-doc-set.md`](./5.2-read-file-content-doc-set.md)
-  - Classification: WAITING
+  - Classification: SEQUENTIAL
   - Status: pending
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
-  - Blocked By: 1.4
+  - Blocked By: 5.1
   - Summary: Document the advanced single-file reader with explicit mode semantics and shared internal read-core lineage.
 
 ## Internal Dependencies (This Level)

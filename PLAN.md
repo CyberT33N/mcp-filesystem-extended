@@ -4,17 +4,17 @@ file_id: "filesystem-mcp-enterprise-runtime-and-documentation-plan"
 plan_version: 1
 created: "2026-04-18T00:00:00Z"
 last_updated: "2026-04-18T00:00:00Z"
-status: "pending"
+ status: "in_progress"
 total_units: 11
-completed_units: 0
+ completed_units: 1
 total_tasks_all_levels: 32
-completed_tasks_all_levels: 0
+ completed_tasks_all_levels: 5
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-resume_frontier_unit: "1"
-resume_frontier_task: "1.1"
-next_frontier_task: "1.2"
+ resume_frontier_unit: "2"
+ resume_frontier_task: "2.1"
+ next_frontier_task: "2.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -41,28 +41,28 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Plan Directory:** `.plan/`
 - **Total Units:** 11
 - **Hierarchy Depth:** 2 levels
-- **Overall Status:** pending
-- **Progress:** 0/32 tasks completed
+- **Overall Status:** in_progress
+- **Progress:** 5/32 tasks completed
 - **Historical Backup Plan:** [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md)
 
 ## Execution Frontier
 [INTENT: REFERENCE]
 
-- **Resume Frontier Unit:** `1`
-- **Resume Frontier Task:** `1.1`
-- **Next Frontier Task:** `1.2`
+- **Resume Frontier Unit:** `2`
+- **Resume Frontier Task:** `2.1`
+- **Next Frontier Task:** `2.2`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
-- **Frontier Rule:** Runtime architecture refactors execute before endpoint-level documentation and root TOC integration. Root documentation waits until endpoint-local SSOT surfaces exist.
+- **Frontier Rule:** Unit 1 is complete. The active frontier now starts with the newly unblocked endpoint-local documentation path, while later validation units keep their remaining dependencies.
 
 ## Units
 [INTENT: REFERENCE]
 
 - [ ] **1. Runtime Architecture Refactors** → [`.plan/1-runtime-architecture-refactors/orchestration.md`](.plan/1-runtime-architecture-refactors/orchestration.md)
   - Classification: Mixed
-  - Status: pending | Tasks: 5 | Completed: 0
+  - Status: done | Tasks: 5 | Completed: 5
   - Summary: Introduce the shared inspection content-state model, hybrid-aware routing, internal read-core SSOT, and traversal/preflight governance refactors.
 - [ ] **2. Inspection Discovery Docs** → [`.plan/2-inspection-discovery-docs/orchestration.md`](.plan/2-inspection-discovery-docs/orchestration.md)
-  - Classification: WAITING
+  - Classification: ISOLATED
   - Status: pending | Tasks: 3 | Completed: 0
   - Summary: Create endpoint-local documentation sets for discovery-oriented inspection tools whose conventions depend on the final traversal model.
 - [ ] **3. Inspection Metadata and Integrity Docs** → [`.plan/3-inspection-metadata-and-integrity-docs/orchestration.md`](.plan/3-inspection-metadata-and-integrity-docs/orchestration.md)
@@ -70,11 +70,11 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
   - Status: pending | Tasks: 3 | Completed: 0
   - Summary: Create endpoint-local documentation sets for metadata, checksum, and integrity-oriented inspection tools.
 - [ ] **4. Inspection Search and Count Docs** → [`.plan/4-inspection-search-and-count-docs/orchestration.md`](.plan/4-inspection-search-and-count-docs/orchestration.md)
-  - Classification: WAITING
+  - Classification: Mixed
   - Status: pending | Tasks: 3 | Completed: 0
   - Summary: Create endpoint-local documentation sets for regex search, fixed-string search, and count-lines after the runtime/search refactors land.
 - [ ] **5. Inspection Read Docs** → [`.plan/5-inspection-read-docs/orchestration.md`](.plan/5-inspection-read-docs/orchestration.md)
-  - Classification: WAITING
+  - Classification: Mixed
   - Status: pending | Tasks: 2 | Completed: 0
   - Summary: Create endpoint-local documentation sets for the two separate public read tools while documenting their intentionally distinct public roles and shared internal SSOT refactor.
 - [ ] **6. Comparison Docs** → [`.plan/6-comparison-docs/orchestration.md`](.plan/6-comparison-docs/orchestration.md)
@@ -107,13 +107,13 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 
 | ID | Source | Target | Type | Status | Description | Shared Files |
 |----|--------|--------|------|--------|-------------|--------------|
-| D1 | 2.1-2.3 | 1.5 | WAITING | UNRESOLVED | Discovery-endpoint documentation must describe the finalized traversal, preflight, and runtime-budget model. | `src/domain/shared/guardrails/traversal-runtime-budget.ts`, `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
-| D2 | 4.1-4.3 | 1.5 | WAITING | UNRESOLVED | Search/count documentation must reflect the final content-state, hybrid-lane, and timeout/preflight architecture. | `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/domain/inspection/count-lines/**` |
-| D3 | 5.1-5.2 | 1.4 | WAITING | UNRESOLVED | Read-endpoint documentation must describe the final public split and internal shared read-core refactor. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
+| D1 | 2.1-2.3 | 1.5 | WAITING | RESOLVED | Discovery-endpoint documentation now re-anchors the finalized traversal, preflight, and runtime-budget model from completed unit 1. | `src/domain/shared/guardrails/traversal-runtime-budget.ts`, `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
+| D2 | 4.1-4.3 | 1.5 | WAITING | RESOLVED | Search/count documentation now re-anchors the finalized content-state, hybrid-lane, and timeout/preflight architecture from completed unit 1. | `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/domain/inspection/count-lines/**` |
+| D3 | 5.1-5.2 | 1.4 | WAITING | RESOLVED | Read-endpoint documentation now re-anchors the finalized public split and internal shared read-core refactor from completed unit 1. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
 | D4 | 10.1 | 2.1 | WAITING | UNRESOLVED | Root conventions cannot become the SSOT TOC until endpoint-local conventions exist. | `CONVENTIONS.md` |
 | D5 | 10.2 | 2.1 | WAITING | UNRESOLVED | Root description cannot become the SSOT TOC until endpoint-local descriptions exist. | `DESCRIPTION.md` |
 | D6 | 10.3 | 2.1 | WAITING | UNRESOLVED | Root README cannot become the DX TOC until endpoint-local READMEs exist. | `README.md` |
-| D7 | 11.1 | 1.5 | WAITING | UNRESOLVED | Public tool descriptions and server instructions must align with the finalized runtime architecture before the final validation pass. | `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts`, `src/application/server/filesystem-server.ts` |
+| D7 | 11.1 | 1.5 | WAITING | RESOLVED | Public tool descriptions and server instructions may now align to the finalized runtime architecture from completed unit 1 before the final validation pass. | `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts`, `src/application/server/filesystem-server.ts` |
 | D8 | 11.2 | 10.3 | WAITING | UNRESOLVED | The backup-reference policy and root-to-endpoint link audit require the completed root TOC surfaces. | `README.md`, `DESCRIPTION.md`, `CONVENTIONS.md` |
 | D9 | 11.3 | 11.2 | WAITING | UNRESOLVED | Final architecture validation runs only after code-contract alignment and link-policy validation complete. | `PLAN.md`, `.plan/**`, root docs, endpoint docs |
 
