@@ -25,13 +25,13 @@ todo_window_mode_override: "inherit"
 
 ## Tasks
 - [ ] **11.1 Public code-contract alignment** → [`11.1-public-code-contract-alignment.md`](./11.1-public-code-contract-alignment.md)
-  - Classification: WAITING
+  - Classification: ISOLATED
   - Status: pending
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: public registration/instruction/fuse files
-  - Blocked By: 1.5
-  - Summary: Align caller-facing code surfaces with the finalized runtime architecture after the refactor unit lands.
+  - Blocked By: none
+  - Summary: Reconfirm and, only where residual drift remains, align caller-facing code surfaces with the finalized runtime architecture now that the unit-1 runtime blocker is resolved.
 - [ ] **11.2 Backup-plan reference policy and link audit** → [`11.2-backup-plan-reference-policy-and-link-audit.md`](./11.2-backup-plan-reference-policy-and-link-audit.md)
   - Classification: WAITING
   - Status: pending
@@ -52,7 +52,7 @@ todo_window_mode_override: "inherit"
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
-| D1 | 11.2 | 11.1 | WAITING | UNRESOLVED | Backup-policy and link audit require the final caller-facing code-contract wording to exist. | root docs, endpoint docs, public contract files |
+| D1 | 11.2 | 11.1 | WAITING | UNRESOLVED | Backup-policy and link audit require the reconfirmed caller-facing code-contract wording surface to exist, even when only residual drift corrections were needed. | root docs, endpoint docs, public contract files |
 | D2 | 11.3 | 11.2 | SEQUENTIAL | UNRESOLVED | Final validation runs only after backup-policy and link audit complete. | full documentation surface |
 
 ## Execution Order
