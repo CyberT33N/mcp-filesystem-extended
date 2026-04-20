@@ -486,6 +486,7 @@ export async function getSearchRegexPathResult(
       toolName,
       previewFirstSupported: true,
       inlineCandidateByteBudget: executionPolicy.regexSyncCandidateBytesCap,
+      inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
       taskBackedExecutionSupported: false,
     },
   });

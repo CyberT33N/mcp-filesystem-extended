@@ -8,6 +8,7 @@ import {
   resolveTraversalWorkloadAdmissionDecision,
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
+import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
@@ -77,14 +78,27 @@ async function getFindFilesByGlobRootResult(
     ["directory"],
   );
   const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
+  const candidateWorkloadEvidence = await collectTraversalCandidateWorkloadEvidence({
+    validRootPath: traversalPreflightContext.rootEntry.validPath,
+    traversalScopePolicyResolution: traversalPreflightContext.traversalScopePolicyResolution,
+    runtimeBudgetLimits: {
+      maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
+      maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
+      softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+    },
+    inlineCandidateByteBudget: null,
+    fileMatcher: (candidateRelativePath) => minimatch(candidateRelativePath, pattern, { dot: true }),
+  });
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: searchPath,
     rootEntry: traversalPreflightContext.rootEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    candidateWorkloadEvidence,
     executionPolicy,
     consumerCapabilities: {
       toolName: "find_files_by_glob",
       previewFirstSupported: false,
+      inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
       taskBackedExecutionSupported: false,
     },
   });

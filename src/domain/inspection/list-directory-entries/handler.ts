@@ -9,6 +9,7 @@ import {
   resolveTraversalWorkloadAdmissionDecision,
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
+import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
@@ -181,14 +182,29 @@ async function buildListedDirectoryRoot(
     recursive,
   );
   const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
+  const candidateWorkloadEvidence = recursive
+    ? await collectTraversalCandidateWorkloadEvidence({
+        validRootPath: traversalPreflightContext.rootEntry.validPath,
+        traversalScopePolicyResolution: traversalPreflightContext.traversalScopePolicyResolution,
+        runtimeBudgetLimits: {
+          maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
+          maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
+          softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+        },
+        inlineCandidateByteBudget: null,
+        fileMatcher: () => true,
+      })
+    : null;
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: requestedPath,
     rootEntry: traversalPreflightContext.rootEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    candidateWorkloadEvidence,
     executionPolicy,
     consumerCapabilities: {
       toolName: "list_directory_entries",
       previewFirstSupported: false,
+      inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
       taskBackedExecutionSupported: false,
     },
   });

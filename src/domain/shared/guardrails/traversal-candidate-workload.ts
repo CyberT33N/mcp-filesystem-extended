@@ -59,7 +59,7 @@ export interface CollectTraversalCandidateWorkloadEvidenceInput {
   /**
    * Candidate-byte ceiling whose overflow proves that inline execution is no longer appropriate.
    */
-  inlineCandidateByteBudget: number;
+  inlineCandidateByteBudget?: number | null;
 
   /**
    * Lane-specific file matcher applied to candidate paths relative to the requested root.
@@ -181,7 +181,12 @@ export async function collectTraversalCandidateWorkloadEvidence(
       estimatedCandidateBytes += candidateStats.size;
       matchedCandidateFiles += 1;
 
-      if (estimatedCandidateBytes > input.inlineCandidateByteBudget) {
+      const inlineCandidateByteBudget = input.inlineCandidateByteBudget ?? null;
+
+      if (
+        inlineCandidateByteBudget !== null
+        && estimatedCandidateBytes > inlineCandidateByteBudget
+      ) {
         probeTruncated = true;
         break;
       }

@@ -43,6 +43,12 @@ export interface TraversalWorkloadAdmissionConsumerCapabilities {
   inlineCandidateByteBudget?: number | null;
 
   /**
+   * Candidate-file ceiling above which per-file execution fan-out is no longer appropriate for the
+   * inline lane of this consumer.
+   */
+  inlineCandidateFileBudget?: number | null;
+
+  /**
    * Whether this consumer owns a real task-backed execution lane for oversized workloads.
    */
   taskBackedExecutionSupported: boolean;
@@ -134,6 +140,22 @@ function exceedsInlineCandidateByteBudget(
   );
 }
 
+function exceedsInlineCandidateFileBudget(
+  input: TraversalWorkloadAdmissionInput,
+): boolean {
+  const candidateWorkloadEvidence = input.candidateWorkloadEvidence ?? null;
+  const inlineCandidateFileBudget = input.consumerCapabilities.inlineCandidateFileBudget ?? null;
+
+  if (candidateWorkloadEvidence === null || inlineCandidateFileBudget === null) {
+    return false;
+  }
+
+  return (
+    candidateWorkloadEvidence.probeTruncated
+    || candidateWorkloadEvidence.matchedCandidateFiles > inlineCandidateFileBudget
+  );
+}
+
 function buildPreviewFirstAdmissionGuidance(
   requestedRoot: string,
   toolName: string,
@@ -190,9 +212,11 @@ export function resolveTraversalWorkloadAdmissionDecision(
   }
 
   const inlineCandidateBudgetExceeded = exceedsInlineCandidateByteBudget(input);
+  const inlineCandidateFileBudgetExceeded = exceedsInlineCandidateFileBudget(input);
 
   if (
     !inlineCandidateBudgetExceeded
+    && !inlineCandidateFileBudgetExceeded
     && isWithinInlineAdmissionBand(input.admissionEvidence, input.executionPolicy)
   ) {
     return {
@@ -205,6 +229,7 @@ export function resolveTraversalWorkloadAdmissionDecision(
     input.consumerCapabilities.previewFirstSupported
     && (
       inlineCandidateBudgetExceeded
+      || inlineCandidateFileBudgetExceeded
       || isWithinPreviewFirstAdmissionBand(input.admissionEvidence, input.executionPolicy)
     )
   ) {

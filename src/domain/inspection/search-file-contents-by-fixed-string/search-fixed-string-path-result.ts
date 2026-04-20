@@ -139,6 +139,7 @@ export async function getSearchFixedStringPathResult(
       toolName: SEARCH_FIXED_STRING_TOOL_NAME,
       previewFirstSupported: true,
       inlineCandidateByteBudget: executionPolicy.fixedStringSyncCandidateBytesCap,
+      inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
       taskBackedExecutionSupported: false,
     },
   });

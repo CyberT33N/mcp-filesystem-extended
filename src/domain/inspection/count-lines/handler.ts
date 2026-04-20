@@ -12,6 +12,7 @@ import {
   resolveTraversalWorkloadAdmissionDecision,
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
+import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
   assertTraversalRuntimeBudget,
@@ -498,14 +499,28 @@ async function countLinesInDirectory(
     ["directory"],
   );
   const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
+  const candidateWorkloadEvidence = await collectTraversalCandidateWorkloadEvidence({
+    validRootPath: traversalPreflightContext.rootEntry.validPath,
+    traversalScopePolicyResolution: traversalPreflightContext.traversalScopePolicyResolution,
+    runtimeBudgetLimits: {
+      maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
+      maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
+      softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+    },
+    inlineCandidateByteBudget: null,
+    fileMatcher: (candidateRelativePath) =>
+      matchesIncludedFilePatterns(candidateRelativePath, filePatterns),
+  });
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: requestedRootPath,
     rootEntry: traversalPreflightContext.rootEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    candidateWorkloadEvidence,
     executionPolicy,
     consumerCapabilities: {
       toolName: "count_lines",
       previewFirstSupported: false,
+      inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
       taskBackedExecutionSupported: false,
     },
   });

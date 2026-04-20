@@ -20,8 +20,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** in_progress
-- **Progress:** 5/6 tasks
+- **Unit Status:** done
+- **Progress:** 6/6 tasks
 
 ## Execution Frontier
 - **Resume Frontier Task:** `1.6`

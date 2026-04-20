@@ -85,6 +85,12 @@ export interface SearchExecutionPolicy {
   traversalInlineDirectoryBudget: number;
 
   /**
+   * Candidate-file ceiling that still permits inline recursive traversal before per-file execution
+   * fan-out becomes too expensive for the inline lane.
+   */
+  traversalInlineCandidateFileBudget: number;
+
+  /**
    * Entry-budget ceiling that still permits preview-first traversal before narrowing becomes mandatory.
    */
   traversalPreviewFirstEntryBudget: number;
@@ -261,6 +267,21 @@ function resolveTraversalInlineDirectoryBudget(tier: SourceReadTier): number {
   }
 }
 
+function resolveTraversalInlineCandidateFileBudget(tier: SourceReadTier): number {
+  switch (tier) {
+    case SourceReadTier.S:
+      return 6_000;
+    case SourceReadTier.A:
+      return 4_000;
+    case SourceReadTier.B:
+      return 2_500;
+    case SourceReadTier.C:
+      return 1_500;
+    case SourceReadTier.D:
+      return 800;
+  }
+}
+
 function resolveTraversalPreviewFirstEntryBudget(tier: SourceReadTier): number {
   switch (tier) {
     case SourceReadTier.S:
@@ -341,6 +362,9 @@ export function resolveSearchExecutionPolicy(
     fixedStringServiceHardGapBytes: REGEX_SEARCH_MAX_CANDIDATE_BYTES,
     traversalInlineEntryBudget: resolveTraversalInlineEntryBudget(effectiveSourceReadTier),
     traversalInlineDirectoryBudget: resolveTraversalInlineDirectoryBudget(effectiveSourceReadTier),
+    traversalInlineCandidateFileBudget: resolveTraversalInlineCandidateFileBudget(
+      effectiveSourceReadTier,
+    ),
     traversalPreviewFirstEntryBudget: resolveTraversalPreviewFirstEntryBudget(effectiveSourceReadTier),
     traversalPreviewFirstDirectoryBudget: resolveTraversalPreviewFirstDirectoryBudget(effectiveSourceReadTier),
     traversalPreviewExecutionEntryBudget: resolveTraversalPreviewFirstEntryBudget(
