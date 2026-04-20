@@ -3,6 +3,7 @@ import {
   type FilesystemPreflightEntry,
   type TraversalPreflightAdmissionEvidence,
 } from "./filesystem-preflight";
+import type { TraversalCandidateWorkloadEvidence } from "./traversal-candidate-workload";
 
 import { type SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 
@@ -37,6 +38,11 @@ export interface TraversalWorkloadAdmissionConsumerCapabilities {
   previewFirstSupported: boolean;
 
   /**
+   * Candidate-byte ceiling above which inline execution is no longer appropriate for this consumer.
+   */
+  inlineCandidateByteBudget?: number | null;
+
+  /**
    * Whether this consumer owns a real task-backed execution lane for oversized workloads.
    */
   taskBackedExecutionSupported: boolean;
@@ -60,6 +66,11 @@ export interface TraversalWorkloadAdmissionInput {
    * Preflight breadth evidence gathered before recursive traversal begins.
    */
   admissionEvidence: TraversalPreflightAdmissionEvidence | null;
+
+  /**
+   * Execution-aware candidate-workload evidence collected before full traversal begins.
+   */
+  candidateWorkloadEvidence?: TraversalCandidateWorkloadEvidence | null;
 
   /**
    * Shared execution-policy vocabulary derived from runtime capability signals.
@@ -107,6 +118,29 @@ function isWithinPreviewFirstAdmissionBand(
   );
 }
 
+function exceedsInlineCandidateByteBudget(
+  input: TraversalWorkloadAdmissionInput,
+): boolean {
+  const candidateWorkloadEvidence = input.candidateWorkloadEvidence ?? null;
+  const inlineCandidateByteBudget = input.consumerCapabilities.inlineCandidateByteBudget ?? null;
+
+  if (candidateWorkloadEvidence === null || inlineCandidateByteBudget === null) {
+    return false;
+  }
+
+  return (
+    candidateWorkloadEvidence.probeTruncated
+    || candidateWorkloadEvidence.estimatedCandidateBytes > inlineCandidateByteBudget
+  );
+}
+
+function buildPreviewFirstAdmissionGuidance(
+  requestedRoot: string,
+  toolName: string,
+): string {
+  return `Broad recursive traversal for root '${requestedRoot}' is being admitted in preview-first mode for ${toolName}. The bounded preview lane will stop before the deeper runtime safeguard becomes the dominant caller-facing control.`;
+}
+
 function buildTaskBackedRequiredGuidance(
   requestedRoot: string,
   toolName: string,
@@ -120,6 +154,21 @@ function buildNarrowingRequiredGuidance(
   admissionEvidence: TraversalPreflightAdmissionEvidence,
 ): string {
   return `${buildTraversalNarrowingGuidance(requestedRoot)} Broad recursive traversal for ${toolName} exceeded the inline admission band at ${admissionEvidence.visitedEntries} visited entries and ${admissionEvidence.visitedDirectories} visited directories before execution began, and this surface has no task-backed execution lane.`;
+}
+
+/**
+ * Builds canonical caller guidance when a preview-first traversal lane stops before a full
+ * recursive scan completes.
+ *
+ * @param requestedRoot - Caller-supplied root path that should be narrowed before retry.
+ * @param toolName - Exact consumer surface that exhausted the bounded preview lane.
+ * @returns Deterministic English guidance for preview-lane exhaustion.
+ */
+export function buildTraversalPreviewFirstTruncationGuidance(
+  requestedRoot: string,
+  toolName: string,
+): string {
+  return `Preview-first traversal for root '${requestedRoot}' stopped after the bounded preview lane for ${toolName} was exhausted before a full recursive scan completed. ${buildTraversalNarrowingGuidance(requestedRoot)}`;
 }
 
 /**
@@ -140,7 +189,12 @@ export function resolveTraversalWorkloadAdmissionDecision(
     };
   }
 
-  if (isWithinInlineAdmissionBand(input.admissionEvidence, input.executionPolicy)) {
+  const inlineCandidateBudgetExceeded = exceedsInlineCandidateByteBudget(input);
+
+  if (
+    !inlineCandidateBudgetExceeded
+    && isWithinInlineAdmissionBand(input.admissionEvidence, input.executionPolicy)
+  ) {
     return {
       outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE,
       guidanceText: null,
@@ -149,11 +203,17 @@ export function resolveTraversalWorkloadAdmissionDecision(
 
   if (
     input.consumerCapabilities.previewFirstSupported
-    && isWithinPreviewFirstAdmissionBand(input.admissionEvidence, input.executionPolicy)
+    && (
+      inlineCandidateBudgetExceeded
+      || isWithinPreviewFirstAdmissionBand(input.admissionEvidence, input.executionPolicy)
+    )
   ) {
     return {
       outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST,
-      guidanceText: `Broad recursive traversal for root '${input.requestedRoot}' is being admitted in preview-first mode before ${input.consumerCapabilities.toolName} enters its traversal loop.`,
+      guidanceText: buildPreviewFirstAdmissionGuidance(
+        input.requestedRoot,
+        input.consumerCapabilities.toolName,
+      ),
     };
   }
 

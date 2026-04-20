@@ -3,7 +3,6 @@ import path from "path";
 
 import {
   assertCandidateByteBudget,
-  assertExpectedFileTypes,
   buildTraversalNarrowingGuidance,
   collectValidatedFilesystemPreflightEntries,
   resolveTraversalPreflightContext,
@@ -26,22 +25,23 @@ import {
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
- import {
-   resolveTraversalScopePolicy,
-   shouldExcludeTraversalScopePath,
-   shouldTraverseTraversalScopeDirectoryPath,
- } from "@domain/shared/guardrails/traversal-scope-policy";
- import { classifyPattern } from "@domain/shared/search/pattern-classifier";
- import { resolveSearchExecutionPolicy, type SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
+import {
+  shouldExcludeTraversalScopePath,
+  shouldTraverseTraversalScopeDirectoryPath,
+} from "@domain/shared/guardrails/traversal-scope-policy";
+import {
+  resolveTraversalPreviewLanePlan,
+  shouldStopTraversalPreviewLane,
+} from "@domain/shared/guardrails/traversal-preview-lane";
+import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
+import { classifyPattern } from "@domain/shared/search/pattern-classifier";
+import { resolveSearchExecutionPolicy, type SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import {
   classifyInspectionContentState,
   INSPECTION_CONTENT_STATE_LITERALS,
   type InspectionContentStateClassification,
 } from "@domain/shared/search/inspection-content-state";
- import {
-   REGEX_SEARCH_MAX_CANDIDATE_BYTES,
-   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
- } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { buildUgrepCommand } from "@infrastructure/search/ugrep-command-builder";
 import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
@@ -461,14 +461,31 @@ export async function getSearchRegexPathResult(
   const regex = compileGuardrailedSearchRegex(toolName, pattern, caseSensitive);
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(searchPath);
+  const previewExecutionRuntimeBudgetLimits = {
+    maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
+    maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
+    softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+  };
+  const candidateWorkloadEvidence = searchScopeEntry.type === "directory"
+    ? await collectTraversalCandidateWorkloadEvidence({
+        validRootPath: searchScopeEntry.validPath,
+        traversalScopePolicyResolution: traversalPreflightContext.traversalScopePolicyResolution,
+        runtimeBudgetLimits: previewExecutionRuntimeBudgetLimits,
+        inlineCandidateByteBudget: executionPolicy.regexSyncCandidateBytesCap,
+        fileMatcher: (candidateRelativePath) =>
+          matchesIncludedFilePatterns(candidateRelativePath, filePatterns),
+      })
+    : null;
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: searchPath,
     rootEntry: searchScopeEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    candidateWorkloadEvidence,
     executionPolicy,
     consumerCapabilities: {
       toolName,
       previewFirstSupported: true,
+      inlineCandidateByteBudget: executionPolicy.regexSyncCandidateBytesCap,
       taskBackedExecutionSupported: false,
     },
   });
@@ -485,6 +502,13 @@ export async function getSearchRegexPathResult(
       ),
     )
     : effectiveMaxResults;
+  const previewLanePlan = resolveTraversalPreviewLanePlan(
+    searchPath,
+    toolName,
+    traversalAdmissionDecision,
+    executionPolicy,
+    executionPolicy.regexSyncCandidateBytesCap,
+  );
 
   if (
     traversalAdmissionDecision.outcome
@@ -503,6 +527,23 @@ export async function getSearchRegexPathResult(
   }
 
   if (searchScopeEntry.type === "file") {
+    if (
+      shouldStopTraversalPreviewLane(
+        aggregateBudgetState.totalCandidateBytesScanned,
+        searchScopeEntry.size,
+        previewLanePlan,
+      )
+    ) {
+      return {
+        root: searchPath,
+        matches: [],
+        filesSearched: 0,
+        totalMatches: 0,
+        truncated: true,
+        error: previewLanePlan.guidanceText,
+      };
+    }
+
     const fileSearchResult = await collectRegexMatchesFromFileEntry(
       toolName,
       searchScopeEntry,
@@ -548,7 +589,9 @@ export async function getSearchRegexPathResult(
 
     searchAborted = true;
 
-    if (unsupportedStateReason === null) {
+    if (previewLanePlan.guidanceText !== null) {
+      unsupportedStateReason = previewLanePlan.guidanceText;
+    } else if (unsupportedStateReason === null) {
       unsupportedStateReason = error.message;
     }
 
@@ -570,6 +613,7 @@ export async function getSearchRegexPathResult(
         traversalRuntimeBudgetState,
         Date.now(),
         traversalNarrowingGuidance,
+        previewLanePlan.runtimeBudgetLimits ?? undefined,
       );
     } catch (error) {
       if (markTraversalBudgetExceeded(error)) {
@@ -599,6 +643,7 @@ export async function getSearchRegexPathResult(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
+          previewLanePlan.runtimeBudgetLimits ?? undefined,
         );
       } catch (error) {
         if (markTraversalBudgetExceeded(error)) {
@@ -641,6 +686,22 @@ export async function getSearchRegexPathResult(
 
       if (candidateEntry.type !== "file") {
         continue;
+      }
+
+      if (
+        shouldStopTraversalPreviewLane(
+          aggregateBudgetState.totalCandidateBytesScanned,
+          candidateEntry.size,
+          previewLanePlan,
+        )
+      ) {
+        searchAborted = true;
+
+        if (unsupportedStateReason === null) {
+          unsupportedStateReason = previewLanePlan.guidanceText;
+        }
+
+        break;
       }
 
       const fileSearchResult = await collectRegexMatchesFromFileEntry(

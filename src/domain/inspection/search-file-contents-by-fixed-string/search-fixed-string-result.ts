@@ -100,6 +100,10 @@ export function formatSearchFixedStringPathOutput(
   effectiveMaxResults: number,
 ): string {
   if (result.error !== null) {
+    if (result.error.startsWith("Preview-first traversal for root ")) {
+      return result.error;
+    }
+
     return `Fixed-string search failed for root ${result.root}: ${result.error}`;
   }
 

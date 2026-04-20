@@ -2,6 +2,7 @@ import {
   REGEX_SEARCH_MAX_CANDIDATE_BYTES,
   TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES,
   TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES,
+  TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
   CpuRegexTier,
@@ -92,6 +93,21 @@ export interface SearchExecutionPolicy {
    * Directory-budget ceiling that still permits preview-first traversal before narrowing becomes mandatory.
    */
   traversalPreviewFirstDirectoryBudget: number;
+
+  /**
+   * Entry-budget ceiling enforced while the bounded preview-first lane is executing.
+   */
+  traversalPreviewExecutionEntryBudget: number;
+
+  /**
+   * Directory-budget ceiling enforced while the bounded preview-first lane is executing.
+   */
+  traversalPreviewExecutionDirectoryBudget: number;
+
+  /**
+   * Soft runtime budget in milliseconds enforced while the bounded preview-first lane is executing.
+   */
+  traversalPreviewExecutionTimeBudgetMs: number;
 }
 
 function downgradeSourceReadTierForConfidence(
@@ -275,6 +291,21 @@ function resolveTraversalPreviewFirstDirectoryBudget(tier: SourceReadTier): numb
   }
 }
 
+function resolveTraversalPreviewExecutionTimeBudgetMs(tier: SourceReadTier): number {
+  switch (tier) {
+    case SourceReadTier.S:
+      return Math.min(2_500, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
+    case SourceReadTier.A:
+      return Math.min(2_000, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
+    case SourceReadTier.B:
+      return Math.min(1_500, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
+    case SourceReadTier.C:
+      return Math.min(1_250, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
+    case SourceReadTier.D:
+      return Math.min(1_000, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
+  }
+}
+
 /**
  * Resolves the shared search execution policy from the current runtime capability profile.
  *
@@ -312,5 +343,14 @@ export function resolveSearchExecutionPolicy(
     traversalInlineDirectoryBudget: resolveTraversalInlineDirectoryBudget(effectiveSourceReadTier),
     traversalPreviewFirstEntryBudget: resolveTraversalPreviewFirstEntryBudget(effectiveSourceReadTier),
     traversalPreviewFirstDirectoryBudget: resolveTraversalPreviewFirstDirectoryBudget(effectiveSourceReadTier),
+    traversalPreviewExecutionEntryBudget: resolveTraversalPreviewFirstEntryBudget(
+      effectiveSourceReadTier,
+    ),
+    traversalPreviewExecutionDirectoryBudget: resolveTraversalPreviewFirstDirectoryBudget(
+      effectiveSourceReadTier,
+    ),
+    traversalPreviewExecutionTimeBudgetMs: resolveTraversalPreviewExecutionTimeBudgetMs(
+      effectiveSourceReadTier,
+    ),
   };
 }

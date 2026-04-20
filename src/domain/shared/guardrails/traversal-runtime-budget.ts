@@ -34,6 +34,33 @@ export interface TraversalRuntimeBudgetState {
 }
 
 /**
+ * Overrideable traversal-runtime ceilings used when a bounded execution lane must stay below the
+ * deeper emergency safeguard.
+ */
+export interface TraversalRuntimeBudgetLimits {
+  /**
+   * Maximum number of filesystem entries that the current traversal lane may visit.
+   */
+  maxVisitedEntries: number;
+
+  /**
+   * Maximum number of directories that the current traversal lane may descend into.
+   */
+  maxVisitedDirectories: number;
+
+  /**
+   * Soft wall-clock runtime budget in milliseconds for the current traversal lane.
+   */
+  softTimeBudgetMs: number;
+}
+
+const DEFAULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS: TraversalRuntimeBudgetLimits = {
+  maxVisitedEntries: TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
+  maxVisitedDirectories: TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
+  softTimeBudgetMs: TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
+};
+
+/**
  * Structured error raised when the shared traversal runtime safeguard aborts one recursive workload.
  */
 export class TraversalRuntimeBudgetExceededError extends Error {
@@ -168,24 +195,25 @@ export function assertTraversalRuntimeBudget(
   state: TraversalRuntimeBudgetState,
   nowMs: number = Date.now(),
   narrowingGuidance?: string,
+  limits: TraversalRuntimeBudgetLimits = DEFAULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
 ): void {
-  if (state.visitedEntries > TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES) {
+  if (state.visitedEntries > limits.maxVisitedEntries) {
     throwTraversalRuntimeBudgetExceededFailure(
       toolName,
       "traversal entries visited",
       state.visitedEntries,
-      TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
+      limits.maxVisitedEntries,
       "entries",
       narrowingGuidance,
     );
   }
 
-  if (state.visitedDirectories > TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES) {
+  if (state.visitedDirectories > limits.maxVisitedDirectories) {
     throwTraversalRuntimeBudgetExceededFailure(
       toolName,
       "traversal directories visited",
       state.visitedDirectories,
-      TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
+      limits.maxVisitedDirectories,
       "directories",
       narrowingGuidance,
     );
@@ -193,12 +221,12 @@ export function assertTraversalRuntimeBudget(
 
   const elapsedMs = getTraversalRuntimeElapsedMs(state, nowMs);
 
-  if (elapsedMs > TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS) {
+  if (elapsedMs > limits.softTimeBudgetMs) {
     throwTraversalRuntimeBudgetExceededFailure(
       toolName,
       "traversal soft runtime budget",
       elapsedMs,
-      TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
+      limits.softTimeBudgetMs,
       "milliseconds",
       narrowingGuidance,
     );

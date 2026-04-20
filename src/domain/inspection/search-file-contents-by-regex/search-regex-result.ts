@@ -112,6 +112,10 @@ export function formatSearchRegexPathOutput(
   effectiveMaxResults: number,
 ): string {
   if (result.error !== null) {
+    if (result.error.startsWith("Preview-first traversal for root ")) {
+      return result.error;
+    }
+
     return `Regex search failed for root ${result.root}: ${result.error}`;
   }
 

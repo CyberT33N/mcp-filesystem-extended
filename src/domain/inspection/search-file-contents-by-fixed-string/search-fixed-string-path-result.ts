@@ -18,16 +18,21 @@ import {
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
 import {
-  resolveTraversalScopePolicy,
   shouldExcludeTraversalScopePath,
   shouldTraverseTraversalScopeDirectoryPath,
 } from "@domain/shared/guardrails/traversal-scope-policy";
+import {
+  resolveTraversalPreviewLanePlan,
+  shouldStopTraversalPreviewLane,
+} from "@domain/shared/guardrails/traversal-preview-lane";
+import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
   resolveSearchExecutionPolicy,
   type SearchExecutionPolicy,
 } from "@domain/shared/search/search-execution-policy";
 import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
+import { minimatch } from "minimatch";
 
 import {
   type FixedStringSearchMatch,
@@ -41,6 +46,31 @@ import { collectFixedStringMatchesFromFileEntry } from "./fixed-string-search-fi
 import { getValidatedPreflightEntry } from "./fixed-string-search-support";
 
 const SEARCH_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string";
+
+function matchesPreviewLaneFilePatterns(
+  candidateRelativePath: string,
+  filePatterns: string[],
+): boolean {
+  if (filePatterns.length === 0) {
+    return true;
+  }
+
+  const normalizedCandidateRelativePath = candidateRelativePath.split(path.sep).join("/");
+  const fileName = path.basename(normalizedCandidateRelativePath);
+
+  return filePatterns.some((filePattern) => {
+    const normalizedFilePattern = filePattern.split(path.sep).join("/");
+
+    if (normalizedFilePattern.includes("/")) {
+      return minimatch(normalizedCandidateRelativePath, normalizedFilePattern, {
+        dot: true,
+        nocase: true,
+      });
+    }
+
+    return minimatch(fileName, normalizedFilePattern, { dot: true, nocase: true });
+  });
+}
 
 /**
  * Resolves the fixed-string search result for one validated file or directory scope.
@@ -84,14 +114,31 @@ export async function getSearchFixedStringPathResult(
   const searchScopeEntry = traversalPreflightContext.rootEntry;
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(searchPath);
+  const previewExecutionRuntimeBudgetLimits = {
+    maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
+    maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
+    softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+  };
+  const candidateWorkloadEvidence = searchScopeEntry.type === "directory"
+    ? await collectTraversalCandidateWorkloadEvidence({
+        validRootPath: searchScopeEntry.validPath,
+        traversalScopePolicyResolution: traversalPreflightContext.traversalScopePolicyResolution,
+        runtimeBudgetLimits: previewExecutionRuntimeBudgetLimits,
+        inlineCandidateByteBudget: executionPolicy.fixedStringSyncCandidateBytesCap,
+        fileMatcher: (candidateRelativePath) =>
+          matchesPreviewLaneFilePatterns(candidateRelativePath, filePatterns),
+      })
+    : null;
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: searchPath,
     rootEntry: searchScopeEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    candidateWorkloadEvidence,
     executionPolicy,
     consumerCapabilities: {
       toolName: SEARCH_FIXED_STRING_TOOL_NAME,
       previewFirstSupported: true,
+      inlineCandidateByteBudget: executionPolicy.fixedStringSyncCandidateBytesCap,
       taskBackedExecutionSupported: false,
     },
   });
@@ -108,6 +155,13 @@ export async function getSearchFixedStringPathResult(
       ),
     )
     : effectiveMaxResults;
+  const previewLanePlan = resolveTraversalPreviewLanePlan(
+    searchPath,
+    SEARCH_FIXED_STRING_TOOL_NAME,
+    traversalAdmissionDecision,
+    executionPolicy,
+    executionPolicy.fixedStringSyncCandidateBytesCap,
+  );
 
   if (
     traversalAdmissionDecision.outcome
@@ -126,6 +180,23 @@ export async function getSearchFixedStringPathResult(
   }
 
   if (searchScopeEntry.type === "file") {
+    if (
+      shouldStopTraversalPreviewLane(
+        aggregateBudgetState.totalCandidateBytesScanned,
+        searchScopeEntry.size,
+        previewLanePlan,
+      )
+    ) {
+      return {
+        root: searchPath,
+        matches: [],
+        filesSearched: 0,
+        totalMatches: 0,
+        truncated: true,
+        error: previewLanePlan.guidanceText,
+      };
+    }
+
     const fileSearchResult = await collectFixedStringMatchesFromFileEntry(
       searchScopeEntry,
       searchPath,
@@ -167,7 +238,9 @@ export async function getSearchFixedStringPathResult(
 
     searchAborted = true;
 
-    if (unsupportedStateReason === null) {
+    if (previewLanePlan.guidanceText !== null) {
+      unsupportedStateReason = previewLanePlan.guidanceText;
+    } else if (unsupportedStateReason === null) {
       unsupportedStateReason = error.message;
     }
 
@@ -186,6 +259,7 @@ export async function getSearchFixedStringPathResult(
         traversalRuntimeBudgetState,
         Date.now(),
         traversalNarrowingGuidance,
+        previewLanePlan.runtimeBudgetLimits ?? undefined,
       );
     } catch (error) {
       if (markTraversalBudgetExceeded(error)) {
@@ -215,6 +289,7 @@ export async function getSearchFixedStringPathResult(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
+          previewLanePlan.runtimeBudgetLimits ?? undefined,
         );
       } catch (error) {
         if (markTraversalBudgetExceeded(error)) {
@@ -257,6 +332,22 @@ export async function getSearchFixedStringPathResult(
 
       if (candidateEntry.type !== "file") {
         continue;
+      }
+
+      if (
+        shouldStopTraversalPreviewLane(
+          aggregateBudgetState.totalCandidateBytesScanned,
+          candidateEntry.size,
+          previewLanePlan,
+        )
+      ) {
+        searchAborted = true;
+
+        if (unsupportedStateReason === null) {
+          unsupportedStateReason = previewLanePlan.guidanceText;
+        }
+
+        break;
       }
 
       const fileSearchResult = await collectFixedStringMatchesFromFileEntry(
