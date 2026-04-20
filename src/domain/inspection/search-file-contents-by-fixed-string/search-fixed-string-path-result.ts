@@ -7,6 +7,7 @@ import {
   type FilesystemPreflightEntry,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
+  TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS,
   resolveTraversalWorkloadAdmissionDecision,
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
@@ -140,6 +141,10 @@ export async function getSearchFixedStringPathResult(
       previewFirstSupported: true,
       inlineCandidateByteBudget: executionPolicy.fixedStringSyncCandidateBytesCap,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+      executionTimeCostMultiplier:
+        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.LITERAL_SEARCH.executionTimeCostMultiplier,
+      estimatedPerCandidateFileCostMs:
+        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.LITERAL_SEARCH.estimatedPerCandidateFileCostMs,
       taskBackedExecutionSupported: false,
     },
   });

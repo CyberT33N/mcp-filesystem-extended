@@ -18,6 +18,33 @@ export const TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES = {
 } as const;
 
 /**
+ * Canonical lane-local execution-cost models that translate bounded workload probes into
+ * conservative inline-admission estimates.
+ */
+export const TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS = {
+  COUNT_PATTERN_AWARE: {
+    executionTimeCostMultiplier: 2,
+    estimatedPerCandidateFileCostMs: 180,
+  },
+  COUNT_STREAMING: {
+    executionTimeCostMultiplier: 2,
+    estimatedPerCandidateFileCostMs: 40,
+  },
+  DISCOVERY: {
+    executionTimeCostMultiplier: 2,
+    estimatedPerCandidateFileCostMs: 0,
+  },
+  LITERAL_SEARCH: {
+    executionTimeCostMultiplier: 2,
+    estimatedPerCandidateFileCostMs: 500,
+  },
+  REGEX_SEARCH: {
+    executionTimeCostMultiplier: 2,
+    estimatedPerCandidateFileCostMs: 650,
+  },
+} as const;
+
+/**
  * Deterministic admission outcome chosen before broad recursive traversal begins.
  */
 export type TraversalWorkloadAdmissionOutcome =
@@ -47,6 +74,16 @@ export interface TraversalWorkloadAdmissionConsumerCapabilities {
    * inline lane of this consumer.
    */
   inlineCandidateFileBudget?: number | null;
+
+  /**
+   * Multiplier that projects bounded probe time into conservative lane-local execution time.
+   */
+  executionTimeCostMultiplier?: number | null;
+
+  /**
+   * Additional conservative per-candidate-file cost in milliseconds for lane-local execution.
+   */
+  estimatedPerCandidateFileCostMs?: number | null;
 
   /**
    * Whether this consumer owns a real task-backed execution lane for oversized workloads.
@@ -156,6 +193,37 @@ function exceedsInlineCandidateFileBudget(
   );
 }
 
+function estimateInlineExecutionCostMs(
+  input: TraversalWorkloadAdmissionInput,
+): number | null {
+  const candidateWorkloadEvidence = input.candidateWorkloadEvidence ?? null;
+  const executionTimeCostMultiplier = input.consumerCapabilities.executionTimeCostMultiplier ?? null;
+
+  if (candidateWorkloadEvidence === null || executionTimeCostMultiplier === null) {
+    return null;
+  }
+
+  const estimatedPerCandidateFileCostMs =
+    input.consumerCapabilities.estimatedPerCandidateFileCostMs ?? 0;
+
+  return Math.ceil(
+    candidateWorkloadEvidence.probeElapsedMs * executionTimeCostMultiplier
+    + candidateWorkloadEvidence.matchedCandidateFiles * estimatedPerCandidateFileCostMs,
+  );
+}
+
+function exceedsInlineExecutionTimeBudget(
+  input: TraversalWorkloadAdmissionInput,
+): boolean {
+  const estimatedInlineExecutionCostMs = estimateInlineExecutionCostMs(input);
+
+  if (estimatedInlineExecutionCostMs === null) {
+    return false;
+  }
+
+  return estimatedInlineExecutionCostMs > input.executionPolicy.traversalInlineExecutionBudgetMs;
+}
+
 function buildPreviewFirstAdmissionGuidance(
   requestedRoot: string,
   toolName: string,
@@ -213,10 +281,12 @@ export function resolveTraversalWorkloadAdmissionDecision(
 
   const inlineCandidateBudgetExceeded = exceedsInlineCandidateByteBudget(input);
   const inlineCandidateFileBudgetExceeded = exceedsInlineCandidateFileBudget(input);
+  const inlineExecutionTimeBudgetExceeded = exceedsInlineExecutionTimeBudget(input);
 
   if (
     !inlineCandidateBudgetExceeded
     && !inlineCandidateFileBudgetExceeded
+    && !inlineExecutionTimeBudgetExceeded
     && isWithinInlineAdmissionBand(input.admissionEvidence, input.executionPolicy)
   ) {
     return {
@@ -230,6 +300,7 @@ export function resolveTraversalWorkloadAdmissionDecision(
     && (
       inlineCandidateBudgetExceeded
       || inlineCandidateFileBudgetExceeded
+      || inlineExecutionTimeBudgetExceeded
       || isWithinPreviewFirstAdmissionBand(input.admissionEvidence, input.executionPolicy)
     )
   ) {

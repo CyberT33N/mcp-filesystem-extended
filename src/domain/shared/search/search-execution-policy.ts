@@ -91,6 +91,12 @@ export interface SearchExecutionPolicy {
   traversalInlineCandidateFileBudget: number;
 
   /**
+   * Estimated wall-clock budget in milliseconds that one inline traversal lane may consume before
+   * admission must degrade to preview-first or narrowing-required behavior.
+   */
+  traversalInlineExecutionBudgetMs: number;
+
+  /**
    * Entry-budget ceiling that still permits preview-first traversal before narrowing becomes mandatory.
    */
   traversalPreviewFirstEntryBudget: number;
@@ -282,6 +288,21 @@ function resolveTraversalInlineCandidateFileBudget(tier: SourceReadTier): number
   }
 }
 
+function resolveTraversalInlineExecutionBudgetMs(tier: SourceReadTier): number {
+  switch (tier) {
+    case SourceReadTier.S:
+      return 3_500;
+    case SourceReadTier.A:
+      return 3_000;
+    case SourceReadTier.B:
+      return 2_500;
+    case SourceReadTier.C:
+      return 2_000;
+    case SourceReadTier.D:
+      return 1_500;
+  }
+}
+
 function resolveTraversalPreviewFirstEntryBudget(tier: SourceReadTier): number {
   switch (tier) {
     case SourceReadTier.S:
@@ -363,6 +384,9 @@ export function resolveSearchExecutionPolicy(
     traversalInlineEntryBudget: resolveTraversalInlineEntryBudget(effectiveSourceReadTier),
     traversalInlineDirectoryBudget: resolveTraversalInlineDirectoryBudget(effectiveSourceReadTier),
     traversalInlineCandidateFileBudget: resolveTraversalInlineCandidateFileBudget(
+      effectiveSourceReadTier,
+    ),
+    traversalInlineExecutionBudgetMs: resolveTraversalInlineExecutionBudgetMs(
       effectiveSourceReadTier,
     ),
     traversalPreviewFirstEntryBudget: resolveTraversalPreviewFirstEntryBudget(effectiveSourceReadTier),

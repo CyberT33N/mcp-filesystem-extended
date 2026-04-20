@@ -6,6 +6,7 @@ import {
   resolveTraversalPreflightContext,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
+  TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS,
   resolveTraversalWorkloadAdmissionDecision,
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
@@ -205,6 +206,10 @@ async function buildListedDirectoryRoot(
       toolName: "list_directory_entries",
       previewFirstSupported: false,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+      executionTimeCostMultiplier:
+        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.executionTimeCostMultiplier,
+      estimatedPerCandidateFileCostMs:
+        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.estimatedPerCandidateFileCostMs,
       taskBackedExecutionSupported: false,
     },
   });

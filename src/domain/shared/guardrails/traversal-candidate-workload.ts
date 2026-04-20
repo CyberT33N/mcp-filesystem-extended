@@ -32,6 +32,11 @@ export interface TraversalCandidateWorkloadEvidence {
   matchedCandidateFiles: number;
 
   /**
+   * Wall-clock time spent by the bounded candidate-workload probe.
+   */
+  probeElapsedMs: number;
+
+  /**
    * Indicates whether the bounded probe stopped before the full candidate surface was exhausted.
    */
   probeTruncated: boolean;
@@ -76,6 +81,7 @@ export interface CollectTraversalCandidateWorkloadEvidenceInput {
 export async function collectTraversalCandidateWorkloadEvidence(
   input: CollectTraversalCandidateWorkloadEvidenceInput,
 ): Promise<TraversalCandidateWorkloadEvidence> {
+  const startedAtMs = Date.now();
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   let estimatedCandidateBytes = 0;
   let matchedCandidateFiles = 0;
@@ -198,6 +204,7 @@ export async function collectTraversalCandidateWorkloadEvidence(
   return {
     estimatedCandidateBytes,
     matchedCandidateFiles,
+    probeElapsedMs: Date.now() - startedAtMs,
     probeTruncated,
   };
 }

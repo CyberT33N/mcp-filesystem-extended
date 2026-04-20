@@ -9,6 +9,7 @@ import {
   resolveTraversalPreflightContext,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
+  TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS,
   resolveTraversalWorkloadAdmissionDecision,
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
@@ -521,6 +522,12 @@ async function countLinesInDirectory(
       toolName: "count_lines",
       previewFirstSupported: false,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+      executionTimeCostMultiplier: pattern === undefined
+        ? TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.COUNT_STREAMING.executionTimeCostMultiplier
+        : TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.COUNT_PATTERN_AWARE.executionTimeCostMultiplier,
+      estimatedPerCandidateFileCostMs: pattern === undefined
+        ? TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.COUNT_STREAMING.estimatedPerCandidateFileCostMs
+        : TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.COUNT_PATTERN_AWARE.estimatedPerCandidateFileCostMs,
       taskBackedExecutionSupported: false,
     },
   });
