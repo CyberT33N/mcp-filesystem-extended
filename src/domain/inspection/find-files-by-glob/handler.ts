@@ -122,28 +122,27 @@ async function getFindFilesByGlobRootResult(
         }
 
         const fullPath = path.join(currentPath, entry.name);
+        const rawRelativePath =
+          currentRelativePath === ""
+            ? entry.name
+            : path.join(currentRelativePath, entry.name);
+        const relativePath = normalizeRelativePath(rawRelativePath);
+        const shouldTraverseExcludedDirectory =
+          entry.isDirectory() &&
+          shouldTraverseTraversalScopeDirectoryPath(
+            relativePath,
+            traversalScopePolicyResolution
+          );
+
+        if (
+          shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
+          !shouldTraverseExcludedDirectory
+        ) {
+          continue;
+        }
 
         try {
           await validatePath(fullPath, allowedDirectories);
-
-          const rawRelativePath =
-            currentRelativePath === ""
-              ? entry.name
-              : path.join(currentRelativePath, entry.name);
-          const relativePath = normalizeRelativePath(rawRelativePath);
-          const shouldTraverseExcludedDirectory =
-            entry.isDirectory() &&
-            shouldTraverseTraversalScopeDirectoryPath(
-              relativePath,
-              traversalScopePolicyResolution
-            );
-
-          if (
-            shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
-            !shouldTraverseExcludedDirectory
-          ) {
-            continue;
-          }
 
           if (minimatch(relativePath, pattern, { dot: true })) {
             results.push(fullPath);

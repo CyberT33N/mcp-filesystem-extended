@@ -151,15 +151,15 @@ export async function getSearchFixedStringPathResult(
       throw error;
     }
 
-    let entryNames: string[];
+    let entries: import("fs").Dirent<string>[];
 
     try {
-      entryNames = await fs.readdir(dirPath);
+      entries = await fs.readdir(dirPath, { withFileTypes: true });
     } catch {
       return;
     }
 
-    for (const entryName of entryNames) {
+    for (const entry of entries) {
       if (searchAborted) {
         break;
       }
@@ -180,20 +180,11 @@ export async function getSearchFixedStringPathResult(
         throw error;
       }
 
-      const fullPath = path.join(dirPath, entryName);
-      let candidateEntry: FilesystemPreflightEntry;
-
-      try {
-        candidateEntry = await getValidatedPreflightEntry(fullPath, allowedDirectories);
-      } catch {
-        continue;
-      }
-
       const rawRelativePath = currentRelativePath === ""
-        ? entryName
-        : path.join(currentRelativePath, entryName);
+        ? entry.name
+        : path.join(currentRelativePath, entry.name);
       const relativePath = rawRelativePath.split(path.sep).join("/");
-      const shouldTraverseExcludedDirectory = candidateEntry.type === "directory"
+      const shouldTraverseExcludedDirectory = entry.isDirectory()
         && shouldTraverseTraversalScopeDirectoryPath(
           relativePath,
           traversalScopePolicyResolution,
@@ -203,6 +194,15 @@ export async function getSearchFixedStringPathResult(
         shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
         && !shouldTraverseExcludedDirectory
       ) {
+        continue;
+      }
+
+      const fullPath = path.join(dirPath, entry.name);
+      let candidateEntry: FilesystemPreflightEntry;
+
+      try {
+        candidateEntry = await getValidatedPreflightEntry(fullPath, allowedDirectories);
+      } catch {
         continue;
       }
 

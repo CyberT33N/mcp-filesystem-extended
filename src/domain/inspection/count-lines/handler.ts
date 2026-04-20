@@ -518,26 +518,24 @@ async function countLinesInDirectory(
         );
 
         const fullPath = path.join(currentPath, entry.name);
+        const relativePath = normalizeRelativePath(path.relative(validatedRootPath, fullPath));
+        const shouldTraverseExcludedDirectory =
+          entry.isDirectory() &&
+          shouldTraverseTraversalScopeDirectoryPath(
+            relativePath,
+            traversalScopePolicyResolution,
+          );
+
+        if (
+          shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
+          !shouldTraverseExcludedDirectory
+        ) {
+          continue;
+        }
         
         try {
           // Validate each path before processing
           await validatePath(fullPath, allowedDirectories);
-          
-          // Get relative path for glob matching
-          const relativePath = normalizeRelativePath(path.relative(validatedRootPath, fullPath));
-          const shouldTraverseExcludedDirectory =
-            entry.isDirectory() &&
-            shouldTraverseTraversalScopeDirectoryPath(
-              relativePath,
-              traversalScopePolicyResolution,
-            );
-
-          if (
-            shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
-            !shouldTraverseExcludedDirectory
-          ) {
-            continue;
-          }
           
           if (entry.isDirectory()) {
             // Recursively process subdirectories

@@ -127,25 +127,24 @@ export async function searchFiles(
       }
 
       const fullPath = path.join(currentPath, entry.name);
+      const relativePath = path.relative(validatedRootPath, fullPath).split(path.sep).join("/");
+      const shouldTraverseExcludedDirectory =
+        entry.isDirectory() &&
+        shouldTraverseTraversalScopeDirectoryPath(
+          relativePath,
+          traversalScopePolicyResolution,
+        );
+
+      if (
+        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
+        !shouldTraverseExcludedDirectory
+      ) {
+        continue;
+      }
 
       try {
         // Validate each path before processing
         await validatePath(fullPath, allowedDirectories);
-
-        const relativePath = path.relative(validatedRootPath, fullPath).split(path.sep).join("/");
-        const shouldTraverseExcludedDirectory =
-          entry.isDirectory() &&
-          shouldTraverseTraversalScopeDirectoryPath(
-            relativePath,
-            traversalScopePolicyResolution,
-          );
-
-        if (
-          shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
-          !shouldTraverseExcludedDirectory
-        ) {
-          continue;
-        }
 
         // Case-insensitive filename matching
         if (entry.name.toLowerCase().includes(pattern.toLowerCase())) {
