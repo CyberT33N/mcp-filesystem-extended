@@ -1,3 +1,6 @@
+import fs from "fs/promises";
+import path from "path";
+
 /**
  * Shared handler-preflight helpers that resolve real filesystem metadata before content-oriented
  * endpoints start expensive reads, traversal fan-out, or diff preparation.
@@ -14,7 +17,10 @@ import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 import { readGitIgnoreTraversalEnrichmentForRoot } from "./gitignore-traversal-enrichment";
 import {
+  normalizeTraversalScopePath,
   resolveTraversalScopePolicy,
+  shouldExcludeTraversalScopePath,
+  shouldTraverseTraversalScopeDirectoryPath,
   type TraversalScopePolicyResolution,
 } from "./traversal-scope-policy";
 
@@ -23,7 +29,13 @@ import {
   createMetadataPreflightRejectedFailure,
   formatToolGuardrailFailureAsText,
 } from "./tool-guardrail-error-contract";
-import { MAX_GENERIC_PATHS_PER_REQUEST, PATH_MAX_CHARS } from "./tool-guardrail-limits";
+import {
+  MAX_GENERIC_PATHS_PER_REQUEST,
+  PATH_MAX_CHARS,
+  TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES,
+  TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES,
+  TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS,
+} from "./tool-guardrail-limits";
 
 /**
  * Canonical validated metadata entry shared by filesystem preflight helpers.
@@ -65,6 +77,17 @@ export interface TraversalPreflightContext {
   traversalScopePolicyResolution: TraversalScopePolicyResolution;
 }
 
+interface TraversalScopePreflightProbeState {
+  readonly startedAtMs: number;
+  visitedEntries: number;
+  visitedDirectories: number;
+}
+
+interface TraversalScopePreflightProbeDirectory {
+  readonly absolutePath: string;
+  readonly relativePath: string;
+}
+
 /**
  * Builds canonical narrowing guidance for traversal-heavy requests.
  *
@@ -73,6 +96,144 @@ export interface TraversalPreflightContext {
  */
 export function buildTraversalNarrowingGuidance(requestedRoot: string): string {
   return `Narrow the requested root '${requestedRoot}', add exclude globs, or target a more specific descendant before retrying broad recursive traversal.`;
+}
+
+function throwTraversalScopePreflightRejectedFailure(
+  toolName: string,
+  requestedRoot: string,
+  measuredValue: number,
+  limitValue: number,
+  unit: string,
+  reason: string,
+): never {
+  throwMetadataPreflightRejectedFailure(
+    toolName,
+    `recursive traversal preflight for root '${requestedRoot}'`,
+    createToolGuardrailMetricValue(measuredValue, unit),
+    createToolGuardrailMetricValue(limitValue, unit),
+    reason,
+  );
+}
+
+function assertTraversalScopePreflightBudget(
+  toolName: string,
+  requestedRoot: string,
+  state: TraversalScopePreflightProbeState,
+  nowMs: number = Date.now(),
+): void {
+  if (state.visitedEntries > TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES) {
+    throwTraversalScopePreflightRejectedFailure(
+      toolName,
+      requestedRoot,
+      state.visitedEntries,
+      TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES,
+      "entries",
+      "Projected traversal entry breadth exceeds the shared preflight ceiling before recursive execution begins.",
+    );
+  }
+
+  if (state.visitedDirectories > TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES) {
+    throwTraversalScopePreflightRejectedFailure(
+      toolName,
+      requestedRoot,
+      state.visitedDirectories,
+      TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES,
+      "directories",
+      "Projected traversal directory breadth exceeds the shared preflight ceiling before recursive execution begins.",
+    );
+  }
+
+  const elapsedMs = nowMs - state.startedAtMs;
+
+  if (elapsedMs > TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS) {
+    throwTraversalScopePreflightRejectedFailure(
+      toolName,
+      requestedRoot,
+      elapsedMs,
+      TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS,
+      "milliseconds",
+      "Traversal-scope admission exceeded the shared preflight time budget before recursive execution began.",
+    );
+  }
+}
+
+async function assertTraversalScopePreflightAdmission(
+  toolName: string,
+  requestedRoot: string,
+  validRootPath: string,
+  traversalScopePolicyResolution: TraversalScopePolicyResolution,
+): Promise<void> {
+  const state: TraversalScopePreflightProbeState = {
+    startedAtMs: Date.now(),
+    visitedEntries: 0,
+    visitedDirectories: 0,
+  };
+  const pendingDirectories: TraversalScopePreflightProbeDirectory[] = [{
+    absolutePath: validRootPath,
+    relativePath: "",
+  }];
+
+  while (pendingDirectories.length > 0) {
+    const currentDirectory = pendingDirectories.shift();
+
+    if (currentDirectory === undefined) {
+      break;
+    }
+
+    state.visitedDirectories += 1;
+    assertTraversalScopePreflightBudget(toolName, requestedRoot, state);
+
+    let entries: import("fs").Dirent<string>[];
+
+    try {
+      entries = await fs.readdir(currentDirectory.absolutePath, { withFileTypes: true });
+    } catch (error) {
+      if (currentDirectory.relativePath === "") {
+        const reason = error instanceof Error
+          ? error.message
+          : "Traversal root could not be read during preflight admission.";
+
+        throwMetadataPreflightRejectedFailure(
+          toolName,
+          `recursive traversal preflight for root '${requestedRoot}'`,
+          "unresolved",
+          "readable traversal root directory",
+          reason,
+        );
+      }
+
+      continue;
+    }
+
+    for (const entry of entries) {
+      const rawRelativePath = currentDirectory.relativePath === ""
+        ? entry.name
+        : path.join(currentDirectory.relativePath, entry.name);
+      const relativePath = normalizeTraversalScopePath(rawRelativePath);
+      const shouldTraverseExcludedDirectory = entry.isDirectory()
+        && shouldTraverseTraversalScopeDirectoryPath(
+          relativePath,
+          traversalScopePolicyResolution,
+        );
+
+      if (
+        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
+        && !shouldTraverseExcludedDirectory
+      ) {
+        continue;
+      }
+
+      state.visitedEntries += 1;
+      assertTraversalScopePreflightBudget(toolName, requestedRoot, state);
+
+      if (entry.isDirectory()) {
+        pendingDirectories.push({
+          absolutePath: path.join(currentDirectory.absolutePath, entry.name),
+          relativePath: rawRelativePath,
+        });
+      }
+    }
+  }
 }
 
 function throwMetadataPreflightRejectedFailure(
@@ -182,6 +343,7 @@ export async function resolveTraversalPreflightContext(
   respectGitIgnore: boolean,
   allowedDirectories: string[],
   allowedTypes: Array<"file" | "directory"> = ["file", "directory"],
+  recursiveTraversal: boolean = true,
 ): Promise<TraversalPreflightContext> {
   const entries = await collectValidatedFilesystemPreflightEntries(
     toolName,
@@ -200,18 +362,28 @@ export async function resolveTraversalPreflightContext(
     rootEntry.type === "directory" && respectGitIgnore
       ? await readGitIgnoreTraversalEnrichmentForRoot(rootEntry.validPath)
       : null;
+  const traversalScopePolicyResolution = resolveTraversalScopePolicy(
+    requestedRoot,
+    [...excludePatterns],
+    {
+      includeExcludedGlobs: [...includeExcludedGlobs],
+      respectGitIgnore,
+      gitIgnoreTraversalEnrichment,
+    },
+  );
+
+  if (rootEntry.type === "directory" && recursiveTraversal) {
+    await assertTraversalScopePreflightAdmission(
+      toolName,
+      requestedRoot,
+      rootEntry.validPath,
+      traversalScopePolicyResolution,
+    );
+  }
 
   return {
     rootEntry,
-    traversalScopePolicyResolution: resolveTraversalScopePolicy(
-      requestedRoot,
-      [...excludePatterns],
-      {
-        includeExcludedGlobs: [...includeExcludedGlobs],
-        respectGitIgnore,
-        gitIgnoreTraversalEnrichment,
-      },
-    ),
+    traversalScopePolicyResolution,
   };
 }
 

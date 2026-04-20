@@ -614,6 +614,48 @@ export const CONTENT_MUTATION_TOTAL_INPUT_CHARS = 400_000;
 export const LINE_REPLACEMENT_TOTAL_INPUT_CHARS = 300_000;
 
 /**
+ * Maximum number of filesystem entries that one shared traversal-scope preflight probe may inspect
+ * before the server rejects the traversal root as too broad for immediate recursive execution.
+ *
+ * @remarks
+ * This ceiling belongs to the metadata-first admission layer and exists specifically to make
+ * server-side scope governance visible before recursive consumers enter their full traversal loop.
+ * The budget stays materially below the deeper runtime traversal ceiling so broad-root refusals can
+ * fail early as preflight decisions instead of surfacing first as runtime-budget exhaustion.
+ *
+ * @example
+ * `assertTraversalScopePreflightBudget(toolName, requestedRoot, state)`
+ */
+export const TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES = 25_000;
+
+/**
+ * Maximum number of directories that one shared traversal-scope preflight probe may inspect
+ * before the server rejects the traversal root as too broad for immediate recursive execution.
+ *
+ * @remarks
+ * The preflight directory ceiling is intentionally lower than the deeper runtime traversal budget so
+ * wide recursive directory trees can be rejected up front with narrowing guidance rather than first
+ * surfacing as timeout-shaped runtime failures.
+ *
+ * @example
+ * `assertTraversalScopePreflightBudget(toolName, requestedRoot, state)`
+ */
+export const TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES = 2_500;
+
+/**
+ * Soft wall-clock runtime budget for one shared traversal-scope preflight probe.
+ *
+ * @remarks
+ * This budget constrains only the early server-side admission probe, not the deeper guarded
+ * traversal itself. Keeping the probe budget materially below the later runtime safeguard preserves
+ * preflight-first refusal semantics for broad invalid traversal roots.
+ *
+ * @example
+ * `assertTraversalScopePreflightBudget(toolName, requestedRoot, state)`
+ */
+export const TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS = 750;
+
+/**
  * Maximum number of filesystem entries that one guarded traversal may visit before the shared
  * runtime-budget layer must refuse further fan-out.
  *
@@ -683,6 +725,9 @@ export const ENDPOINT_FAMILY_GUARDRAIL_LIMITS = Object.freeze({
   PATH_MUTATION_SUMMARY_CAP_CHARS,
   CONTENT_MUTATION_TOTAL_INPUT_CHARS,
   LINE_REPLACEMENT_TOTAL_INPUT_CHARS,
+  TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES,
+  TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES,
+  TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS,
   TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
   TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
   TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,

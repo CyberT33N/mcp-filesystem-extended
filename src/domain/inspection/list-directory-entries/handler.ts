@@ -172,6 +172,7 @@ async function buildListedDirectoryRoot(
     respectGitIgnore,
     allowedDirectories,
     ["directory"],
+    recursive,
   );
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(requestedPath);
