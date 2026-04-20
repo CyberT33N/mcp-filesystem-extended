@@ -4,9 +4,9 @@ file_id: "1"
 unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "in_progress"
- total_tasks: 6
-  completed_tasks: 5
+ unit_status: "done"
+  total_tasks: 6
+  completed_tasks: 6
  has_sub_units: false
  sub_unit_count: 0
   resume_frontier_task: "1.6"
@@ -24,8 +24,8 @@ todo_window_mode_override: "inherit"
 - **Progress:** 5/6 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.5`
-- **Next Frontier Task:** `1.5`
+- **Resume Frontier Task:** `1.6`
+- **Next Frontier Task:** `1.6`
 - **Todo Window Mode:** `inherit`
 
 ## Tasks
@@ -69,9 +69,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: traversal guardrails and recursive discovery/search surfaces
   - Blocked By: none
   - Summary: Demote timeout-first traversal refusal into a deeper safeguard and introduce preflight-driven scope handling for broad valid workloads.
-- [ ] **1.6 Traversal workload admission and lane-routing completion** → [`1.6-traversal-workload-admission-and-lane-routing-completion.md`](./1.6-traversal-workload-admission-and-lane-routing-completion.md)
+- [x] **1.6 Traversal workload admission and lane-routing completion** → [`1.6-traversal-workload-admission-and-lane-routing-completion.md`](./1.6-traversal-workload-admission-and-lane-routing-completion.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: done
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: shared admission planner plus recursive discovery/search/count consumers
@@ -85,7 +85,7 @@ todo_window_mode_override: "inherit"
 | D2 | 1.3 | 1.2 | SEQUENTIAL | RESOLVED | Regex/count alignment assumes the fixed-string lane and shared state semantics are already bound. | `src/domain/shared/search/search-execution-policy.ts` |
 | D3 | 1.4 | 1.3 | SEQUENTIAL | RESOLVED | Read-core SSOT refactor depends on the finalized inspection-state and execution-lane rules. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
 | D4 | 1.5 | 1.4 | SEQUENTIAL | RESOLVED | Traversal governance refactor should land after state and read-core semantics are stabilized. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
-| D5 | 1.6 | 1.5 | SEQUENTIAL | UNRESOLVED | Shared workload admission and recursive lane routing close the residual runtime-control-plane gap left after the phase-one traversal refactor. | `src/domain/shared/guardrails/filesystem-preflight.ts`, `src/domain/shared/search/search-execution-policy.ts` |
+| D5 | 1.6 | 1.5 | SEQUENTIAL | RESOLVED | Shared workload admission and recursive lane routing close the residual runtime-control-plane gap left after the phase-one traversal refactor. | `src/domain/shared/guardrails/filesystem-preflight.ts`, `src/domain/shared/search/search-execution-policy.ts` |
 
 ## Execution Order
 1. 1.1

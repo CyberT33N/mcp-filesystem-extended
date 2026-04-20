@@ -5,6 +5,10 @@ import {
   resolveTraversalPreflightContext,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
+  resolveTraversalWorkloadAdmissionDecision,
+  TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
+} from "@domain/shared/guardrails/traversal-workload-admission";
+import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
   isTraversalRuntimeBudgetExceededError,
@@ -15,7 +19,9 @@ import {
   shouldExcludeTraversalScopePath,
   shouldTraverseTraversalScopeDirectoryPath,
 } from "@domain/shared/guardrails/traversal-scope-policy";
+import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
+import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 
 /**
  * Describes the helper-level result for one name-search traversal.
@@ -67,6 +73,27 @@ export async function searchFiles(
     allowedDirectories,
     ["directory"],
   );
+  const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
+  const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
+    requestedRoot: rootPath,
+    rootEntry: traversalPreflightContext.rootEntry,
+    admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    executionPolicy,
+    consumerCapabilities: {
+      toolName: "find_paths_by_name",
+      previewFirstSupported: false,
+      taskBackedExecutionSupported: false,
+    },
+  });
+
+  if (
+    traversalAdmissionDecision.outcome
+    !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE
+  ) {
+    throw new Error(
+      traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(rootPath),
+    );
+  }
   const validatedRootPath = traversalPreflightContext.rootEntry.validPath;
   const traversalScopePolicyResolution = traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();

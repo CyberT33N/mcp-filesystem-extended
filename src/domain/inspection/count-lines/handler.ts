@@ -8,6 +8,10 @@ import {
   buildTraversalNarrowingGuidance,
   resolveTraversalPreflightContext,
 } from "@domain/shared/guardrails/filesystem-preflight";
+import {
+  resolveTraversalWorkloadAdmissionDecision,
+  TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
+} from "@domain/shared/guardrails/traversal-workload-admission";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
   assertTraversalRuntimeBudget,
@@ -34,6 +38,8 @@ import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
+
+import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 
 import { minimatch } from "minimatch";
 
@@ -491,6 +497,27 @@ async function countLinesInDirectory(
     allowedDirectories,
     ["directory"],
   );
+  const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
+  const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
+    requestedRoot: requestedRootPath,
+    rootEntry: traversalPreflightContext.rootEntry,
+    admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    executionPolicy,
+    consumerCapabilities: {
+      toolName: "count_lines",
+      previewFirstSupported: false,
+      taskBackedExecutionSupported: false,
+    },
+  });
+
+  if (
+    traversalAdmissionDecision.outcome
+    !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE
+  ) {
+    throw new Error(
+      traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(requestedRootPath),
+    );
+  }
   const validatedRootPath = traversalPreflightContext.rootEntry.validPath;
   const traversalScopePolicyResolution = traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();

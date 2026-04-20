@@ -5,6 +5,10 @@ import {
   resolveTraversalPreflightContext,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
+  resolveTraversalWorkloadAdmissionDecision,
+  TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
+} from "@domain/shared/guardrails/traversal-workload-admission";
+import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
   isTraversalRuntimeBudgetExceededError,
@@ -17,8 +21,10 @@ import {
 } from "@domain/shared/guardrails/traversal-scope-policy";
 import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
+import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
+import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 
 import { minimatch } from "minimatch";
 
@@ -70,6 +76,27 @@ async function getFindFilesByGlobRootResult(
     allowedDirectories,
     ["directory"],
   );
+  const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
+  const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
+    requestedRoot: searchPath,
+    rootEntry: traversalPreflightContext.rootEntry,
+    admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    executionPolicy,
+    consumerCapabilities: {
+      toolName: "find_files_by_glob",
+      previewFirstSupported: false,
+      taskBackedExecutionSupported: false,
+    },
+  });
+
+  if (
+    traversalAdmissionDecision.outcome
+    !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE
+  ) {
+    throw new Error(
+      traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(searchPath),
+    );
+  }
   const validRootPath = traversalPreflightContext.rootEntry.validPath;
   const traversalScopePolicyResolution = traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();

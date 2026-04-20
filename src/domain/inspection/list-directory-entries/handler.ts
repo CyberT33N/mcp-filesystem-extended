@@ -6,6 +6,10 @@ import {
   resolveTraversalPreflightContext,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
+  resolveTraversalWorkloadAdmissionDecision,
+  TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
+} from "@domain/shared/guardrails/traversal-workload-admission";
+import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
   recordTraversalDirectoryVisit,
@@ -23,7 +27,9 @@ import {
   type FileSystemEntryMetadata,
   type FileSystemEntryMetadataSelection,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
+import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
+import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 
 /**
  * Structured directory entry returned by the `list_directory_entries` tool.
@@ -174,6 +180,27 @@ async function buildListedDirectoryRoot(
     ["directory"],
     recursive,
   );
+  const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
+  const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
+    requestedRoot: requestedPath,
+    rootEntry: traversalPreflightContext.rootEntry,
+    admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    executionPolicy,
+    consumerCapabilities: {
+      toolName: "list_directory_entries",
+      previewFirstSupported: false,
+      taskBackedExecutionSupported: false,
+    },
+  });
+
+  if (
+    traversalAdmissionDecision.outcome
+    !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE
+  ) {
+    throw new Error(
+      traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(requestedPath),
+    );
+  }
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(requestedPath);
 

@@ -75,6 +75,36 @@ export interface TraversalPreflightContext {
    * Effective traversal-scope policy resolved for the requested root.
    */
   traversalScopePolicyResolution: TraversalScopePolicyResolution;
+
+  /**
+   * Breadth evidence gathered before recursive traversal begins.
+   */
+  traversalPreflightAdmissionEvidence: TraversalPreflightAdmissionEvidence | null;
+}
+
+/**
+ * Breadth evidence gathered during root-level traversal admission before recursive execution begins.
+ */
+export interface TraversalPreflightAdmissionEvidence {
+  /**
+   * Caller-supplied root path that owns the current admission decision.
+   */
+  requestedRoot: string;
+
+  /**
+   * Number of filesystem entries observed during the bounded preflight probe.
+   */
+  visitedEntries: number;
+
+  /**
+   * Number of directories observed during the bounded preflight probe.
+   */
+  visitedDirectories: number;
+
+  /**
+   * Elapsed wall-clock time spent by the bounded preflight probe.
+   */
+  elapsedMs: number;
 }
 
 interface TraversalScopePreflightProbeState {
@@ -162,7 +192,7 @@ async function assertTraversalScopePreflightAdmission(
   requestedRoot: string,
   validRootPath: string,
   traversalScopePolicyResolution: TraversalScopePolicyResolution,
-): Promise<void> {
+): Promise<TraversalPreflightAdmissionEvidence> {
   const state: TraversalScopePreflightProbeState = {
     startedAtMs: Date.now(),
     visitedEntries: 0,
@@ -234,6 +264,15 @@ async function assertTraversalScopePreflightAdmission(
       }
     }
   }
+
+  const finishedAtMs = Date.now();
+
+  return {
+    requestedRoot,
+    visitedEntries: state.visitedEntries,
+    visitedDirectories: state.visitedDirectories,
+    elapsedMs: finishedAtMs - state.startedAtMs,
+  };
 }
 
 function throwMetadataPreflightRejectedFailure(
@@ -372,18 +411,20 @@ export async function resolveTraversalPreflightContext(
     },
   );
 
-  if (rootEntry.type === "directory" && recursiveTraversal) {
-    await assertTraversalScopePreflightAdmission(
-      toolName,
-      requestedRoot,
-      rootEntry.validPath,
-      traversalScopePolicyResolution,
-    );
-  }
+  const traversalPreflightAdmissionEvidence =
+    rootEntry.type === "directory" && recursiveTraversal
+      ? await assertTraversalScopePreflightAdmission(
+        toolName,
+        requestedRoot,
+        rootEntry.validPath,
+        traversalScopePolicyResolution,
+      )
+      : null;
 
   return {
     rootEntry,
     traversalScopePolicyResolution,
+    traversalPreflightAdmissionEvidence,
   };
 }
 

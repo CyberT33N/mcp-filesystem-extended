@@ -1,4 +1,8 @@
-import { REGEX_SEARCH_MAX_CANDIDATE_BYTES } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  REGEX_SEARCH_MAX_CANDIDATE_BYTES,
+  TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES,
+  TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
   CpuRegexTier,
   type IoCapabilityProfile,
@@ -68,6 +72,26 @@ export interface SearchExecutionPolicy {
    * Absolute service hard gap for fixed-string search candidate bytes.
    */
   fixedStringServiceHardGapBytes: number;
+
+  /**
+   * Entry-budget ceiling that still permits inline recursive traversal before preview or narrowing.
+   */
+  traversalInlineEntryBudget: number;
+
+  /**
+   * Directory-budget ceiling that still permits inline recursive traversal before preview or narrowing.
+   */
+  traversalInlineDirectoryBudget: number;
+
+  /**
+   * Entry-budget ceiling that still permits preview-first traversal before narrowing becomes mandatory.
+   */
+  traversalPreviewFirstEntryBudget: number;
+
+  /**
+   * Directory-budget ceiling that still permits preview-first traversal before narrowing becomes mandatory.
+   */
+  traversalPreviewFirstDirectoryBudget: number;
 }
 
 function downgradeSourceReadTierForConfidence(
@@ -191,6 +215,66 @@ function resolveFixedStringSyncCandidateBytesCap(tier: SourceReadTier): number {
   }
 }
 
+function resolveTraversalInlineEntryBudget(tier: SourceReadTier): number {
+  switch (tier) {
+    case SourceReadTier.S:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.35));
+    case SourceReadTier.A:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.25));
+    case SourceReadTier.B:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.18));
+    case SourceReadTier.C:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.12));
+    case SourceReadTier.D:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.08));
+  }
+}
+
+function resolveTraversalInlineDirectoryBudget(tier: SourceReadTier): number {
+  switch (tier) {
+    case SourceReadTier.S:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.35));
+    case SourceReadTier.A:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.25));
+    case SourceReadTier.B:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.18));
+    case SourceReadTier.C:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.12));
+    case SourceReadTier.D:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.08));
+  }
+}
+
+function resolveTraversalPreviewFirstEntryBudget(tier: SourceReadTier): number {
+  switch (tier) {
+    case SourceReadTier.S:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.6));
+    case SourceReadTier.A:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.5));
+    case SourceReadTier.B:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.4));
+    case SourceReadTier.C:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.28));
+    case SourceReadTier.D:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.2));
+  }
+}
+
+function resolveTraversalPreviewFirstDirectoryBudget(tier: SourceReadTier): number {
+  switch (tier) {
+    case SourceReadTier.S:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.6));
+    case SourceReadTier.A:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.48));
+    case SourceReadTier.B:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.35));
+    case SourceReadTier.C:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.25));
+    case SourceReadTier.D:
+      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.16));
+  }
+}
+
 /**
  * Resolves the shared search execution policy from the current runtime capability profile.
  *
@@ -224,5 +308,9 @@ export function resolveSearchExecutionPolicy(
     fixedStringSyncCandidateBytesCap: resolveFixedStringSyncCandidateBytesCap(effectiveSourceReadTier),
     regexServiceHardGapBytes: REGEX_SEARCH_MAX_CANDIDATE_BYTES,
     fixedStringServiceHardGapBytes: REGEX_SEARCH_MAX_CANDIDATE_BYTES,
+    traversalInlineEntryBudget: resolveTraversalInlineEntryBudget(effectiveSourceReadTier),
+    traversalInlineDirectoryBudget: resolveTraversalInlineDirectoryBudget(effectiveSourceReadTier),
+    traversalPreviewFirstEntryBudget: resolveTraversalPreviewFirstEntryBudget(effectiveSourceReadTier),
+    traversalPreviewFirstDirectoryBudget: resolveTraversalPreviewFirstDirectoryBudget(effectiveSourceReadTier),
   };
 }

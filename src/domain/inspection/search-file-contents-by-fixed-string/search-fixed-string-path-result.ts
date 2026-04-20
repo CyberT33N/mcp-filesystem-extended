@@ -7,6 +7,10 @@ import {
   type FilesystemPreflightEntry,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
+  resolveTraversalWorkloadAdmissionDecision,
+  TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
+} from "@domain/shared/guardrails/traversal-workload-admission";
+import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
   isTraversalRuntimeBudgetExceededError,
@@ -80,6 +84,46 @@ export async function getSearchFixedStringPathResult(
   const searchScopeEntry = traversalPreflightContext.rootEntry;
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(searchPath);
+  const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
+    requestedRoot: searchPath,
+    rootEntry: searchScopeEntry,
+    admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
+    executionPolicy,
+    consumerCapabilities: {
+      toolName: SEARCH_FIXED_STRING_TOOL_NAME,
+      previewFirstSupported: true,
+      taskBackedExecutionSupported: false,
+    },
+  });
+  const previewFirstAdmissionActive =
+    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST;
+  const admissionAdjustedMaxResults = previewFirstAdmissionActive
+    ? Math.max(
+      1,
+      Math.min(
+        effectiveMaxResults,
+        Math.floor(
+          REGEX_SEARCH_MAX_RESULTS_HARD_CAP * executionPolicy.previewFirstResponseCapFraction,
+        ),
+      ),
+    )
+    : effectiveMaxResults;
+
+  if (
+    traversalAdmissionDecision.outcome
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED
+    || traversalAdmissionDecision.outcome
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED
+  ) {
+    return {
+      root: searchPath,
+      matches: [],
+      filesSearched: 0,
+      totalMatches: 0,
+      truncated: false,
+      error: traversalAdmissionDecision.guidanceText,
+    };
+  }
 
   if (searchScopeEntry.type === "file") {
     const fileSearchResult = await collectFixedStringMatchesFromFileEntry(
@@ -91,7 +135,7 @@ export async function getSearchFixedStringPathResult(
       executionPolicy,
       aggregateBudgetState,
       true,
-      effectiveMaxResults,
+      admissionAdjustedMaxResults,
       0,
     );
 
@@ -100,7 +144,7 @@ export async function getSearchFixedStringPathResult(
       matches: fileSearchResult.matches,
       filesSearched: fileSearchResult.fileSearched ? 1 : 0,
       totalMatches: fileSearchResult.totalMatches,
-      truncated: fileSearchResult.truncated,
+      truncated: fileSearchResult.truncated || previewFirstAdmissionActive,
       error: null,
     };
   }
@@ -224,7 +268,7 @@ export async function getSearchFixedStringPathResult(
         executionPolicy,
         aggregateBudgetState,
         false,
-        effectiveMaxResults - results.length,
+        admissionAdjustedMaxResults - results.length,
         totalBytesScanned,
       );
 
@@ -250,7 +294,7 @@ export async function getSearchFixedStringPathResult(
     matches: results,
     filesSearched,
     totalMatches: matchesFound,
-    truncated: searchAborted,
+    truncated: searchAborted || previewFirstAdmissionActive,
     error: results.length === 0 && unsupportedStateReason !== null ? unsupportedStateReason : null,
   };
 }
