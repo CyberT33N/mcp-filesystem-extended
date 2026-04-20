@@ -4,13 +4,13 @@ file_id: "1"
 unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "done"
- total_tasks: 5
+unit_status: "in_progress"
+ total_tasks: 6
   completed_tasks: 5
  has_sub_units: false
  sub_unit_count: 0
-  resume_frontier_task: "1.5"
-  next_frontier_task: "1.5"
+  resume_frontier_task: "1.6"
+  next_frontier_task: "1.6"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,8 +20,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** done
-- **Progress:** 5/5 tasks
+- **Unit Status:** in_progress
+- **Progress:** 5/6 tasks
 
 ## Execution Frontier
 - **Resume Frontier Task:** `1.5`
@@ -69,6 +69,14 @@ todo_window_mode_override: "inherit"
   - Files Modified: traversal guardrails and recursive discovery/search surfaces
   - Blocked By: none
   - Summary: Demote timeout-first traversal refusal into a deeper safeguard and introduce preflight-driven scope handling for broad valid workloads.
+- [ ] **1.6 Traversal workload admission and lane-routing completion** → [`1.6-traversal-workload-admission-and-lane-routing-completion.md`](./1.6-traversal-workload-admission-and-lane-routing-completion.md)
+  - Classification: SEQUENTIAL
+  - Status: pending
+  - Complexity: HIGH
+  - Execution Surface Band: GREEN
+  - Files Modified: shared admission planner plus recursive discovery/search/count consumers
+  - Blocked By: none
+  - Summary: Close the residual admission-to-execution gap by introducing shared root-level workload admission and binding all recursive consumers to it before traversal begins.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
@@ -77,6 +85,7 @@ todo_window_mode_override: "inherit"
 | D2 | 1.3 | 1.2 | SEQUENTIAL | RESOLVED | Regex/count alignment assumes the fixed-string lane and shared state semantics are already bound. | `src/domain/shared/search/search-execution-policy.ts` |
 | D3 | 1.4 | 1.3 | SEQUENTIAL | RESOLVED | Read-core SSOT refactor depends on the finalized inspection-state and execution-lane rules. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
 | D4 | 1.5 | 1.4 | SEQUENTIAL | RESOLVED | Traversal governance refactor should land after state and read-core semantics are stabilized. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
+| D5 | 1.6 | 1.5 | SEQUENTIAL | UNRESOLVED | Shared workload admission and recursive lane routing close the residual runtime-control-plane gap left after the phase-one traversal refactor. | `src/domain/shared/guardrails/filesystem-preflight.ts`, `src/domain/shared/search/search-execution-policy.ts` |
 
 ## Execution Order
 1. 1.1
@@ -84,8 +93,10 @@ todo_window_mode_override: "inherit"
 3. 1.3
 4. 1.4
 5. 1.5
+6. 1.6
 
 ## Notes for Orchestrating Agent
 - Re-reference [`__bak__/plan-ugrep/PLAN.md`](../../__bak__/plan-ugrep/PLAN.md) only as historical implementation evidence.
 - No task in this unit may collapse the separate public read endpoints into a single public mega-endpoint.
+- Task `1.5` remains the phase-one traversal refactor, but unit 1 is not final until task `1.6` closes the residual admission-to-execution control-plane gap for broad recursive workloads.
 
