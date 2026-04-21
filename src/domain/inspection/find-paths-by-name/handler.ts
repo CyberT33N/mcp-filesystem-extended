@@ -1,18 +1,29 @@
 import {
+  buildTraversalNarrowingGuidance,
   DISCOVERY_MAX_RESULTS_HARD_CAP,
   DISCOVERY_RESPONSE_CAP_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
-import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
+import {
+  createContinuationEnvelope,
+  createInlineContinuationEnvelope,
+  createPersistedContinuationEnvelope,
+  getContinuationNotFoundMessage,
+  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
+  INSPECTION_CONTINUATION_STATUSES,
+} from "@domain/shared/continuation/inspection-continuation-contract";
 import type {
   InspectionContinuationAdmission,
   InspectionContinuationMetadata,
 } from "@domain/shared/continuation/inspection-continuation-contract";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
-import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
 
-import { searchFiles } from "./helpers";
+import {
+  FIND_PATHS_BY_NAME_FAMILY_MEMBER,
+  type FindPathsByNameContinuationState,
+  searchFiles,
+} from "./helpers";
 
 /**
  * Describes the structured name-search result for one requested root.
@@ -42,6 +53,159 @@ export interface FindPathsByNameResult {
   continuation: InspectionContinuationMetadata;
 }
 
+interface FindPathsByNameRequestPayload {
+  directoryPaths: string[];
+  pattern: string;
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+}
+
+interface FindPathsByNameBatchContinuationState {
+  rootTraversalStates: Record<string, FindPathsByNameContinuationState>;
+}
+
+interface FindPathsByNameExecutionContext {
+  requestPayload: FindPathsByNameRequestPayload;
+  continuationState: FindPathsByNameBatchContinuationState | null;
+  activeContinuationToken: string | null;
+  activeContinuationExpiresAt: string | null;
+}
+
+interface FindPathsByNameRootExecutionResult extends FindPathsByNameRootResult {
+  admissionOutcome: InspectionContinuationAdmission["outcome"];
+  nextContinuationState: FindPathsByNameContinuationState | null;
+}
+
+const FIND_PATHS_BY_NAME_CONTINUATION_GUIDANCE =
+  "Resume the same name-discovery request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.";
+
+function resolveFindPathsByNameExecutionContext(
+  continuationToken: string | undefined,
+  directoryPaths: string[],
+  pattern: string,
+  excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
+  maxResults: number,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  now: Date,
+): FindPathsByNameExecutionContext {
+  if (continuationToken === undefined) {
+    return {
+      requestPayload: {
+        directoryPaths,
+        pattern,
+        excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
+        maxResults,
+      },
+      continuationState: null,
+      activeContinuationToken: null,
+      activeContinuationExpiresAt: null,
+    };
+  }
+
+  if (inspectionContinuationStore === undefined) {
+    throw new Error("Continuation storage is unavailable for find_paths_by_name resume requests.");
+  }
+
+  const continuationSession = inspectionContinuationStore.loadActiveSession<
+    FindPathsByNameRequestPayload,
+    FindPathsByNameBatchContinuationState
+  >(
+    continuationToken,
+    FIND_PATHS_BY_NAME_FAMILY_MEMBER,
+    FIND_PATHS_BY_NAME_FAMILY_MEMBER,
+    now,
+  );
+
+  if (continuationSession === null) {
+    throw new Error(getContinuationNotFoundMessage(FIND_PATHS_BY_NAME_FAMILY_MEMBER));
+  }
+
+  return {
+    requestPayload: continuationSession.requestPayload,
+    continuationState: continuationSession.continuationState,
+    activeContinuationToken: continuationSession.continuationToken,
+    activeContinuationExpiresAt: continuationSession.expiresAt,
+  };
+}
+
+function buildFindPathsByNameContinuationEnvelope(
+  continuationToken: string | null,
+  continuationExpiresAt: string | null,
+  nextContinuationState: FindPathsByNameBatchContinuationState | null,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  requestPayload: FindPathsByNameRequestPayload,
+  rootResults: FindPathsByNameRootExecutionResult[],
+  now: Date,
+): Pick<FindPathsByNameResult, "admission" | "continuation"> {
+  const previewFirstActive = rootResults.some(
+    (rootResult) =>
+      rootResult.admissionOutcome === INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  );
+
+  if (!previewFirstActive) {
+    return createInlineContinuationEnvelope();
+  }
+
+  if (nextContinuationState === null) {
+    if (continuationToken !== null && inspectionContinuationStore !== undefined) {
+      inspectionContinuationStore.markSessionCompleted(continuationToken, now);
+    }
+
+    return createContinuationEnvelope(
+      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      null,
+      null,
+    );
+  }
+
+  if (inspectionContinuationStore === undefined) {
+    throw new Error("Continuation storage is unavailable for preview-first name discovery.");
+  }
+
+  if (continuationToken === null) {
+    const continuationSession = inspectionContinuationStore.createSession(
+      {
+        endpointName: FIND_PATHS_BY_NAME_FAMILY_MEMBER,
+        familyMember: FIND_PATHS_BY_NAME_FAMILY_MEMBER,
+        requestPayload,
+        continuationState: nextContinuationState,
+        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      },
+      now,
+    );
+
+    return createPersistedContinuationEnvelope(
+      FIND_PATHS_BY_NAME_FAMILY_MEMBER,
+      continuationSession.continuationToken,
+      continuationSession.status,
+      continuationSession.expiresAt,
+      FIND_PATHS_BY_NAME_CONTINUATION_GUIDANCE,
+      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    );
+  }
+
+  if (continuationExpiresAt === null) {
+    throw new Error("Active name-discovery continuation session is missing an expiration timestamp.");
+  }
+
+  inspectionContinuationStore.updateContinuationState(continuationToken, nextContinuationState, now);
+
+  return createPersistedContinuationEnvelope(
+    FIND_PATHS_BY_NAME_FAMILY_MEMBER,
+    continuationToken,
+    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
+    continuationExpiresAt,
+    FIND_PATHS_BY_NAME_CONTINUATION_GUIDANCE,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  );
+}
+
 async function getFindPathsByNameRootResult(
   directoryPath: string,
   pattern: string,
@@ -50,35 +214,9 @@ async function getFindPathsByNameRootResult(
   respectGitIgnore: boolean,
   allowedDirectories: string[],
   maxResults: number,
-): Promise<FindPathsByNameRootResult> {
-  const validPath = await validatePath(directoryPath, allowedDirectories);
+  continuationState: FindPathsByNameContinuationState | null = null,
+): Promise<FindPathsByNameRootExecutionResult> {
   const result = await searchFiles(
-    validPath,
-    pattern,
-    excludePatterns,
-    includeExcludedGlobs,
-    respectGitIgnore,
-    allowedDirectories,
-    maxResults,
-  );
-
-  return {
-    root: directoryPath,
-    matches: result.matches,
-    truncated: result.truncated,
-  };
-}
-
-async function getFormattedSearchFilesResult(
-  directoryPath: string,
-  pattern: string,
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  allowedDirectories: string[],
-  maxResults: number,
-): Promise<string> {
-  const result = await getFindPathsByNameRootResult(
     directoryPath,
     pattern,
     excludePatterns,
@@ -86,9 +224,27 @@ async function getFormattedSearchFilesResult(
     respectGitIgnore,
     allowedDirectories,
     maxResults,
+    continuationState,
   );
 
+  return {
+    root: directoryPath,
+    matches: result.matches,
+    truncated: result.truncated,
+    admissionOutcome: result.admissionOutcome ?? INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.INLINE,
+    nextContinuationState: result.nextContinuationState ?? null,
+  };
+}
+
+function formatFindPathsByNameRootOutput(
+  result: FindPathsByNameRootResult,
+  maxResults: number,
+): string {
   if (result.matches.length === 0) {
+    if (result.truncated) {
+      return `Traversal scope exceeded the bounded preview-first lane before matching paths could be collected. ${buildTraversalNarrowingGuidance(result.root)}`;
+    }
+
     return "No matches found";
   }
 
@@ -126,35 +282,97 @@ async function getFormattedSearchFilesResult(
  * @returns Structured per-root name-search results and aggregate totals.
  */
 export async function getFindPathsByNameResult(
-  _continuationToken: string | undefined,
+  continuationToken: string | undefined,
   directoryPaths: string[],
   pattern: string,
   excludePatterns: string[],
   includeExcludedGlobs: string[] = [],
   respectGitIgnore = false,
-  _inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
   allowedDirectories: string[],
   maxResults = DISCOVERY_MAX_RESULTS_HARD_CAP,
 ): Promise<FindPathsByNameResult> {
+  const now = new Date();
+  const executionContext = resolveFindPathsByNameExecutionContext(
+    continuationToken,
+    directoryPaths,
+    pattern,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    inspectionContinuationStore,
+    now,
+  );
+  const activeDirectoryPaths = executionContext.continuationState === null
+    ? executionContext.requestPayload.directoryPaths
+    : executionContext.requestPayload.directoryPaths.filter(
+        (requestedDirectoryPath) =>
+          executionContext.continuationState?.rootTraversalStates[requestedDirectoryPath] !== undefined,
+      );
+
+  if (activeDirectoryPaths.length === 0) {
+    if (executionContext.activeContinuationToken !== null && inspectionContinuationStore !== undefined) {
+      inspectionContinuationStore.markSessionCompleted(executionContext.activeContinuationToken, now);
+    }
+
+    return {
+      roots: [],
+      totalMatches: 0,
+      truncated: false,
+      ...createInlineContinuationEnvelope(),
+    };
+  }
+
   const roots = await Promise.all(
-    directoryPaths.map((directoryPath) =>
+    activeDirectoryPaths.map((directoryPath) =>
       getFindPathsByNameRootResult(
         directoryPath,
-        pattern,
-        excludePatterns,
-        includeExcludedGlobs,
-        respectGitIgnore,
+        executionContext.requestPayload.pattern,
+        executionContext.requestPayload.excludePatterns,
+        executionContext.requestPayload.includeExcludedGlobs,
+        executionContext.requestPayload.respectGitIgnore,
         allowedDirectories,
-        maxResults,
+        executionContext.requestPayload.maxResults,
+        executionContext.continuationState?.rootTraversalStates[directoryPath] ?? null,
       )
     )
   );
 
-  return {
+  const nextContinuationState = roots.reduce<FindPathsByNameBatchContinuationState | null>(
+    (accumulatedState, rootResult) => {
+      if (rootResult.nextContinuationState === null) {
+        return accumulatedState;
+      }
+
+      return {
+        rootTraversalStates: {
+          ...(accumulatedState?.rootTraversalStates ?? {}),
+          [rootResult.root]: rootResult.nextContinuationState,
+        },
+      };
+    },
+    null,
+  );
+  const continuationEnvelope = buildFindPathsByNameContinuationEnvelope(
+    executionContext.activeContinuationToken,
+    executionContext.activeContinuationExpiresAt,
+    nextContinuationState,
+    inspectionContinuationStore,
+    executionContext.requestPayload,
     roots,
+    now,
+  );
+
+  return {
+    roots: roots.map(({ root, matches, truncated }) => ({
+      root,
+      matches,
+      truncated,
+    })),
     totalMatches: roots.reduce((total, root) => total + root.matches.length, 0),
     truncated: roots.some((root) => root.truncated),
-    ...createInlineContinuationEnvelope(),
+    ...continuationEnvelope,
   };
 }
 
@@ -186,57 +404,46 @@ export async function handleSearchFiles(
   allowedDirectories: string[],
   maxResults = DISCOVERY_MAX_RESULTS_HARD_CAP,
 ): Promise<string> {
-  if (directoryPaths.length === 1) {
-    const firstDirectoryPath = directoryPaths[0];
+  const result = await getFindPathsByNameResult(
+    continuationToken,
+    directoryPaths,
+    pattern,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    inspectionContinuationStore,
+    allowedDirectories,
+    maxResults,
+  );
 
-    if (firstDirectoryPath === undefined) {
-      throw new Error("Expected one root path for name-based search.");
+  if (result.roots.length === 1) {
+    const firstRootResult = result.roots[0];
+
+    if (firstRootResult === undefined) {
+      throw new Error("Expected one root result for name-based search.");
     }
 
-    return getFormattedSearchFilesResult(
-      firstDirectoryPath,
-      pattern,
-      excludePatterns,
-      includeExcludedGlobs,
-      respectGitIgnore,
-      allowedDirectories,
-      maxResults,
+    const output = formatFindPathsByNameRootOutput(firstRootResult, maxResults);
+
+    assertActualTextBudget(
+      FIND_PATHS_BY_NAME_FAMILY_MEMBER,
+      output.length,
+      DISCOVERY_RESPONSE_CAP_CHARS,
+      "formatted name-based search results",
     );
+
+    return output;
   }
 
-  const results = await Promise.all(
-    directoryPaths.map(async (directoryPath) => {
-      try {
-        const output = await getFormattedSearchFilesResult(
-          directoryPath,
-          pattern,
-          excludePatterns,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          allowedDirectories,
-          maxResults,
-        );
-        return {
-          label: directoryPath,
-          output,
-        };
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        return {
-          label: directoryPath,
-          error: errorMessage,
-        };
-      }
-    })
-  );
+  const results = result.roots.map((rootResult) => ({
+    label: rootResult.root,
+    output: formatFindPathsByNameRootOutput(rootResult, maxResults),
+  }));
 
   const output = formatBatchTextOperationResults("search files", results);
 
-  void continuationToken;
-  void inspectionContinuationStore;
-
   assertActualTextBudget(
-    "find_paths_by_name",
+    FIND_PATHS_BY_NAME_FAMILY_MEMBER,
     output.length,
     DISCOVERY_RESPONSE_CAP_CHARS,
     "formatted batched name-based search results",

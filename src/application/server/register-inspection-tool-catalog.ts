@@ -148,7 +148,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Lists structured directory entries for one or more directory roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly. " +
-        "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
+        "Valid broad listing workloads may degrade into preview-first responses that return additive `admission` and `continuation` metadata. Resume the same listing through `continuationToken` on this endpoint; no separate continuation endpoint exists.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ListDirectoryEntriesArgsSchema,
       outputSchema: ListDirectoryEntriesStructuredResultSchema,
@@ -196,12 +196,12 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Finds file and directory paths by case-insensitive name substring while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for path discovery, not for searching file contents. " +
-        "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
+        "Valid broad discovery workloads may degrade into preview-first responses that return additive `admission` and `continuation` metadata. Resume the same name-discovery request through `continuationToken` on this endpoint.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: FindPathsByNameArgsSchema,
       outputSchema: FindPathsByNameResultSchema,
     },
-    async ({ continuationToken, roots, nameContains, excludeGlobs, includeExcludedGlobs, respectGitIgnore }) =>
+    async ({ continuationToken, roots, nameContains, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
       executeTool("find_paths_by_name", async () => {
         const result = await getFindPathsByNameResult(
           continuationToken,
@@ -212,6 +212,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           respectGitIgnore,
           inspectionContinuationStore,
           allowedDirectories,
+          maxResults,
         );
         const text = await handleSearchFiles(
           continuationToken,
@@ -222,6 +223,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           respectGitIgnore,
           inspectionContinuationStore,
           allowedDirectories,
+          maxResults,
         );
 
       return {
@@ -244,7 +246,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Finds files by glob pattern under one or more roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool when the selection is expressed in glob syntax rather than plain name matching or regex content search. " +
-        "Results remain bounded by server safety caps, and overly broad requests may be refused when the projected response would exceed those caps.",
+        "Valid broad discovery workloads may degrade into preview-first responses that return additive `admission` and `continuation` metadata. Resume the same glob-discovery request through `continuationToken` on this endpoint.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: FindFilesByGlobArgsSchema,
       outputSchema: FindFilesByGlobResultSchema,
@@ -294,7 +296,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Searches text file contents with a regular expression while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for content matching, not for file-name or glob matching. " +
-        "Valid large text workloads may degrade into preview-first or task-backed results under the shared runtime policy, while structurally unsafe patterns, unsupported surfaces, and over-hard-gap workloads still refuse.",
+        "Valid large text workloads may degrade into preview-first results that return additive `admission` and `continuation` metadata. Resume the same regex-search request through `continuationToken` on this endpoint, while structurally unsafe patterns, unsupported surfaces, and over-hard-gap workloads still refuse.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByRegexArgsSchema,
       outputSchema: SearchFileContentsByRegexResultSchema,
@@ -351,7 +353,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Searches text file contents with an exact fixed string while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for literal content matching, not for regex content matching, file-name matching, or glob matching. " +
-        "Valid large text workloads may degrade into preview-first or task-backed results under the shared literal-search policy, while unsupported or over-hard-gap workloads still refuse.",
+        "Valid large text workloads may degrade into preview-first results that return additive `admission` and `continuation` metadata. Resume the same fixed-string-search request through `continuationToken` on this endpoint, while unsupported or over-hard-gap workloads still refuse.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByFixedStringArgsSchema,
       outputSchema: SearchFileContentsByFixedStringResultSchema,
@@ -408,7 +410,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Counts lines in files or traversed directory trees while broad directory roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for totals and filtered line counting, not for reading full file content. " +
-        "Total-only counts use a large-file-safe streaming path, pattern-aware counts reuse the shared native-search lane, and only unsupported or over-hard-gap workloads refuse.",
+        "Total-only counts use a large-file-safe streaming path, pattern-aware counts reuse the shared native-search lane, and broad workloads that leave the inline band return task-backed `continuationToken` metadata on this same endpoint instead of partial preview totals.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: CountLinesArgsSchema,
       outputSchema: CountLinesResultSchema,

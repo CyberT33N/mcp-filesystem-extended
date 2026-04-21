@@ -2,14 +2,23 @@ import { formatBatchTextOperationResults } from "@infrastructure/formatting/batc
 
 import { compileGuardrailedSearchRegex } from "@domain/shared/guardrails/regex-search-safety";
 import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
+import type { TraversalWorkloadAdmissionOutcome } from "@domain/shared/guardrails/traversal-workload-admission";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
-import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
+import {
+  createContinuationEnvelope,
+  createInlineContinuationEnvelope,
+  createPersistedContinuationEnvelope,
+  getContinuationNotFoundMessage,
+  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
+  INSPECTION_CONTINUATION_STATUSES,
+} from "@domain/shared/continuation/inspection-continuation-contract";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
 
 import {
   createRegexSearchAggregateBudgetState,
   getSearchRegexPathResult,
+  type SearchRegexRootContinuationState,
 } from "./search-regex-path-result";
 import {
   assertFormattedRegexResponseBudget,
@@ -19,6 +28,35 @@ import {
 } from "./search-regex-result";
 
 const SEARCH_REGEX_TOOL_NAME = "search_file_contents_by_regex";
+const SEARCH_REGEX_CONTINUATION_GUIDANCE =
+  "Resume the same regex-search request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.";
+
+interface SearchRegexRequestPayload {
+  searchPaths: string[];
+  pattern: string;
+  filePatterns: string[];
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+  caseSensitive: boolean;
+}
+
+interface SearchRegexContinuationState {
+  rootTraversalStates: Record<string, SearchRegexRootContinuationState>;
+}
+
+interface SearchRegexExecutionContext {
+  requestPayload: SearchRegexRequestPayload;
+  continuationState: SearchRegexContinuationState | null;
+  activeContinuationToken: string | null;
+  activeContinuationExpiresAt: string | null;
+}
+
+type SearchRegexRootExecutionResult = SearchRegexPathResult & {
+  admissionOutcome: TraversalWorkloadAdmissionOutcome;
+  nextContinuationState: SearchRegexRootContinuationState | null;
+};
 
 function createRegexRootErrorResult(
   searchPath: string,
@@ -49,6 +87,135 @@ function createSharedRegexExecutionContext(
   };
 }
 
+function resolveSearchRegexExecutionContext(
+  continuationToken: string | undefined,
+  searchPaths: string[],
+  pattern: string,
+  filePatterns: string[],
+  excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
+  maxResults: number,
+  caseSensitive: boolean,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  now: Date,
+): SearchRegexExecutionContext {
+  if (continuationToken === undefined) {
+    return {
+      requestPayload: {
+        searchPaths,
+        pattern,
+        filePatterns,
+        excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
+        maxResults,
+        caseSensitive,
+      },
+      continuationState: null,
+      activeContinuationToken: null,
+      activeContinuationExpiresAt: null,
+    };
+  }
+
+  if (inspectionContinuationStore === undefined) {
+    throw new Error("Continuation storage is unavailable for regex-search resume requests.");
+  }
+
+  const continuationSession = inspectionContinuationStore.loadActiveSession<
+    SearchRegexRequestPayload,
+    SearchRegexContinuationState
+  >(
+    continuationToken,
+    SEARCH_REGEX_TOOL_NAME,
+    SEARCH_REGEX_TOOL_NAME,
+    now,
+  );
+
+  if (continuationSession === null) {
+    throw new Error(getContinuationNotFoundMessage(SEARCH_REGEX_TOOL_NAME));
+  }
+
+  return {
+    requestPayload: continuationSession.requestPayload,
+    continuationState: continuationSession.continuationState,
+    activeContinuationToken: continuationSession.continuationToken,
+    activeContinuationExpiresAt: continuationSession.expiresAt,
+  };
+}
+
+function buildSearchRegexContinuationEnvelope(
+  continuationToken: string | null,
+  continuationExpiresAt: string | null,
+  nextContinuationState: SearchRegexContinuationState | null,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  requestPayload: SearchRegexRequestPayload,
+  roots: SearchRegexRootExecutionResult[],
+  now: Date,
+): Pick<SearchRegexResult, "admission" | "continuation"> {
+  const previewFirstActive = roots.some(
+    (rootResult) =>
+      rootResult.admissionOutcome === INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  );
+
+  if (!previewFirstActive) {
+    return createInlineContinuationEnvelope();
+  }
+
+  if (nextContinuationState === null) {
+    if (continuationToken !== null && inspectionContinuationStore !== undefined) {
+      inspectionContinuationStore.markSessionCompleted(continuationToken, now);
+    }
+
+    return createContinuationEnvelope(
+      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      null,
+      null,
+    );
+  }
+
+  if (inspectionContinuationStore === undefined) {
+    throw new Error("Continuation storage is unavailable for preview-first regex search.");
+  }
+
+  if (continuationToken === null) {
+    const continuationSession = inspectionContinuationStore.createSession(
+      {
+        endpointName: SEARCH_REGEX_TOOL_NAME,
+        familyMember: SEARCH_REGEX_TOOL_NAME,
+        requestPayload,
+        continuationState: nextContinuationState,
+        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      },
+      now,
+    );
+
+    return createPersistedContinuationEnvelope(
+      SEARCH_REGEX_TOOL_NAME,
+      continuationSession.continuationToken,
+      continuationSession.status,
+      continuationSession.expiresAt,
+      SEARCH_REGEX_CONTINUATION_GUIDANCE,
+      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    );
+  }
+
+  if (continuationExpiresAt === null) {
+    throw new Error("Active regex-search continuation session is missing an expiration timestamp.");
+  }
+
+  inspectionContinuationStore.updateContinuationState(continuationToken, nextContinuationState, now);
+
+  return createPersistedContinuationEnvelope(
+    SEARCH_REGEX_TOOL_NAME,
+    continuationToken,
+    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
+    continuationExpiresAt,
+    SEARCH_REGEX_CONTINUATION_GUIDANCE,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  );
+}
+
 /**
  * Executes regex search across one or more roots and returns the formatted text response surface.
  *
@@ -70,6 +237,7 @@ function createSharedRegexExecutionContext(
  * @returns Formatted text output that respects the regex-search family response cap.
  */
 export async function handleSearchRegex(
+  continuationToken: string | undefined,
   searchPaths: string[],
   pattern: string,
   filePatterns: string[],
@@ -79,80 +247,45 @@ export async function handleSearchRegex(
   maxResults: number,
   caseSensitive: boolean,
   allowedDirectories: string[],
+  inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<string> {
-  const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
-  const { aggregateBudgetState, executionPolicy } = createSharedRegexExecutionContext(
+  const structuredResult = await getSearchRegexResult(
+    continuationToken,
+    searchPaths,
     pattern,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
     caseSensitive,
+    allowedDirectories,
+    inspectionContinuationStore,
   );
+  const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
 
-  if (searchPaths.length === 1) {
-    const firstSearchPath = searchPaths[0];
+  if (structuredResult.roots.length === 1) {
+    const firstRootResult = structuredResult.roots[0];
 
-    if (firstSearchPath === undefined) {
-      throw new Error("Expected one root path for regex content search.");
+    if (firstRootResult === undefined) {
+      throw new Error("Expected one root result for regex-search formatting.");
     }
-
-    const result = await getSearchRegexPathResult(
-      SEARCH_REGEX_TOOL_NAME,
-      firstSearchPath,
-      pattern,
-      filePatterns,
-      excludePatterns,
-      includeExcludedGlobs,
-      respectGitIgnore,
-      effectiveMaxResults,
-      caseSensitive,
-      allowedDirectories,
-      executionPolicy,
-      aggregateBudgetState,
-    );
 
     return assertFormattedRegexResponseBudget(
       SEARCH_REGEX_TOOL_NAME,
-      formatSearchRegexPathOutput(result, pattern, effectiveMaxResults),
+      formatSearchRegexPathOutput(firstRootResult, pattern, effectiveMaxResults),
     );
-  }
-
-  const results: Array<
-    | { label: string; output: string }
-    | { label: string; error: string }
-  > = [];
-
-  for (const searchPath of searchPaths) {
-    try {
-      const result = await getSearchRegexPathResult(
-        SEARCH_REGEX_TOOL_NAME,
-        searchPath,
-        pattern,
-        filePatterns,
-        excludePatterns,
-        includeExcludedGlobs,
-        respectGitIgnore,
-        effectiveMaxResults,
-        caseSensitive,
-        allowedDirectories,
-        executionPolicy,
-        aggregateBudgetState,
-      );
-
-      results.push({
-        label: searchPath,
-        output: formatSearchRegexPathOutput(result, pattern, effectiveMaxResults),
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      results.push({
-        label: searchPath,
-        error: errorMessage,
-      });
-    }
   }
 
   return assertFormattedRegexResponseBudget(
     SEARCH_REGEX_TOOL_NAME,
-    formatBatchTextOperationResults("search regex", results),
+    formatBatchTextOperationResults(
+      "search regex",
+      structuredResult.roots.map((rootResult) => ({
+        label: rootResult.root,
+        output: formatSearchRegexPathOutput(rootResult, pattern, effectiveMaxResults),
+      })),
+    ),
   );
 }
 
@@ -177,7 +310,7 @@ export async function handleSearchRegex(
  * @returns Structured per-root results with preserved field names and harmonized failure semantics.
  */
 export async function getSearchRegexResult(
-  _continuationToken: string | undefined,
+  continuationToken: string | undefined,
   searchPaths: string[],
   pattern: string,
   filePatterns: string[],
@@ -187,77 +320,120 @@ export async function getSearchRegexResult(
   maxResults: number,
   caseSensitive: boolean,
   allowedDirectories: string[],
-  _inspectionContinuationStore?: InspectionContinuationSqliteStore,
+  inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<SearchRegexResult> {
-  const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
-  const { aggregateBudgetState, executionPolicy } = createSharedRegexExecutionContext(
+  const now = new Date();
+  const executionContext = resolveSearchRegexExecutionContext(
+    continuationToken,
+    searchPaths,
     pattern,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
     caseSensitive,
+    inspectionContinuationStore,
+    now,
   );
+  const effectiveMaxResults = Math.min(
+    executionContext.requestPayload.maxResults,
+    REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
+  );
+  const { aggregateBudgetState, executionPolicy } = createSharedRegexExecutionContext(
+    executionContext.requestPayload.pattern,
+    executionContext.requestPayload.caseSensitive,
+  );
+  const activeSearchPaths = executionContext.continuationState === null
+    ? executionContext.requestPayload.searchPaths
+    : executionContext.requestPayload.searchPaths.filter(
+        (requestedSearchPath) =>
+          executionContext.continuationState?.rootTraversalStates[requestedSearchPath] !== undefined,
+      );
 
-  if (searchPaths.length === 1) {
-    const firstSearchPath = searchPaths[0];
-
-    if (firstSearchPath === undefined) {
-      throw new Error("Expected one root path for regex content search.");
+  if (activeSearchPaths.length === 0) {
+    if (executionContext.activeContinuationToken !== null && inspectionContinuationStore !== undefined) {
+      inspectionContinuationStore.markSessionCompleted(executionContext.activeContinuationToken, now);
     }
 
-    const result = await getSearchRegexPathResult(
-      SEARCH_REGEX_TOOL_NAME,
-      firstSearchPath,
-      pattern,
-      filePatterns,
-      excludePatterns,
-      includeExcludedGlobs,
-      respectGitIgnore,
-      effectiveMaxResults,
-      caseSensitive,
-      allowedDirectories,
-      executionPolicy,
-      aggregateBudgetState,
-    );
-
     return {
-      roots: [result],
-      totalLocations: result.matches.length,
-      totalMatches: result.totalMatches,
-      truncated: result.truncated,
+      roots: [],
+      totalLocations: 0,
+      totalMatches: 0,
+      truncated: false,
       ...createInlineContinuationEnvelope(),
     };
   }
 
-  const roots: SearchRegexPathResult[] = [];
+  const roots: SearchRegexRootExecutionResult[] = [];
 
-  for (const searchPath of searchPaths) {
+  for (const searchPath of activeSearchPaths) {
     try {
       const result = await getSearchRegexPathResult(
         SEARCH_REGEX_TOOL_NAME,
         searchPath,
-        pattern,
-        filePatterns,
-        excludePatterns,
-        includeExcludedGlobs,
-        respectGitIgnore,
+        executionContext.requestPayload.pattern,
+        executionContext.requestPayload.filePatterns,
+        executionContext.requestPayload.excludePatterns,
+        executionContext.requestPayload.includeExcludedGlobs,
+        executionContext.requestPayload.respectGitIgnore,
         effectiveMaxResults,
-        caseSensitive,
+        executionContext.requestPayload.caseSensitive,
         allowedDirectories,
         executionPolicy,
         aggregateBudgetState,
+        executionContext.continuationState?.rootTraversalStates[searchPath] ?? null,
       );
 
       roots.push(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      roots.push(createRegexRootErrorResult(searchPath, errorMessage));
+      roots.push({
+        ...createRegexRootErrorResult(searchPath, errorMessage),
+        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.INLINE,
+        nextContinuationState: null,
+      });
     }
   }
 
-  return {
+  const nextContinuationState = roots.reduce<SearchRegexContinuationState | null>(
+    (accumulatedState, rootResult) => {
+      if (rootResult.nextContinuationState === null) {
+        return accumulatedState;
+      }
+
+      return {
+        rootTraversalStates: {
+          ...(accumulatedState?.rootTraversalStates ?? {}),
+          [rootResult.root]: rootResult.nextContinuationState,
+        },
+      };
+    },
+    null,
+  );
+  const continuationEnvelope = buildSearchRegexContinuationEnvelope(
+    executionContext.activeContinuationToken,
+    executionContext.activeContinuationExpiresAt,
+    nextContinuationState,
+    inspectionContinuationStore,
+    executionContext.requestPayload,
     roots,
+    now,
+  );
+
+  return {
+    roots: roots.map(({ root, matches, filesSearched, totalMatches, truncated, error }) => ({
+      root,
+      matches,
+      filesSearched,
+      totalMatches,
+      truncated,
+      error,
+    })),
     totalLocations: roots.reduce((total, root) => total + root.matches.length, 0),
     totalMatches: roots.reduce((total, root) => total + root.totalMatches, 0),
     truncated: roots.some((root) => root.truncated),
-    ...createInlineContinuationEnvelope(),
+    ...continuationEnvelope,
   };
 }

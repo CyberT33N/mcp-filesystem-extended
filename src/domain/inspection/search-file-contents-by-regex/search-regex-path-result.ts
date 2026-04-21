@@ -66,6 +66,17 @@ export interface RegexSearchAggregateBudgetState {
   totalCandidateBytesScanned: number;
 }
 
+interface SearchRegexTraversalFrame {
+  directoryRelativePath: string;
+  nextEntryIndex: number;
+}
+
+export interface SearchRegexRootContinuationState {
+  traversalFrames: SearchRegexTraversalFrame[];
+  activeFileRelativePath: string | null;
+  activeFileMatchOffset: number;
+}
+
 /**
  * Creates the canonical request-aggregate budget state for one regex request.
  *
@@ -75,6 +86,16 @@ export function createRegexSearchAggregateBudgetState(): RegexSearchAggregateBud
   return {
     totalCandidateBytesScanned: 0,
   };
+}
+
+function cloneSearchRegexTraversalFrames(
+  traversalFrames: SearchRegexTraversalFrame[],
+): SearchRegexTraversalFrame[] {
+  return traversalFrames.map((traversalFrame) => ({ ...traversalFrame }));
+}
+
+function createInitialSearchRegexTraversalFrames(): SearchRegexTraversalFrame[] {
+  return [{ directoryRelativePath: "", nextEntryIndex: 0 }];
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -243,6 +264,7 @@ async function collectRegexMatchesFromFileEntry(
   aggregateBudgetState: RegexSearchAggregateBudgetState,
   refuseUnsupportedFileScope: boolean,
   maxAdditionalResults: number,
+  matchesToSkipBeforeCollecting: number,
   totalBytesScannedBeforeRead: number,
   collectedLocationsBeforeRead: number,
 ): Promise<{
@@ -360,6 +382,7 @@ async function collectRegexMatchesFromFileEntry(
   const matches: RegexSearchMatch[] = [];
   let totalMatches = 0;
   let truncated = false;
+  let remainingMatchesToSkip = matchesToSkipBeforeCollecting;
 
   const matchedLines = executionResult.stdout
     .split(/\r?\n/u)
@@ -377,6 +400,11 @@ async function collectRegexMatchesFromFileEntry(
     resetRegexLastIndex(regex);
 
     while ((lineMatch = regex.exec(parsedLine.lineContent)) !== null) {
+      if (remainingMatchesToSkip > 0) {
+        remainingMatchesToSkip -= 1;
+        continue;
+      }
+
       totalMatches += 1;
 
       matches.push({
@@ -449,7 +477,11 @@ export async function getSearchRegexPathResult(
     detectIoCapabilityProfile(),
   ),
   aggregateBudgetState: RegexSearchAggregateBudgetState = createRegexSearchAggregateBudgetState(),
-): Promise<SearchRegexPathResult> {
+  continuationState: SearchRegexRootContinuationState | null = null,
+): Promise<SearchRegexPathResult & {
+  admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+  nextContinuationState: SearchRegexRootContinuationState | null;
+}> {
   const traversalPreflightContext = await resolveTraversalPreflightContext(
     toolName,
     searchPath,
@@ -529,10 +561,16 @@ export async function getSearchRegexPathResult(
       totalMatches: 0,
       truncated: false,
       error: traversalAdmissionDecision.guidanceText,
+      admissionOutcome: traversalAdmissionDecision.outcome,
+      nextContinuationState: null,
     };
   }
 
   if (searchScopeEntry.type === "file") {
+    const activeFileMatchOffset = continuationState?.activeFileRelativePath === ""
+      ? continuationState.activeFileMatchOffset
+      : 0;
+
     if (
       shouldStopTraversalPreviewLane(
         aggregateBudgetState.totalCandidateBytesScanned,
@@ -547,6 +585,14 @@ export async function getSearchRegexPathResult(
         totalMatches: 0,
         truncated: true,
         error: previewLanePlan.guidanceText,
+        admissionOutcome: traversalAdmissionDecision.outcome,
+        nextContinuationState: previewFirstAdmissionActive
+          ? {
+              traversalFrames: [],
+              activeFileRelativePath: "",
+              activeFileMatchOffset,
+            }
+          : null,
       };
     }
 
@@ -562,17 +608,28 @@ export async function getSearchRegexPathResult(
       aggregateBudgetState,
       true,
       admissionAdjustedMaxResults,
+      activeFileMatchOffset,
       0,
       0,
     );
+
+    const nextContinuationState = previewFirstAdmissionActive && fileSearchResult.truncated
+      ? {
+          traversalFrames: [],
+          activeFileRelativePath: "",
+          activeFileMatchOffset: activeFileMatchOffset + fileSearchResult.matches.length,
+        }
+      : null;
 
     return {
       root: searchPath,
       matches: fileSearchResult.matches,
       filesSearched: fileSearchResult.fileSearched ? 1 : 0,
       totalMatches: fileSearchResult.totalMatches,
-      truncated: fileSearchResult.truncated || previewFirstAdmissionActive,
+      truncated: fileSearchResult.truncated || nextContinuationState !== null,
       error: null,
+      admissionOutcome: traversalAdmissionDecision.outcome,
+      nextContinuationState,
     };
   }
 
@@ -580,6 +637,9 @@ export async function getSearchRegexPathResult(
   const traversalScopePolicyResolution =
     traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
+  const traversalFrames = continuationState === null
+    ? createInitialSearchRegexTraversalFrames()
+    : cloneSearchRegexTraversalFrames(continuationState.traversalFrames);
 
   const results: RegexSearchMatch[] = [];
   let filesSearched = 0;
@@ -587,6 +647,8 @@ export async function getSearchRegexPathResult(
   let searchAborted = false;
   let totalBytesScanned = 0;
   let unsupportedStateReason: string | null = null;
+  let activeFileRelativePath = continuationState?.activeFileRelativePath ?? null;
+  let activeFileMatchOffset = continuationState?.activeFileMatchOffset ?? 0;
 
   function markTraversalBudgetExceeded(error: unknown): boolean {
     if (!isTraversalRuntimeBudgetExceededError(error)) {
@@ -604,44 +666,99 @@ export async function getSearchRegexPathResult(
     return true;
   }
 
-  async function searchDirectory(
-    dirPath: string,
-    currentRelativePath: string,
-  ): Promise<void> {
-    if (searchAborted) {
-      return;
+  if (activeFileRelativePath !== null) {
+    const activeFileAbsolutePath = activeFileRelativePath === ""
+      ? validRootPath
+      : path.join(validRootPath, activeFileRelativePath);
+    const activeFileCandidateEntry = await getValidatedPreflightEntry(
+      toolName,
+      activeFileAbsolutePath,
+      allowedDirectories,
+    );
+
+    const resumedFileSearchResult = await collectRegexMatchesFromFileEntry(
+      toolName,
+      activeFileCandidateEntry,
+      activeFileRelativePath === "" ? searchPath : activeFileRelativePath,
+      filePatterns,
+      regex,
+      pattern,
+      caseSensitive,
+      executionPolicy,
+      aggregateBudgetState,
+      false,
+      admissionAdjustedMaxResults,
+      activeFileMatchOffset,
+      totalBytesScanned,
+      results.length,
+    );
+
+    if (resumedFileSearchResult.fileSearched) {
+      filesSearched += 1;
     }
 
-    recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
-    try {
-      assertTraversalRuntimeBudget(
-        toolName,
-        traversalRuntimeBudgetState,
-        Date.now(),
-        traversalNarrowingGuidance,
-        previewLanePlan.runtimeBudgetLimits ?? undefined,
-      );
-    } catch (error) {
-      if (markTraversalBudgetExceeded(error)) {
-        return;
-      }
+    totalBytesScanned = resumedFileSearchResult.totalBytesScanned;
+    matchesFound += resumedFileSearchResult.totalMatches;
+    results.push(...resumedFileSearchResult.matches);
 
-      throw error;
+    if (
+      unsupportedStateReason === null
+      && resumedFileSearchResult.unsupportedStateReason !== null
+    ) {
+      unsupportedStateReason = resumedFileSearchResult.unsupportedStateReason;
+    }
+
+    if (resumedFileSearchResult.truncated) {
+      searchAborted = true;
+      activeFileMatchOffset += resumedFileSearchResult.matches.length;
+    } else {
+      activeFileRelativePath = null;
+      activeFileMatchOffset = 0;
+    }
+  }
+
+  while (traversalFrames.length > 0 && !searchAborted) {
+    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
+
+    if (currentTraversalFrame === undefined) {
+      break;
+    }
+
+    const currentPath = currentTraversalFrame.directoryRelativePath === ""
+      ? validRootPath
+      : path.join(validRootPath, currentTraversalFrame.directoryRelativePath);
+
+    if (currentTraversalFrame.nextEntryIndex === 0) {
+      recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
+      try {
+        assertTraversalRuntimeBudget(
+          toolName,
+          traversalRuntimeBudgetState,
+          Date.now(),
+          traversalNarrowingGuidance,
+          previewLanePlan.runtimeBudgetLimits ?? undefined,
+        );
+      } catch (error) {
+        if (markTraversalBudgetExceeded(error)) {
+          break;
+        }
+
+        throw error;
+      }
     }
 
     let entries: import("fs").Dirent<string>[];
 
     try {
-      entries = await fs.readdir(dirPath, { withFileTypes: true });
+      entries = await fs.readdir(currentPath, { withFileTypes: true });
     } catch {
-      return;
+      traversalFrames.pop();
+      continue;
     }
 
-    for (const entry of entries) {
-      if (searchAborted) {
-        break;
-      }
+    let descendedIntoChildDirectory = false;
 
+    while (currentTraversalFrame.nextEntryIndex < entries.length && !searchAborted) {
       recordTraversalEntryVisit(traversalRuntimeBudgetState);
       try {
         assertTraversalRuntimeBudget(
@@ -659,9 +776,17 @@ export async function getSearchRegexPathResult(
         throw error;
       }
 
-      const rawRelativePath = currentRelativePath === ""
+      const entry = entries[currentTraversalFrame.nextEntryIndex];
+
+      if (entry === undefined) {
+        break;
+      }
+
+      currentTraversalFrame.nextEntryIndex += 1;
+
+      const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
         ? entry.name
-        : path.join(currentRelativePath, entry.name);
+        : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
       const relativePath = normalizeRelativePath(rawRelativePath);
       const shouldTraverseExcludedDirectory = entry.isDirectory()
         && shouldTraverseTraversalScopeDirectoryPath(
@@ -676,7 +801,7 @@ export async function getSearchRegexPathResult(
         continue;
       }
 
-      const fullPath = path.join(dirPath, entry.name);
+      const fullPath = path.join(currentPath, entry.name);
       let candidateEntry: FilesystemPreflightEntry;
 
       try {
@@ -686,8 +811,12 @@ export async function getSearchRegexPathResult(
       }
 
       if (candidateEntry.type === "directory") {
-        await searchDirectory(candidateEntry.validPath, rawRelativePath);
-        continue;
+        traversalFrames.push({
+          directoryRelativePath: rawRelativePath,
+          nextEntryIndex: 0,
+        });
+        descendedIntoChildDirectory = true;
+        break;
       }
 
       if (candidateEntry.type !== "file") {
@@ -722,6 +851,7 @@ export async function getSearchRegexPathResult(
         aggregateBudgetState,
         false,
         admissionAdjustedMaxResults - results.length,
+        0,
         totalBytesScanned,
         results.length,
       );
@@ -743,19 +873,34 @@ export async function getSearchRegexPathResult(
 
       if (fileSearchResult.truncated) {
         searchAborted = true;
+        activeFileRelativePath = relativePath;
+        activeFileMatchOffset = fileSearchResult.matches.length;
         break;
       }
     }
+
+    if (!descendedIntoChildDirectory && currentTraversalFrame.nextEntryIndex >= entries.length) {
+      traversalFrames.pop();
+    }
   }
 
-  await searchDirectory(validRootPath, "");
+  const nextContinuationState = previewFirstAdmissionActive
+    && (traversalFrames.length > 0 || activeFileRelativePath !== null)
+    ? {
+        traversalFrames: cloneSearchRegexTraversalFrames(traversalFrames),
+        activeFileRelativePath,
+        activeFileMatchOffset,
+      }
+    : null;
 
   return {
     root: searchPath,
     matches: results,
     filesSearched,
     totalMatches: matchesFound,
-    truncated: searchAborted || previewFirstAdmissionActive,
+    truncated: searchAborted || nextContinuationState !== null,
     error: results.length === 0 && unsupportedStateReason !== null ? unsupportedStateReason : null,
+    admissionOutcome: traversalAdmissionDecision.outcome,
+    nextContinuationState,
   };
 }

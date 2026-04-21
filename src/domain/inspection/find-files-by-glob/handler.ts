@@ -14,6 +14,8 @@ import {
   createInlineContinuationEnvelope,
   createPersistedContinuationEnvelope,
   getContinuationNotFoundMessage,
+  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
+  INSPECTION_CONTINUATION_STATUSES,
 } from "@domain/shared/continuation/inspection-continuation-contract";
 import type {
   InspectionContinuationAdmission,
@@ -54,6 +56,15 @@ export interface FindFilesByGlobRootResult {
   truncated: boolean;
 }
 
+interface FindFilesByGlobTraversalFrame {
+  directoryRelativePath: string;
+  nextEntryIndex: number;
+}
+
+interface FindFilesByGlobRootContinuationState {
+  traversalFrames: FindFilesByGlobTraversalFrame[];
+}
+
 /**
  * Describes the structured glob-search result across the full request batch.
  *
@@ -79,11 +90,12 @@ interface FindFilesByGlobRequestPayload {
 }
 
 interface FindFilesByGlobContinuationState {
-  rootMatchOffsets: Record<string, number>;
+  rootTraversalStates: Record<string, FindFilesByGlobRootContinuationState>;
 }
 
 interface FindFilesByGlobRootExecutionResult extends FindFilesByGlobRootResult {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+  nextContinuationState: FindFilesByGlobRootContinuationState | null;
 }
 
 const FIND_FILES_BY_GLOB_FAMILY_MEMBER = "find_files_by_glob";
@@ -94,6 +106,183 @@ function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
 
+function cloneFindFilesByGlobTraversalFrames(
+  traversalFrames: FindFilesByGlobTraversalFrame[],
+): FindFilesByGlobTraversalFrame[] {
+  return traversalFrames.map((traversalFrame) => ({ ...traversalFrame }));
+}
+
+function createInitialFindFilesByGlobTraversalFrames(): FindFilesByGlobTraversalFrame[] {
+  return [{ directoryRelativePath: "", nextEntryIndex: 0 }];
+}
+
+async function readSortedDirectoryEntries(currentPath: string): Promise<import("fs").Dirent<string>[]> {
+  const entries = await fs.readdir(currentPath, { withFileTypes: true });
+
+  return entries.sort((leftEntry, rightEntry) => leftEntry.name.localeCompare(rightEntry.name));
+}
+
+interface FindFilesByGlobExecutionContext {
+  requestPayload: FindFilesByGlobRequestPayload;
+  continuationState: FindFilesByGlobContinuationState | null;
+  activeContinuationToken: string | null;
+  activeContinuationExpiresAt: string | null;
+}
+
+function resolveFindFilesByGlobExecutionContext(
+  continuationToken: string | undefined,
+  searchPaths: string[],
+  pattern: string,
+  excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
+  maxResults: number,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  now: Date,
+): FindFilesByGlobExecutionContext {
+  if (continuationToken === undefined) {
+    return {
+      requestPayload: {
+        searchPaths,
+        pattern,
+        excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
+        maxResults,
+      },
+      continuationState: null,
+      activeContinuationToken: null,
+      activeContinuationExpiresAt: null,
+    };
+  }
+
+  if (inspectionContinuationStore === undefined) {
+    throw new Error("Continuation storage is unavailable for find_files_by_glob resume requests.");
+  }
+
+  const continuationSession = inspectionContinuationStore.loadActiveSession<
+    FindFilesByGlobRequestPayload,
+    FindFilesByGlobContinuationState
+  >(
+    continuationToken,
+    FIND_FILES_BY_GLOB_FAMILY_MEMBER,
+    FIND_FILES_BY_GLOB_FAMILY_MEMBER,
+    now,
+  );
+
+  if (continuationSession === null) {
+    throw new Error(getContinuationNotFoundMessage(FIND_FILES_BY_GLOB_FAMILY_MEMBER));
+  }
+
+  return {
+    requestPayload: continuationSession.requestPayload,
+    continuationState: continuationSession.continuationState,
+    activeContinuationToken: continuationSession.continuationToken,
+    activeContinuationExpiresAt: continuationSession.expiresAt,
+  };
+}
+
+function buildFindFilesByGlobContinuationEnvelope(
+  continuationToken: string | null,
+  continuationExpiresAt: string | null,
+  nextContinuationState: FindFilesByGlobContinuationState | null,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  requestPayload: FindFilesByGlobRequestPayload,
+  rootResults: FindFilesByGlobRootExecutionResult[],
+  now: Date,
+): Pick<FindFilesByGlobResult, "admission" | "continuation"> {
+  const previewFirstActive = rootResults.some(
+    (rootResult) =>
+      rootResult.admissionOutcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  );
+
+  if (!previewFirstActive) {
+    return createInlineContinuationEnvelope();
+  }
+
+  if (nextContinuationState === null) {
+    if (continuationToken !== null && inspectionContinuationStore !== undefined) {
+      inspectionContinuationStore.markSessionCompleted(continuationToken, now);
+    }
+
+    return createContinuationEnvelope(
+      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      null,
+      null,
+    );
+  }
+
+  if (inspectionContinuationStore === undefined) {
+    throw new Error("Continuation storage is unavailable for preview-first glob discovery.");
+  }
+
+  if (continuationToken === null) {
+    const continuationSession = inspectionContinuationStore.createSession(
+      {
+        endpointName: FIND_FILES_BY_GLOB_FAMILY_MEMBER,
+        familyMember: FIND_FILES_BY_GLOB_FAMILY_MEMBER,
+        requestPayload,
+        continuationState: nextContinuationState,
+        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      },
+      now,
+    );
+
+    return createPersistedContinuationEnvelope(
+      FIND_FILES_BY_GLOB_FAMILY_MEMBER,
+      continuationSession.continuationToken,
+      continuationSession.status,
+      continuationSession.expiresAt,
+      FIND_FILES_BY_GLOB_CONTINUATION_GUIDANCE,
+      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    );
+  }
+
+  if (continuationExpiresAt === null) {
+    throw new Error("Active glob-discovery continuation session is missing an expiration timestamp.");
+  }
+
+  inspectionContinuationStore.updateContinuationState(continuationToken, nextContinuationState, now);
+
+  return createPersistedContinuationEnvelope(
+    FIND_FILES_BY_GLOB_FAMILY_MEMBER,
+    continuationToken,
+    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
+    continuationExpiresAt,
+    FIND_FILES_BY_GLOB_CONTINUATION_GUIDANCE,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  );
+}
+
+function formatFindFilesByGlobRootOutput(
+  rootResult: FindFilesByGlobRootResult,
+  pattern: string,
+  maxResults: number,
+): string {
+  if (rootResult.matches.length === 0) {
+    if (rootResult.truncated) {
+      return `Traversal scope exceeded the bounded preview-first lane before matching files could be collected. ${buildTraversalNarrowingGuidance(rootResult.root)}`;
+    }
+
+    return `No files matching pattern: ${pattern}`;
+  }
+
+  const sortedMatches = [...rootResult.matches].sort();
+  let output = `Found ${sortedMatches.length} files matching pattern: ${pattern}`;
+
+  if (rootResult.truncated) {
+    output += ` (limited to ${maxResults} results)`;
+  }
+
+  output += "\n\n";
+
+  for (const match of sortedMatches) {
+    output += `${match}\n`;
+  }
+
+  return output.trimEnd();
+}
+
 async function getFindFilesByGlobRootResult(
   searchPath: string,
   pattern: string,
@@ -101,7 +290,8 @@ async function getFindFilesByGlobRootResult(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   maxResults: number,
-  allowedDirectories: string[]
+  allowedDirectories: string[],
+  continuationState: FindFilesByGlobRootContinuationState | null = null,
 ): Promise<FindFilesByGlobRootExecutionResult> {
   const traversalPreflightContext = await resolveTraversalPreflightContext(
     "find_files_by_glob",
@@ -152,160 +342,159 @@ async function getFindFilesByGlobRootResult(
       traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(searchPath),
     );
   }
+
   const validRootPath = traversalPreflightContext.rootEntry.validPath;
   const traversalScopePolicyResolution = traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(searchPath);
+  const previewExecutionRuntimeBudgetLimits =
+    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
+      ? {
+          maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
+          maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
+          softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+        }
+      : undefined;
 
   const results: string[] = [];
   let searchAborted = false;
+  const traversalFrames = continuationState === null
+    ? createInitialFindFilesByGlobTraversalFrames()
+    : cloneFindFilesByGlobTraversalFrames(continuationState.traversalFrames);
 
-  async function findMatches(currentPath: string, currentRelativePath: string) {
-    if (searchAborted) return;
+  while (traversalFrames.length > 0 && !searchAborted) {
+    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
 
-    try {
-      recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
-      assertTraversalRuntimeBudget(
-        "find_files_by_glob",
-        traversalRuntimeBudgetState,
-        Date.now(),
-        traversalNarrowingGuidance,
-      );
-    } catch (error) {
-      if (isTraversalRuntimeBudgetExceededError(error)) {
-        searchAborted = true;
-        return;
-      }
-
-      throw error;
+    if (currentTraversalFrame === undefined) {
+      break;
     }
 
+    const currentPath = currentTraversalFrame.directoryRelativePath === ""
+      ? validRootPath
+      : path.join(validRootPath, currentTraversalFrame.directoryRelativePath);
+
+    if (currentTraversalFrame.nextEntryIndex === 0) {
+      try {
+        recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
+        assertTraversalRuntimeBudget(
+          "find_files_by_glob",
+          traversalRuntimeBudgetState,
+          Date.now(),
+          traversalNarrowingGuidance,
+          previewExecutionRuntimeBudgetLimits,
+        );
+      } catch (error) {
+        if (isTraversalRuntimeBudgetExceededError(error)) {
+          searchAborted = true;
+          break;
+        }
+
+        throw error;
+      }
+    }
+
+    let entries: import("fs").Dirent<string>[];
+
     try {
-      const entries = await fs.readdir(currentPath, { withFileTypes: true });
+      entries = await readSortedDirectoryEntries(currentPath);
+    } catch {
+      traversalFrames.pop();
+      continue;
+    }
 
-      for (const entry of entries) {
-        if (searchAborted) break;
+    let descendedIntoChildDirectory = false;
 
-        try {
-          recordTraversalEntryVisit(traversalRuntimeBudgetState);
-          assertTraversalRuntimeBudget(
-            "find_files_by_glob",
-            traversalRuntimeBudgetState,
-            Date.now(),
-            traversalNarrowingGuidance,
-          );
-        } catch (error) {
-          if (isTraversalRuntimeBudgetExceededError(error)) {
-            searchAborted = true;
-            break;
-          }
-
-          throw error;
+    while (currentTraversalFrame.nextEntryIndex < entries.length && !searchAborted) {
+      try {
+        recordTraversalEntryVisit(traversalRuntimeBudgetState);
+        assertTraversalRuntimeBudget(
+          "find_files_by_glob",
+          traversalRuntimeBudgetState,
+          Date.now(),
+          traversalNarrowingGuidance,
+          previewExecutionRuntimeBudgetLimits,
+        );
+      } catch (error) {
+        if (isTraversalRuntimeBudgetExceededError(error)) {
+          searchAborted = true;
+          break;
         }
 
-        const fullPath = path.join(currentPath, entry.name);
-        const rawRelativePath =
-          currentRelativePath === ""
-            ? entry.name
-            : path.join(currentRelativePath, entry.name);
-        const relativePath = normalizeRelativePath(rawRelativePath);
-        const shouldTraverseExcludedDirectory =
-          entry.isDirectory() &&
-          shouldTraverseTraversalScopeDirectoryPath(
-            relativePath,
-            traversalScopePolicyResolution
-          );
+        throw error;
+      }
 
-        if (
-          shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
-          !shouldTraverseExcludedDirectory
-        ) {
-          continue;
-        }
+      const entry = entries[currentTraversalFrame.nextEntryIndex];
 
-        try {
-          await validatePath(fullPath, allowedDirectories);
+      if (entry === undefined) {
+        break;
+      }
 
-          if (minimatch(relativePath, pattern, { dot: true })) {
-            results.push(fullPath);
+      currentTraversalFrame.nextEntryIndex += 1;
 
-            if (results.length >= maxResults) {
-              searchAborted = true;
-              break;
-            }
-          }
+      const fullPath = path.join(currentPath, entry.name);
+      const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
+        ? entry.name
+        : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
+      const relativePath = normalizeRelativePath(rawRelativePath);
+      const shouldTraverseExcludedDirectory =
+        entry.isDirectory()
+        && shouldTraverseTraversalScopeDirectoryPath(
+          relativePath,
+          traversalScopePolicyResolution,
+        );
 
-          if (entry.isDirectory()) {
-            await findMatches(fullPath, rawRelativePath);
-          }
-        } catch (error) {
-          continue;
+      if (
+        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
+        && !shouldTraverseExcludedDirectory
+      ) {
+        continue;
+      }
+
+      try {
+        await validatePath(fullPath, allowedDirectories);
+      } catch {
+        continue;
+      }
+
+      if (minimatch(relativePath, pattern, { dot: true })) {
+        results.push(fullPath);
+
+        if (results.length >= maxResults) {
+          searchAborted = true;
+          break;
         }
       }
-    } catch (error) {
-      return;
+
+      if (entry.isDirectory()) {
+        traversalFrames.push({
+          directoryRelativePath: rawRelativePath,
+          nextEntryIndex: 0,
+        });
+        descendedIntoChildDirectory = true;
+        break;
+      }
+    }
+
+    if (!descendedIntoChildDirectory && currentTraversalFrame.nextEntryIndex >= entries.length) {
+      traversalFrames.pop();
     }
   }
 
-  await findMatches(validRootPath, "");
+  const nextContinuationState =
+    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
+    && traversalFrames.length > 0
+      ? {
+          traversalFrames: cloneFindFilesByGlobTraversalFrames(traversalFrames),
+        }
+      : null;
 
   return {
     root: searchPath,
-    matches: results,
-    truncated: searchAborted,
+    matches: [...results].sort(),
+    truncated: searchAborted || nextContinuationState !== null,
     admissionOutcome: traversalAdmissionDecision.outcome,
+    nextContinuationState,
   };
-}
-
-async function getFormattedSearchGlobResult(
-  searchPath: string,
-  pattern: string,
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  maxResults: number,
-  allowedDirectories: string[]
-): Promise<string> {
-  const result = await getFindFilesByGlobRootResult(
-    searchPath,
-    pattern,
-    excludePatterns,
-    includeExcludedGlobs,
-    respectGitIgnore,
-    maxResults,
-    allowedDirectories
-  );
-
-  if (result.matches.length === 0) {
-    if (result.truncated) {
-      return `Traversal scope exceeded the deeper runtime safeguard before matching files could be collected. ${buildTraversalNarrowingGuidance(searchPath)}`;
-    }
-
-    return `No files matching pattern: ${pattern}`;
-  }
-
-  let output = `Found ${result.matches.length} files matching pattern: ${pattern}`;
-  if (result.truncated) {
-    output += ` (limited to ${maxResults} results)`;
-  }
-  output += "\n\n";
-
-  result.matches.sort();
-
-  for (const match of result.matches) {
-    output += `${match}\n`;
-  }
-
-  output = output.trimEnd();
-
-  assertActualTextBudget(
-    "find_files_by_glob",
-    output.length,
-    DISCOVERY_RESPONSE_CAP_CHARS,
-    "formatted glob search results",
-  );
-
-  return output;
 }
 
 /**
@@ -326,7 +515,7 @@ async function getFormattedSearchGlobResult(
  * @returns Structured per-root glob-search results and aggregate totals.
  */
 export async function getFindFilesByGlobResult(
-  _continuationToken: string | undefined,
+  continuationToken: string | undefined,
   searchPaths: string[],
   pattern: string,
   excludePatterns: string[],
@@ -334,27 +523,88 @@ export async function getFindFilesByGlobResult(
   respectGitIgnore: boolean,
   maxResults: number,
   allowedDirectories: string[],
-  _inspectionContinuationStore?: InspectionContinuationSqliteStore,
+  inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<FindFilesByGlobResult> {
+  const now = new Date();
+  const executionContext = resolveFindFilesByGlobExecutionContext(
+    continuationToken,
+    searchPaths,
+    pattern,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    inspectionContinuationStore,
+    now,
+  );
+  const activeSearchPaths = executionContext.continuationState === null
+    ? executionContext.requestPayload.searchPaths
+    : executionContext.requestPayload.searchPaths.filter(
+        (requestedSearchPath) =>
+          executionContext.continuationState?.rootTraversalStates[requestedSearchPath] !== undefined,
+      );
+
+  if (activeSearchPaths.length === 0) {
+    if (executionContext.activeContinuationToken !== null && inspectionContinuationStore !== undefined) {
+      inspectionContinuationStore.markSessionCompleted(executionContext.activeContinuationToken, now);
+    }
+
+    return {
+      roots: [],
+      totalMatches: 0,
+      truncated: false,
+      ...createInlineContinuationEnvelope(),
+    };
+  }
+
   const roots = await Promise.all(
-    searchPaths.map((searchPath) =>
+    activeSearchPaths.map((requestedSearchPath) =>
       getFindFilesByGlobRootResult(
-        searchPath,
-        pattern,
-        excludePatterns,
-        includeExcludedGlobs,
-        respectGitIgnore,
-        maxResults,
-        allowedDirectories
-      )
-    )
+        requestedSearchPath,
+        executionContext.requestPayload.pattern,
+        executionContext.requestPayload.excludePatterns,
+        executionContext.requestPayload.includeExcludedGlobs,
+        executionContext.requestPayload.respectGitIgnore,
+        executionContext.requestPayload.maxResults,
+        allowedDirectories,
+        executionContext.continuationState?.rootTraversalStates[requestedSearchPath] ?? null,
+      ),
+    ),
+  );
+  const nextContinuationState = roots.reduce<FindFilesByGlobContinuationState | null>(
+    (accumulatedState, rootResult) => {
+      if (rootResult.nextContinuationState === null) {
+        return accumulatedState;
+      }
+
+      return {
+        rootTraversalStates: {
+          ...(accumulatedState?.rootTraversalStates ?? {}),
+          [rootResult.root]: rootResult.nextContinuationState,
+        },
+      };
+    },
+    null,
+  );
+  const continuationEnvelope = buildFindFilesByGlobContinuationEnvelope(
+    executionContext.activeContinuationToken,
+    executionContext.activeContinuationExpiresAt,
+    nextContinuationState,
+    inspectionContinuationStore,
+    executionContext.requestPayload,
+    roots,
+    now,
   );
 
   return {
-    roots,
+    roots: roots.map(({ root, matches, truncated }) => ({
+      root,
+      matches,
+      truncated,
+    })),
     totalMatches: roots.reduce((total, root) => total + root.matches.length, 0),
     truncated: roots.some((root) => root.truncated),
-    ...createInlineContinuationEnvelope(),
+    ...continuationEnvelope,
   };
 }
 
@@ -386,54 +636,47 @@ export async function handleSearchGlob(
   allowedDirectories: string[],
   inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<string> {
-  if (searchPaths.length === 1) {
-    const firstSearchPath = searchPaths[0];
-
-    if (firstSearchPath === undefined) {
-      throw new Error("Expected one root path for glob-based search.");
-    }
-
-    return getFormattedSearchGlobResult(
-      firstSearchPath,
-      pattern,
-      excludePatterns,
-      includeExcludedGlobs,
-      respectGitIgnore,
-      maxResults,
-      allowedDirectories
-    );
-  }
-
-  const results = await Promise.all(
-    searchPaths.map(async (searchPath) => {
-      try {
-        const output = await getFormattedSearchGlobResult(
-          searchPath,
-          pattern,
-          excludePatterns,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          maxResults,
-          allowedDirectories
-        );
-        return {
-          label: searchPath,
-          output,
-        };
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        return {
-          label: searchPath,
-          error: errorMessage,
-        };
-      }
-    })
+  const executionContext = resolveFindFilesByGlobExecutionContext(
+    continuationToken,
+    searchPaths,
+    pattern,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    inspectionContinuationStore,
+    new Date(),
   );
-
-  const output = formatBatchTextOperationResults("search glob", results);
-
-  void continuationToken;
-  void inspectionContinuationStore;
+  const result = await getFindFilesByGlobResult(
+    continuationToken,
+    searchPaths,
+    pattern,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    allowedDirectories,
+    inspectionContinuationStore,
+  );
+  const effectivePattern = executionContext.requestPayload.pattern;
+  const effectiveMaxResults = executionContext.requestPayload.maxResults;
+  const output = result.roots.length === 1
+    ? formatFindFilesByGlobRootOutput(
+        result.roots[0]!,
+        effectivePattern,
+        effectiveMaxResults,
+      )
+    : formatBatchTextOperationResults(
+        "search glob",
+        result.roots.map((rootResult) => ({
+          label: rootResult.root,
+          output: formatFindFilesByGlobRootOutput(
+            rootResult,
+            effectivePattern,
+            effectiveMaxResults,
+          ),
+        })),
+      );
 
   assertActualTextBudget(
     "find_files_by_glob",

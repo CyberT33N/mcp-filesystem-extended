@@ -14,6 +14,7 @@ import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardr
 import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
+  isTraversalRuntimeBudgetExceededError,
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
@@ -29,7 +30,14 @@ import {
   type FileSystemEntryMetadata,
   type FileSystemEntryMetadataSelection,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
-import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
+import {
+  createContinuationEnvelope,
+  createInlineContinuationEnvelope,
+  createPersistedContinuationEnvelope,
+  getContinuationNotFoundMessage,
+  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
+  INSPECTION_CONTINUATION_STATUSES,
+} from "@domain/shared/continuation/inspection-continuation-contract";
 import type {
   InspectionContinuationAdmission,
   InspectionContinuationMetadata,
@@ -88,8 +96,346 @@ export interface ListDirectoryEntriesResult {
   continuation: InspectionContinuationMetadata;
 }
 
+interface ListDirectoryEntriesTraversalFrame {
+  directoryRelativePath: string;
+  nextEntryIndex: number;
+}
+
+interface ListDirectoryEntriesRootContinuationState {
+  traversalFrames: ListDirectoryEntriesTraversalFrame[];
+}
+
+interface ListDirectoryEntriesContinuationState {
+  rootTraversalStates: Record<string, ListDirectoryEntriesRootContinuationState>;
+}
+
+interface ListDirectoryEntriesRequestPayload {
+  requestedPaths: string[];
+  recursive: boolean;
+  metadataSelection: FileSystemEntryMetadataSelection;
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+}
+
+interface ListDirectoryEntriesExecutionContext {
+  requestPayload: ListDirectoryEntriesRequestPayload;
+  continuationState: ListDirectoryEntriesContinuationState | null;
+  activeContinuationToken: string | null;
+  activeContinuationExpiresAt: string | null;
+}
+
+interface ListDirectoryEntriesRootExecutionResult extends ListedDirectoryRoot {
+  admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+  nextContinuationState: ListDirectoryEntriesRootContinuationState | null;
+}
+
+const LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER = "list_directory_entries";
+const LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE =
+  "Resume the same directory-listing request by sending only continuationToken to the same endpoint to receive the next bounded chunk of entries.";
+
 function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
+}
+
+function cloneListDirectoryEntriesTraversalFrames(
+  traversalFrames: ListDirectoryEntriesTraversalFrame[],
+): ListDirectoryEntriesTraversalFrame[] {
+  return traversalFrames.map((traversalFrame) => ({ ...traversalFrame }));
+}
+
+function createInitialListDirectoryEntriesTraversalFrames(): ListDirectoryEntriesTraversalFrame[] {
+  return [{ directoryRelativePath: "", nextEntryIndex: 0 }];
+}
+
+async function readSortedDirectoryEntries(currentPath: string): Promise<import("fs").Dirent<string>[]> {
+  const entries = await fs.readdir(currentPath, { withFileTypes: true });
+
+  return entries.sort((leftEntry, rightEntry) => leftEntry.name.localeCompare(rightEntry.name));
+}
+
+async function createListedDirectoryEntry(
+  entryAbsolutePath: string,
+  entryName: string,
+  relativePath: string,
+  metadataSelection: FileSystemEntryMetadataSelection,
+): Promise<ListedDirectoryEntry> {
+  const metadata = await getFileSystemEntryMetadata(entryAbsolutePath, metadataSelection);
+
+  return {
+    name: entryName,
+    path: normalizeRelativePath(relativePath),
+    ...metadata,
+  };
+}
+
+function resolveListDirectoryEntriesExecutionContext(
+  continuationToken: string | undefined,
+  requestedPaths: string[],
+  recursive: boolean,
+  metadataSelection: FileSystemEntryMetadataSelection,
+  excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  now: Date,
+): ListDirectoryEntriesExecutionContext {
+  if (continuationToken === undefined) {
+    return {
+      requestPayload: {
+        requestedPaths,
+        recursive,
+        metadataSelection,
+        excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
+      },
+      continuationState: null,
+      activeContinuationToken: null,
+      activeContinuationExpiresAt: null,
+    };
+  }
+
+  if (inspectionContinuationStore === undefined) {
+    throw new Error("Continuation storage is unavailable for list_directory_entries resume requests.");
+  }
+
+  const continuationSession = inspectionContinuationStore.loadActiveSession<
+    ListDirectoryEntriesRequestPayload,
+    ListDirectoryEntriesContinuationState
+  >(
+    continuationToken,
+    LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+    LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+    now,
+  );
+
+  if (continuationSession === null) {
+    throw new Error(getContinuationNotFoundMessage(LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER));
+  }
+
+  return {
+    requestPayload: continuationSession.requestPayload,
+    continuationState: continuationSession.continuationState,
+    activeContinuationToken: continuationSession.continuationToken,
+    activeContinuationExpiresAt: continuationSession.expiresAt,
+  };
+}
+
+function buildListDirectoryEntriesContinuationEnvelope(
+  continuationToken: string | null,
+  continuationExpiresAt: string | null,
+  nextContinuationState: ListDirectoryEntriesContinuationState | null,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  requestPayload: ListDirectoryEntriesRequestPayload,
+  rootResults: ListDirectoryEntriesRootExecutionResult[],
+  now: Date,
+): Pick<ListDirectoryEntriesResult, "admission" | "continuation"> {
+  const previewFirstActive = rootResults.some(
+    (rootResult) =>
+      rootResult.admissionOutcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  );
+
+  if (!previewFirstActive) {
+    return createInlineContinuationEnvelope();
+  }
+
+  if (nextContinuationState === null) {
+    if (continuationToken !== null && inspectionContinuationStore !== undefined) {
+      inspectionContinuationStore.markSessionCompleted(continuationToken, now);
+    }
+
+    return createContinuationEnvelope(
+      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      null,
+      null,
+    );
+  }
+
+  if (inspectionContinuationStore === undefined) {
+    throw new Error("Continuation storage is unavailable for preview-first directory listing.");
+  }
+
+  if (continuationToken === null) {
+    const continuationSession = inspectionContinuationStore.createSession(
+      {
+        endpointName: LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+        familyMember: LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+        requestPayload,
+        continuationState: nextContinuationState,
+        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      },
+      now,
+    );
+
+    return createPersistedContinuationEnvelope(
+      LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+      continuationSession.continuationToken,
+      continuationSession.status,
+      continuationSession.expiresAt,
+      LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE,
+      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    );
+  }
+
+  if (continuationExpiresAt === null) {
+    throw new Error("Active directory-listing continuation session is missing an expiration timestamp.");
+  }
+
+  inspectionContinuationStore.updateContinuationState(continuationToken, nextContinuationState, now);
+
+  return createPersistedContinuationEnvelope(
+    LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+    continuationToken,
+    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
+    continuationExpiresAt,
+    LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  );
+}
+
+async function collectDirectoryEntriesPreviewChunk(
+  rootAbsolutePath: string,
+  recursive: boolean,
+  metadataSelection: FileSystemEntryMetadataSelection,
+  traversalScopePolicyResolution: TraversalScopePolicyResolution,
+  traversalRuntimeBudgetState: ReturnType<typeof createTraversalRuntimeBudgetState>,
+  traversalNarrowingGuidance: string,
+  previewExecutionRuntimeBudgetLimits: {
+    maxVisitedEntries: number;
+    maxVisitedDirectories: number;
+    softTimeBudgetMs: number;
+  },
+  continuationState: ListDirectoryEntriesRootContinuationState | null,
+): Promise<{
+  entries: ListedDirectoryEntry[];
+  nextContinuationState: ListDirectoryEntriesRootContinuationState | null;
+}> {
+  const traversalFrames = continuationState === null
+    ? createInitialListDirectoryEntriesTraversalFrames()
+    : cloneListDirectoryEntriesTraversalFrames(continuationState.traversalFrames);
+  const listedEntries: ListedDirectoryEntry[] = [];
+  let previewAborted = false;
+
+  while (traversalFrames.length > 0 && !previewAborted) {
+    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
+
+    if (currentTraversalFrame === undefined) {
+      break;
+    }
+
+    const currentPath = currentTraversalFrame.directoryRelativePath === ""
+      ? rootAbsolutePath
+      : path.join(rootAbsolutePath, currentTraversalFrame.directoryRelativePath);
+
+    if (recursive && currentTraversalFrame.nextEntryIndex === 0) {
+      try {
+        recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
+        assertTraversalRuntimeBudget(
+          LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+          traversalRuntimeBudgetState,
+          Date.now(),
+          traversalNarrowingGuidance,
+          previewExecutionRuntimeBudgetLimits,
+        );
+      } catch (error) {
+        if (isTraversalRuntimeBudgetExceededError(error)) {
+          previewAborted = true;
+          break;
+        }
+
+        throw error;
+      }
+    }
+
+    let entries: import("fs").Dirent<string>[];
+
+    try {
+      entries = await readSortedDirectoryEntries(currentPath);
+    } catch {
+      traversalFrames.pop();
+      continue;
+    }
+
+    let descendedIntoChildDirectory = false;
+
+    while (currentTraversalFrame.nextEntryIndex < entries.length && !previewAborted) {
+      if (recursive) {
+        try {
+          recordTraversalEntryVisit(traversalRuntimeBudgetState);
+          assertTraversalRuntimeBudget(
+            LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+            traversalRuntimeBudgetState,
+            Date.now(),
+            traversalNarrowingGuidance,
+            previewExecutionRuntimeBudgetLimits,
+          );
+        } catch (error) {
+          if (isTraversalRuntimeBudgetExceededError(error)) {
+            previewAborted = true;
+            break;
+          }
+
+          throw error;
+        }
+      }
+
+      const entry = entries[currentTraversalFrame.nextEntryIndex];
+
+      if (entry === undefined) {
+        break;
+      }
+
+      currentTraversalFrame.nextEntryIndex += 1;
+
+      const entryAbsolutePath = path.join(currentPath, entry.name);
+      const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
+        ? entry.name
+        : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
+      const relativePath = normalizeRelativePath(rawRelativePath);
+      const shouldTraverseExcludedDirectory =
+        recursive
+        && entry.isDirectory()
+        && shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
+
+      if (
+        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
+        && !shouldTraverseExcludedDirectory
+      ) {
+        continue;
+      }
+
+      const listedEntry = await createListedDirectoryEntry(
+        entryAbsolutePath,
+        entry.name,
+        rawRelativePath,
+        metadataSelection,
+      );
+      listedEntries.push(listedEntry);
+
+      if (recursive && entry.isDirectory()) {
+        traversalFrames.push({
+          directoryRelativePath: rawRelativePath,
+          nextEntryIndex: 0,
+        });
+        descendedIntoChildDirectory = true;
+        break;
+      }
+    }
+
+    if (!descendedIntoChildDirectory && currentTraversalFrame.nextEntryIndex >= entries.length) {
+      traversalFrames.pop();
+    }
+  }
+
+  return {
+    entries: listedEntries,
+    nextContinuationState: traversalFrames.length === 0
+      ? null
+      : {
+          traversalFrames: cloneListDirectoryEntriesTraversalFrames(traversalFrames),
+        },
+  };
 }
 
 async function collectDirectoryEntries(
@@ -104,14 +450,14 @@ async function collectDirectoryEntries(
   if (recursive) {
     recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
     assertTraversalRuntimeBudget(
-      "list_directory_entries",
+      LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
       traversalRuntimeBudgetState,
       Date.now(),
       traversalNarrowingGuidance,
     );
   }
 
-  const entries = await fs.readdir(currentPath, { withFileTypes: true });
+  const entries = await readSortedDirectoryEntries(currentPath);
   const listedEntries: ListedDirectoryEntry[] = [];
 
   for (const entry of entries) {
@@ -125,7 +471,7 @@ async function collectDirectoryEntries(
     if (recursive) {
       recordTraversalEntryVisit(traversalRuntimeBudgetState);
       assertTraversalRuntimeBudget(
-        "list_directory_entries",
+        LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
         traversalRuntimeBudgetState,
         Date.now(),
         traversalNarrowingGuidance,
@@ -133,27 +479,23 @@ async function collectDirectoryEntries(
     }
 
     const shouldTraverseExcludedDirectory =
-      recursive &&
-      entry.isDirectory() &&
-      shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
+      recursive
+      && entry.isDirectory()
+      && shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
 
     if (
-      shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
-      !shouldTraverseExcludedDirectory
+      shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
+      && !shouldTraverseExcludedDirectory
     ) {
       continue;
     }
 
-    const metadata = await getFileSystemEntryMetadata(
+    const listedEntry = await createListedDirectoryEntry(
       entryAbsolutePath,
-      metadataSelection
+      entry.name,
+      rawRelativePath,
+      metadataSelection,
     );
-
-    let listedEntry: ListedDirectoryEntry = {
-      name: entry.name,
-      path: relativePath,
-      ...metadata,
-    };
 
     if (recursive && entry.isDirectory()) {
       listedEntry.children = await collectDirectoryEntries(
@@ -180,10 +522,11 @@ async function buildListedDirectoryRoot(
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
-  allowedDirectories: string[]
-): Promise<ListedDirectoryRoot> {
+  allowedDirectories: string[],
+  continuationState: ListDirectoryEntriesRootContinuationState | null = null,
+): Promise<ListDirectoryEntriesRootExecutionResult> {
   const traversalPreflightContext = await resolveTraversalPreflightContext(
-    "list_directory_entries",
+    LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
     requestedPath,
     excludePatterns,
     includeExcludedGlobs,
@@ -213,8 +556,8 @@ async function buildListedDirectoryRoot(
     candidateWorkloadEvidence,
     executionPolicy,
     consumerCapabilities: {
-      toolName: "list_directory_entries",
-      previewFirstSupported: false,
+      toolName: LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+      previewFirstSupported: true,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
       executionTimeCostMultiplier:
         TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.executionTimeCostMultiplier,
@@ -226,14 +569,42 @@ async function buildListedDirectoryRoot(
 
   if (
     traversalAdmissionDecision.outcome
-    !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED
+    || traversalAdmissionDecision.outcome
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED
   ) {
     throw new Error(
       traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(requestedPath),
     );
   }
+
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(requestedPath);
+  const previewExecutionRuntimeBudgetLimits = {
+    maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
+    maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
+    softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+  };
+
+  if (traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
+    const previewChunk = await collectDirectoryEntriesPreviewChunk(
+      traversalPreflightContext.rootEntry.validPath,
+      recursive,
+      metadataSelection,
+      traversalPreflightContext.traversalScopePolicyResolution,
+      traversalRuntimeBudgetState,
+      traversalNarrowingGuidance,
+      previewExecutionRuntimeBudgetLimits,
+      continuationState,
+    );
+
+    return {
+      requestedPath,
+      entries: previewChunk.entries,
+      admissionOutcome: traversalAdmissionDecision.outcome,
+      nextContinuationState: previewChunk.nextContinuationState,
+    };
+  }
 
   return {
     requestedPath,
@@ -246,29 +617,13 @@ async function buildListedDirectoryRoot(
       traversalRuntimeBudgetState,
       traversalNarrowingGuidance,
     ),
+    admissionOutcome: traversalAdmissionDecision.outcome,
+    nextContinuationState: null,
   };
 }
 
-/**
- * Builds the structured directory listing result used by the directory-entry surface.
- *
- * @remarks
- * This surface reuses the grouped metadata contract defined in
- * `@domain/inspection/shared/filesystem-entry-metadata-contract` so
- * `get_path_metadata` and `list_directory_entries` stay aligned on the same
- * metadata selection behavior.
- *
- * @param requestedPaths - Directory paths to list.
- * @param recursive - Whether nested directory content should be traversed.
- * @param metadataSelection - Grouped optional metadata flags. `size` and `type` remain required defaults.
- * @param excludePatterns - Optional glob-like exclude patterns.
- * @param includeExcludedGlobs - Optional additive descendant re-include globs.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment should participate.
- * @param allowedDirectories - Allowed directory roots used during path validation.
- * @returns Structured directory listing result.
- */
 export async function getListDirectoryEntriesResult(
-  _continuationToken: string | undefined,
+  continuationToken: string | undefined,
   requestedPaths: string[],
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
@@ -276,42 +631,86 @@ export async function getListDirectoryEntriesResult(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   allowedDirectories: string[],
-  _inspectionContinuationStore?: InspectionContinuationSqliteStore,
+  inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<ListDirectoryEntriesResult> {
+  const now = new Date();
+  const executionContext = resolveListDirectoryEntriesExecutionContext(
+    continuationToken,
+    requestedPaths,
+    recursive,
+    metadataSelection,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    inspectionContinuationStore,
+    now,
+  );
+  const activeRequestedPaths = executionContext.continuationState === null
+    ? executionContext.requestPayload.requestedPaths
+    : executionContext.requestPayload.requestedPaths.filter(
+        (requestedRoot) =>
+          executionContext.continuationState?.rootTraversalStates[requestedRoot] !== undefined,
+      );
+
+  if (activeRequestedPaths.length === 0) {
+    if (executionContext.activeContinuationToken !== null && inspectionContinuationStore !== undefined) {
+      inspectionContinuationStore.markSessionCompleted(executionContext.activeContinuationToken, now);
+    }
+
+    return {
+      roots: [],
+      ...createInlineContinuationEnvelope(),
+    };
+  }
+
   const roots = await Promise.all(
-    requestedPaths.map((requestedPath) =>
+    activeRequestedPaths.map((requestedPath) =>
       buildListedDirectoryRoot(
         requestedPath,
-        recursive,
-        metadataSelection,
-        excludePatterns,
-        includeExcludedGlobs,
-        respectGitIgnore,
-        allowedDirectories
-      )
-    )
+        executionContext.requestPayload.recursive,
+        executionContext.requestPayload.metadataSelection,
+        executionContext.requestPayload.excludePatterns,
+        executionContext.requestPayload.includeExcludedGlobs,
+        executionContext.requestPayload.respectGitIgnore,
+        allowedDirectories,
+        executionContext.continuationState?.rootTraversalStates[requestedPath] ?? null,
+      ),
+    ),
+  );
+  const nextContinuationState = roots.reduce<ListDirectoryEntriesContinuationState | null>(
+    (accumulatedState, rootResult) => {
+      if (rootResult.nextContinuationState === null) {
+        return accumulatedState;
+      }
+
+      return {
+        rootTraversalStates: {
+          ...(accumulatedState?.rootTraversalStates ?? {}),
+          [rootResult.requestedPath]: rootResult.nextContinuationState,
+        },
+      };
+    },
+    null,
+  );
+  const continuationEnvelope = buildListDirectoryEntriesContinuationEnvelope(
+    executionContext.activeContinuationToken,
+    executionContext.activeContinuationExpiresAt,
+    nextContinuationState,
+    inspectionContinuationStore,
+    executionContext.requestPayload,
+    roots,
+    now,
   );
 
-  const result: ListDirectoryEntriesResult = {
-    roots,
-    ...createInlineContinuationEnvelope(),
+  return {
+    roots: roots.map(({ requestedPath, entries }) => ({
+      requestedPath,
+      entries,
+    })),
+    ...continuationEnvelope,
   };
-
-  return result;
 }
 
-/**
- * Lists directory entries as a TOON-encoded structured payload.
- *
- * @param requestedPaths - Directory paths to list.
- * @param recursive - Whether nested directory content should be traversed.
- * @param metadataSelection - Grouped optional metadata flags. `size` and `type` remain required defaults.
- * @param excludePatterns - Optional glob-like exclude patterns.
- * @param includeExcludedGlobs - Optional additive descendant re-include globs.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment should participate.
- * @param allowedDirectories - Allowed directory roots used during path validation.
- * @returns TOON-encoded structured directory listing output.
- */
 export async function handleListDirectoryEntries(
   continuationToken: string | undefined,
   requestedPaths: string[],
@@ -338,7 +737,7 @@ export async function handleListDirectoryEntries(
   const output = encode(result);
 
   assertActualTextBudget(
-    "list_directory_entries",
+    LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
     output.length,
     DISCOVERY_RESPONSE_CAP_CHARS,
     "encoded structured directory listing output",
@@ -346,3 +745,4 @@ export async function handleListDirectoryEntries(
 
   return output;
 }
+

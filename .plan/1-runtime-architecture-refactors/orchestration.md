@@ -4,9 +4,9 @@ file_id: "1"
 unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
- unit_status: "in_progress"
+ unit_status: "done"
   total_tasks: 8
-  completed_tasks: 7
+  completed_tasks: 8
  has_sub_units: false
  sub_unit_count: 0
   resume_frontier_task: "1.8"
@@ -20,8 +20,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** in_progress
-- **Progress:** 7/8 tasks
+- **Unit Status:** done
+- **Progress:** 8/8 tasks
 
 ## Execution Frontier
 - **Resume Frontier Task:** `1.8`
@@ -85,9 +85,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared runtime ceilings, capability flooring, and execution-policy tables
   - Blocked By: none
   - Summary: Recalibrate the shared traversal-admission values upward, bind the explicit 50% / 85% response-band thresholds, and harden the TSDoc rationale for the higher values without weakening the deeper fuse.
-- [~] **1.8 Continuation token and SQLite resume architecture** → [`1.8-continuation-token-and-sqlite-resume-architecture.md`](./1.8-continuation-token-and-sqlite-resume-architecture.md)
+- [x] **1.8 Continuation token and SQLite resume architecture** → [`1.8-continuation-token-and-sqlite-resume-architecture.md`](./1.8-continuation-token-and-sqlite-resume-architecture.md)
   - Classification: SEQUENTIAL
-  - Status: IN_PROGRESS
+  - Status: DONE
   - Complexity: HIGH
   - Execution Surface Band: YELLOW
   - Files Modified: shared continuation contracts, SQLite-backed persistence, affected inspection schemas/handlers, and application-shell integration

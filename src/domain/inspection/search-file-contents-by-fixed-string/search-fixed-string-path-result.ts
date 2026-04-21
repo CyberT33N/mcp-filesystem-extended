@@ -48,6 +48,27 @@ import { getValidatedPreflightEntry } from "./fixed-string-search-support";
 
 const SEARCH_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string";
 
+interface SearchFixedStringTraversalFrame {
+  directoryRelativePath: string;
+  nextEntryIndex: number;
+}
+
+export interface SearchFixedStringRootContinuationState {
+  traversalFrames: SearchFixedStringTraversalFrame[];
+  activeFileRelativePath: string | null;
+  activeFileMatchOffset: number;
+}
+
+function cloneSearchFixedStringTraversalFrames(
+  traversalFrames: SearchFixedStringTraversalFrame[],
+): SearchFixedStringTraversalFrame[] {
+  return traversalFrames.map((traversalFrame) => ({ ...traversalFrame }));
+}
+
+function createInitialSearchFixedStringTraversalFrames(): SearchFixedStringTraversalFrame[] {
+  return [{ directoryRelativePath: "", nextEntryIndex: 0 }];
+}
+
 function matchesPreviewLaneFilePatterns(
   candidateRelativePath: string,
   filePatterns: string[],
@@ -103,7 +124,11 @@ export async function getSearchFixedStringPathResult(
     detectIoCapabilityProfile(),
   ),
   aggregateBudgetState: FixedStringSearchAggregateBudgetState = createFixedStringSearchAggregateBudgetState(),
-): Promise<SearchFixedStringPathResult> {
+  continuationState: SearchFixedStringRootContinuationState | null = null,
+): Promise<SearchFixedStringPathResult & {
+  admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+  nextContinuationState: SearchFixedStringRootContinuationState | null;
+}> {
   const traversalPreflightContext = await resolveTraversalPreflightContext(
     SEARCH_FIXED_STRING_TOOL_NAME,
     searchPath,
@@ -182,10 +207,16 @@ export async function getSearchFixedStringPathResult(
       totalMatches: 0,
       truncated: false,
       error: traversalAdmissionDecision.guidanceText,
+      admissionOutcome: traversalAdmissionDecision.outcome,
+      nextContinuationState: null,
     };
   }
 
   if (searchScopeEntry.type === "file") {
+    const activeFileMatchOffset = continuationState?.activeFileRelativePath === ""
+      ? continuationState.activeFileMatchOffset
+      : 0;
+
     if (
       shouldStopTraversalPreviewLane(
         aggregateBudgetState.totalCandidateBytesScanned,
@@ -200,6 +231,14 @@ export async function getSearchFixedStringPathResult(
         totalMatches: 0,
         truncated: true,
         error: previewLanePlan.guidanceText,
+        admissionOutcome: traversalAdmissionDecision.outcome,
+        nextContinuationState: previewFirstAdmissionActive
+          ? {
+              traversalFrames: [],
+              activeFileRelativePath: "",
+              activeFileMatchOffset,
+            }
+          : null,
       };
     }
 
@@ -213,16 +252,27 @@ export async function getSearchFixedStringPathResult(
       aggregateBudgetState,
       true,
       admissionAdjustedMaxResults,
+      activeFileMatchOffset,
       0,
     );
+
+    const nextContinuationState = previewFirstAdmissionActive && fileSearchResult.truncated
+      ? {
+          traversalFrames: [],
+          activeFileRelativePath: "",
+          activeFileMatchOffset: activeFileMatchOffset + fileSearchResult.matches.length,
+        }
+      : null;
 
     return {
       root: searchPath,
       matches: fileSearchResult.matches,
       filesSearched: fileSearchResult.fileSearched ? 1 : 0,
       totalMatches: fileSearchResult.totalMatches,
-      truncated: fileSearchResult.truncated || previewFirstAdmissionActive,
+      truncated: fileSearchResult.truncated || nextContinuationState !== null,
       error: null,
+      admissionOutcome: traversalAdmissionDecision.outcome,
+      nextContinuationState,
     };
   }
 
@@ -230,12 +280,17 @@ export async function getSearchFixedStringPathResult(
   const traversalScopePolicyResolution =
     traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
+  const traversalFrames = continuationState === null
+    ? createInitialSearchFixedStringTraversalFrames()
+    : cloneSearchFixedStringTraversalFrames(continuationState.traversalFrames);
   const results: FixedStringSearchMatch[] = [];
   let filesSearched = 0;
   let matchesFound = 0;
   let searchAborted = false;
   let totalBytesScanned = 0;
   let unsupportedStateReason: string | null = null;
+  let activeFileRelativePath = continuationState?.activeFileRelativePath ?? null;
+  let activeFileMatchOffset = continuationState?.activeFileMatchOffset ?? 0;
 
   function markTraversalBudgetExceeded(error: unknown): boolean {
     if (!isTraversalRuntimeBudgetExceededError(error)) {
@@ -253,41 +308,85 @@ export async function getSearchFixedStringPathResult(
     return true;
   }
 
-  async function searchDirectory(dirPath: string, currentRelativePath: string): Promise<void> {
-    if (searchAborted) {
-      return;
+  if (activeFileRelativePath !== null) {
+    const activeFileAbsolutePath = activeFileRelativePath === ""
+      ? validRootPath
+      : path.join(validRootPath, activeFileRelativePath);
+    const activeFileCandidateEntry = await getValidatedPreflightEntry(activeFileAbsolutePath, allowedDirectories);
+
+    const resumedFileSearchResult = await collectFixedStringMatchesFromFileEntry(
+      activeFileCandidateEntry,
+      activeFileRelativePath === "" ? searchPath : activeFileRelativePath,
+      fixedString,
+      filePatterns,
+      caseSensitive,
+      executionPolicy,
+      aggregateBudgetState,
+      false,
+      admissionAdjustedMaxResults,
+      activeFileMatchOffset,
+      totalBytesScanned,
+    );
+
+    if (resumedFileSearchResult.fileSearched) {
+      filesSearched += 1;
     }
 
-    recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
-    try {
-      assertTraversalRuntimeBudget(
-        SEARCH_FIXED_STRING_TOOL_NAME,
-        traversalRuntimeBudgetState,
-        Date.now(),
-        traversalNarrowingGuidance,
-        previewLanePlan.runtimeBudgetLimits ?? undefined,
-      );
-    } catch (error) {
-      if (markTraversalBudgetExceeded(error)) {
-        return;
-      }
+    totalBytesScanned = resumedFileSearchResult.totalBytesScanned;
+    matchesFound += resumedFileSearchResult.totalMatches;
+    results.push(...resumedFileSearchResult.matches);
 
-      throw error;
+    if (resumedFileSearchResult.truncated) {
+      searchAborted = true;
+      activeFileMatchOffset += resumedFileSearchResult.matches.length;
+    } else {
+      activeFileRelativePath = null;
+      activeFileMatchOffset = 0;
+    }
+  }
+
+  while (traversalFrames.length > 0 && !searchAborted) {
+    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
+
+    if (currentTraversalFrame === undefined) {
+      break;
+    }
+
+    const currentPath = currentTraversalFrame.directoryRelativePath === ""
+      ? validRootPath
+      : path.join(validRootPath, currentTraversalFrame.directoryRelativePath);
+
+    if (currentTraversalFrame.nextEntryIndex === 0) {
+      recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
+      try {
+        assertTraversalRuntimeBudget(
+          SEARCH_FIXED_STRING_TOOL_NAME,
+          traversalRuntimeBudgetState,
+          Date.now(),
+          traversalNarrowingGuidance,
+          previewLanePlan.runtimeBudgetLimits ?? undefined,
+        );
+      } catch (error) {
+        if (markTraversalBudgetExceeded(error)) {
+          break;
+        }
+
+        throw error;
+      }
     }
 
     let entries: import("fs").Dirent<string>[];
 
     try {
-      entries = await fs.readdir(dirPath, { withFileTypes: true });
+      entries = await fs.readdir(currentPath, { withFileTypes: true });
     } catch {
-      return;
+      traversalFrames.pop();
+      continue;
     }
 
-    for (const entry of entries) {
-      if (searchAborted) {
-        break;
-      }
+    let descendedIntoChildDirectory = false;
 
+    while (currentTraversalFrame.nextEntryIndex < entries.length && !searchAborted) {
       recordTraversalEntryVisit(traversalRuntimeBudgetState);
       try {
         assertTraversalRuntimeBudget(
@@ -305,9 +404,17 @@ export async function getSearchFixedStringPathResult(
         throw error;
       }
 
-      const rawRelativePath = currentRelativePath === ""
+      const entry = entries[currentTraversalFrame.nextEntryIndex];
+
+      if (entry === undefined) {
+        break;
+      }
+
+      currentTraversalFrame.nextEntryIndex += 1;
+
+      const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
         ? entry.name
-        : path.join(currentRelativePath, entry.name);
+        : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
       const relativePath = rawRelativePath.split(path.sep).join("/");
       const shouldTraverseExcludedDirectory = entry.isDirectory()
         && shouldTraverseTraversalScopeDirectoryPath(
@@ -322,7 +429,7 @@ export async function getSearchFixedStringPathResult(
         continue;
       }
 
-      const fullPath = path.join(dirPath, entry.name);
+      const fullPath = path.join(currentPath, entry.name);
       let candidateEntry: FilesystemPreflightEntry;
 
       try {
@@ -332,8 +439,12 @@ export async function getSearchFixedStringPathResult(
       }
 
       if (candidateEntry.type === "directory") {
-        await searchDirectory(candidateEntry.validPath, rawRelativePath);
-        continue;
+        traversalFrames.push({
+          directoryRelativePath: rawRelativePath,
+          nextEntryIndex: 0,
+        });
+        descendedIntoChildDirectory = true;
+        break;
       }
 
       if (candidateEntry.type !== "file") {
@@ -366,6 +477,7 @@ export async function getSearchFixedStringPathResult(
         aggregateBudgetState,
         false,
         admissionAdjustedMaxResults - results.length,
+        0,
         totalBytesScanned,
       );
 
@@ -379,19 +491,34 @@ export async function getSearchFixedStringPathResult(
 
       if (fileSearchResult.truncated) {
         searchAborted = true;
+        activeFileRelativePath = relativePath;
+        activeFileMatchOffset = fileSearchResult.matches.length;
         break;
       }
     }
+
+    if (!descendedIntoChildDirectory && currentTraversalFrame.nextEntryIndex >= entries.length) {
+      traversalFrames.pop();
+    }
   }
 
-  await searchDirectory(validRootPath, "");
+  const nextContinuationState = previewFirstAdmissionActive
+    && (traversalFrames.length > 0 || activeFileRelativePath !== null)
+      ? {
+          traversalFrames: cloneSearchFixedStringTraversalFrames(traversalFrames),
+          activeFileRelativePath,
+          activeFileMatchOffset,
+        }
+      : null;
 
   return {
     root: searchPath,
     matches: results,
     filesSearched,
     totalMatches: matchesFound,
-    truncated: searchAborted || previewFirstAdmissionActive,
+    truncated: searchAborted || nextContinuationState !== null,
     error: results.length === 0 && unsupportedStateReason !== null ? unsupportedStateReason : null,
+    admissionOutcome: traversalAdmissionDecision.outcome,
+    nextContinuationState,
   };
 }

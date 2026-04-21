@@ -44,6 +44,7 @@ export async function collectFixedStringMatchesFromFileEntry(
   aggregateBudgetState: FixedStringSearchAggregateBudgetState,
   refuseUnsupportedFileScope: boolean,
   maxAdditionalResults: number,
+  matchesToSkipBeforeCollecting: number,
   totalBytesScannedBeforeRead: number,
 ): Promise<{
   matches: FixedStringSearchMatch[];
@@ -155,6 +156,7 @@ export async function collectFixedStringMatchesFromFileEntry(
   const matches: FixedStringSearchMatch[] = [];
   let totalMatches = 0;
   let truncated = false;
+  let remainingMatchesToSkip = matchesToSkipBeforeCollecting;
   const matchedLines = executionResult.stdout
     .split(/\r?\n/u)
     .filter((outputLine) => outputLine.trim() !== "");
@@ -171,6 +173,11 @@ export async function collectFixedStringMatchesFromFileEntry(
       fixedString,
       caseSensitive,
     )) {
+      if (remainingMatchesToSkip > 0) {
+        remainingMatchesToSkip -= 1;
+        continue;
+      }
+
       totalMatches += 1;
       matches.push({
         file: parsedLine.file,
