@@ -570,6 +570,7 @@ export async function getSearchRegexPathResult(
     const activeFileMatchOffset = continuationState?.activeFileRelativePath === ""
       ? continuationState.activeFileMatchOffset
       : 0;
+    const explicitFileScopePatterns: string[] = [];
 
     if (
       shouldStopTraversalPreviewLane(
@@ -600,7 +601,7 @@ export async function getSearchRegexPathResult(
       toolName,
       searchScopeEntry,
       searchPath,
-      filePatterns,
+      explicitFileScopePatterns,
       regex,
       pattern,
       caseSensitive,
@@ -675,12 +676,13 @@ export async function getSearchRegexPathResult(
       activeFileAbsolutePath,
       allowedDirectories,
     );
+    const resumedFilePatterns = activeFileRelativePath === "" ? [] : filePatterns;
 
     const resumedFileSearchResult = await collectRegexMatchesFromFileEntry(
       toolName,
       activeFileCandidateEntry,
       activeFileRelativePath === "" ? searchPath : activeFileRelativePath,
-      filePatterns,
+      resumedFilePatterns,
       regex,
       pattern,
       caseSensitive,

@@ -216,6 +216,7 @@ export async function getSearchFixedStringPathResult(
     const activeFileMatchOffset = continuationState?.activeFileRelativePath === ""
       ? continuationState.activeFileMatchOffset
       : 0;
+    const explicitFileScopePatterns: string[] = [];
 
     if (
       shouldStopTraversalPreviewLane(
@@ -246,7 +247,7 @@ export async function getSearchFixedStringPathResult(
       searchScopeEntry,
       searchPath,
       fixedString,
-      filePatterns,
+      explicitFileScopePatterns,
       caseSensitive,
       executionPolicy,
       aggregateBudgetState,
@@ -313,12 +314,13 @@ export async function getSearchFixedStringPathResult(
       ? validRootPath
       : path.join(validRootPath, activeFileRelativePath);
     const activeFileCandidateEntry = await getValidatedPreflightEntry(activeFileAbsolutePath, allowedDirectories);
+    const resumedFilePatterns = activeFileRelativePath === "" ? [] : filePatterns;
 
     const resumedFileSearchResult = await collectFixedStringMatchesFromFileEntry(
       activeFileCandidateEntry,
       activeFileRelativePath === "" ? searchPath : activeFileRelativePath,
       fixedString,
-      filePatterns,
+      resumedFilePatterns,
       caseSensitive,
       executionPolicy,
       aggregateBudgetState,
