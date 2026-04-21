@@ -212,6 +212,19 @@ export async function handleSearchFixedString(
   allowedDirectories: string[],
   inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<string> {
+  const executionContext = resolveSearchFixedStringExecutionContext(
+    continuationToken,
+    searchPaths,
+    fixedString,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    inspectionContinuationStore,
+    new Date(),
+  );
   const structuredResult = await getSearchFixedStringResult(
     continuationToken,
     searchPaths,
@@ -226,6 +239,7 @@ export async function handleSearchFixedString(
     inspectionContinuationStore,
   );
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
+  const effectiveFixedString = executionContext.requestPayload.fixedString;
 
   if (structuredResult.roots.length === 1) {
     const firstRootResult = structuredResult.roots[0];
@@ -236,7 +250,7 @@ export async function handleSearchFixedString(
 
     return assertFormattedFixedStringResponseBudget(
       SEARCH_FIXED_STRING_TOOL_NAME,
-      formatSearchFixedStringPathOutput(firstRootResult, fixedString, effectiveMaxResults),
+      formatSearchFixedStringPathOutput(firstRootResult, effectiveFixedString, effectiveMaxResults),
     );
   }
 
@@ -246,7 +260,7 @@ export async function handleSearchFixedString(
       "search fixed string",
       structuredResult.roots.map((rootResult) => ({
         label: rootResult.root,
-        output: formatSearchFixedStringPathOutput(rootResult, fixedString, effectiveMaxResults),
+        output: formatSearchFixedStringPathOutput(rootResult, effectiveFixedString, effectiveMaxResults),
       })),
     ),
   );

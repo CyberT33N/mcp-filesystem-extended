@@ -249,6 +249,19 @@ export async function handleSearchRegex(
   allowedDirectories: string[],
   inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<string> {
+  const executionContext = resolveSearchRegexExecutionContext(
+    continuationToken,
+    searchPaths,
+    pattern,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    inspectionContinuationStore,
+    new Date(),
+  );
   const structuredResult = await getSearchRegexResult(
     continuationToken,
     searchPaths,
@@ -263,6 +276,7 @@ export async function handleSearchRegex(
     inspectionContinuationStore,
   );
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
+  const effectivePattern = executionContext.requestPayload.pattern;
 
   if (structuredResult.roots.length === 1) {
     const firstRootResult = structuredResult.roots[0];
@@ -273,7 +287,7 @@ export async function handleSearchRegex(
 
     return assertFormattedRegexResponseBudget(
       SEARCH_REGEX_TOOL_NAME,
-      formatSearchRegexPathOutput(firstRootResult, pattern, effectiveMaxResults),
+      formatSearchRegexPathOutput(firstRootResult, effectivePattern, effectiveMaxResults),
     );
   }
 
@@ -283,7 +297,7 @@ export async function handleSearchRegex(
       "search regex",
       structuredResult.roots.map((rootResult) => ({
         label: rootResult.root,
-        output: formatSearchRegexPathOutput(rootResult, pattern, effectiveMaxResults),
+        output: formatSearchRegexPathOutput(rootResult, effectivePattern, effectiveMaxResults),
       })),
     ),
   );
