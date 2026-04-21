@@ -1,8 +1,9 @@
 import {
-  buildTraversalNarrowingGuidance,
   DISCOVERY_MAX_RESULTS_HARD_CAP,
   DISCOVERY_RESPONSE_CAP_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { buildTraversalNarrowingGuidance } from "@domain/shared/guardrails/filesystem-preflight";
+import type { TraversalWorkloadAdmissionOutcome } from "@domain/shared/guardrails/traversal-workload-admission";
 import {
   createContinuationEnvelope,
   createInlineContinuationEnvelope,
@@ -74,7 +75,7 @@ interface FindPathsByNameExecutionContext {
 }
 
 interface FindPathsByNameRootExecutionResult extends FindPathsByNameRootResult {
-  admissionOutcome: InspectionContinuationAdmission["outcome"];
+  admissionOutcome: TraversalWorkloadAdmissionOutcome;
   nextContinuationState: FindPathsByNameContinuationState | null;
 }
 
