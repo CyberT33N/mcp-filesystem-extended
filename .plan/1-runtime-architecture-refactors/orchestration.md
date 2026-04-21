@@ -6,11 +6,11 @@ parent_orchestration: "PLAN.md"
 hierarchy_level: 1
  unit_status: "in_progress"
   total_tasks: 8
-  completed_tasks: 6
+  completed_tasks: 7
  has_sub_units: false
  sub_unit_count: 0
-  resume_frontier_task: "1.7"
-  next_frontier_task: "1.7"
+  resume_frontier_task: "1.8"
+  next_frontier_task: "1.8"
 todo_window_mode_override: "inherit"
 ---
 
@@ -21,11 +21,11 @@ todo_window_mode_override: "inherit"
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
 - **Unit Status:** in_progress
-- **Progress:** 6/8 tasks
+- **Progress:** 7/8 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.7`
-- **Next Frontier Task:** `1.7`
+- **Resume Frontier Task:** `1.8`
+- **Next Frontier Task:** `1.8`
 - **Todo Window Mode:** `inherit`
 
 ## Tasks
@@ -77,9 +77,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared admission planner plus recursive discovery/search/count consumers
   - Blocked By: none
   - Summary: Close the residual admission-to-execution gap by introducing shared root-level workload admission and binding all recursive consumers to it before traversal begins.
-- [~] **1.7 Traversal admission threshold recalibration and TSDoc hardening** → [`1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md`](./1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md)
+- [x] **1.7 Traversal admission threshold recalibration and TSDoc hardening** → [`1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md`](./1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md)
   - Classification: SEQUENTIAL
-  - Status: IN_PROGRESS
+  - Status: DONE
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: shared runtime ceilings, capability flooring, and execution-policy tables
@@ -91,7 +91,7 @@ todo_window_mode_override: "inherit"
   - Complexity: HIGH
   - Execution Surface Band: YELLOW
   - Files Modified: shared continuation contracts, SQLite-backed persistence, affected inspection schemas/handlers, and application-shell integration
-  - Blocked By: 1.7
+  - Blocked By: none
   - Summary: Add same-endpoint continuation-token resume contracts, local SQLite persistence, deterministic error behavior, and preview/task-backed continuation workflow integration for the affected inspection families.
 
 ## Internal Dependencies (This Level)
@@ -103,7 +103,7 @@ todo_window_mode_override: "inherit"
 | D4 | 1.5 | 1.4 | SEQUENTIAL | RESOLVED | Traversal governance refactor should land after state and read-core semantics are stabilized. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
 | D5 | 1.6 | 1.5 | SEQUENTIAL | RESOLVED | Shared workload admission and recursive lane routing close the residual runtime-control-plane gap left after the phase-one traversal refactor. | `src/domain/shared/guardrails/filesystem-preflight.ts`, `src/domain/shared/search/search-execution-policy.ts` |
 | D6 | 1.7 | 1.6 | SEQUENTIAL | RESOLVED | Admission-threshold recalibration depends on the finalized shared planner and recursive consumer routing from task `1.6`. | `src/domain/shared/guardrails/tool-guardrail-limits.ts`, `src/domain/shared/runtime/io-capability-profile.ts`, `src/domain/shared/search/search-execution-policy.ts` |
-| D7 | 1.8 | 1.7 | SEQUENTIAL | UNRESOLVED | Same-endpoint continuation tokens and SQLite-backed resume depend on the recalibrated admission bands and higher shared thresholds from task `1.7`. | `src/domain/shared/search/search-execution-policy.ts`, `src/domain/shared/continuation/**`, `src/infrastructure/persistence/**` |
+| D7 | 1.8 | 1.7 | SEQUENTIAL | RESOLVED | Same-endpoint continuation tokens and SQLite-backed resume depend on the recalibrated admission bands and higher shared thresholds from task `1.7`. | `src/domain/shared/search/search-execution-policy.ts`, `src/domain/shared/continuation/**`, `src/infrastructure/persistence/**` |
 
 ## Execution Order
 1. 1.1
