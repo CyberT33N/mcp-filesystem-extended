@@ -2,9 +2,15 @@ import {
   DISCOVERY_MAX_RESULTS_HARD_CAP,
   DISCOVERY_RESPONSE_CAP_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
+import type {
+  InspectionContinuationAdmission,
+  InspectionContinuationMetadata,
+} from "@domain/shared/continuation/inspection-continuation-contract";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
+import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
 
 import { searchFiles } from "./helpers";
 
@@ -32,6 +38,8 @@ export interface FindPathsByNameResult {
   roots: FindPathsByNameRootResult[];
   totalMatches: number;
   truncated: boolean;
+  admission: InspectionContinuationAdmission;
+  continuation: InspectionContinuationMetadata;
 }
 
 async function getFindPathsByNameRootResult(
@@ -118,11 +126,13 @@ async function getFormattedSearchFilesResult(
  * @returns Structured per-root name-search results and aggregate totals.
  */
 export async function getFindPathsByNameResult(
+  _continuationToken: string | undefined,
   directoryPaths: string[],
   pattern: string,
   excludePatterns: string[],
   includeExcludedGlobs: string[] = [],
   respectGitIgnore = false,
+  _inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
   allowedDirectories: string[],
   maxResults = DISCOVERY_MAX_RESULTS_HARD_CAP,
 ): Promise<FindPathsByNameResult> {
@@ -144,6 +154,7 @@ export async function getFindPathsByNameResult(
     roots,
     totalMatches: roots.reduce((total, root) => total + root.matches.length, 0),
     truncated: roots.some((root) => root.truncated),
+    ...createInlineContinuationEnvelope(),
   };
 }
 
@@ -165,11 +176,13 @@ export async function getFindPathsByNameResult(
  * @returns Human-readable name-search output bounded by the discovery-family text budget.
  */
 export async function handleSearchFiles(
+  continuationToken: string | undefined,
   directoryPaths: string[],
   pattern: string,
   excludePatterns: string[],
   includeExcludedGlobs: string[] = [],
   respectGitIgnore = false,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
   allowedDirectories: string[],
   maxResults = DISCOVERY_MAX_RESULTS_HARD_CAP,
 ): Promise<string> {
@@ -218,6 +231,9 @@ export async function handleSearchFiles(
   );
 
   const output = formatBatchTextOperationResults("search files", results);
+
+  void continuationToken;
+  void inspectionContinuationStore;
 
   assertActualTextBudget(
     "find_paths_by_name",

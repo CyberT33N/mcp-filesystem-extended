@@ -1,5 +1,9 @@
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { REGEX_SEARCH_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import type {
+  InspectionContinuationAdmission,
+  InspectionContinuationMetadata,
+} from "@domain/shared/continuation/inspection-continuation-contract";
 
 /**
  * Describes one collected regex match location.
@@ -96,6 +100,9 @@ export interface SearchRegexResult {
    * Indicates whether any root result stopped early because the effective result limit was reached.
    */
   truncated: boolean;
+
+  admission: InspectionContinuationAdmission;
+  continuation: InspectionContinuationMetadata;
 }
 
 /**

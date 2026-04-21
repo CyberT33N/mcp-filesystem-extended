@@ -1,7 +1,9 @@
 import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
+import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
+import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
 import {
   assertFormattedFixedStringResponseBudget,
   formatSearchFixedStringPathOutput,
@@ -126,6 +128,7 @@ export async function handleSearchFixedString(
  * @returns Structured per-root results with harmonized partial-failure semantics.
  */
 export async function getSearchFixedStringResult(
+  _continuationToken: string | undefined,
   searchPaths: string[],
   fixedString: string,
   filePatterns: string[],
@@ -135,6 +138,7 @@ export async function getSearchFixedStringResult(
   maxResults: number,
   caseSensitive: boolean,
   allowedDirectories: string[],
+  _inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<SearchFixedStringResult> {
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
   const aggregateBudgetState = createFixedStringSearchAggregateBudgetState();
@@ -166,6 +170,7 @@ export async function getSearchFixedStringResult(
       totalLocations: result.matches.length,
       totalMatches: result.totalMatches,
       truncated: result.truncated,
+      ...createInlineContinuationEnvelope(),
     };
   }
 
@@ -200,5 +205,6 @@ export async function getSearchFixedStringResult(
     totalLocations: roots.reduce((total, root) => total + root.matches.length, 0),
     totalMatches: roots.reduce((total, root) => total + root.totalMatches, 0),
     truncated: roots.some((root) => root.truncated),
+    ...createInlineContinuationEnvelope(),
   };
 }

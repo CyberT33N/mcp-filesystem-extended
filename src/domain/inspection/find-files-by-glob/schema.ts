@@ -6,8 +6,43 @@ import {
   MAX_EXCLUDE_GLOBS_PER_REQUEST,
   PATH_MAX_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
+  INSPECTION_CONTINUATION_STATUSES,
+  INSPECTION_CONTINUATION_TOKEN_FIELD,
+} from "@domain/shared/continuation/inspection-continuation-contract";
+
+const InspectionContinuationAdmissionSchema = z.object({
+  outcome: z.enum([
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.INLINE,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+  ]),
+  guidanceText: z.string().nullable(),
+  resumable: z.boolean(),
+});
+
+const InspectionContinuationMetadataSchema = z.object({
+  continuationToken: z.string().nullable(),
+  familyMember: z.string().nullable(),
+  status: z.enum([
+    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
+    INSPECTION_CONTINUATION_STATUSES.CANCELLED,
+    INSPECTION_CONTINUATION_STATUSES.COMPLETED,
+    INSPECTION_CONTINUATION_STATUSES.EXPIRED,
+  ]).nullable(),
+  resumable: z.boolean(),
+  expiresAt: z.string().nullable(),
+});
 
 export const FindFilesByGlobArgsSchema = z.object({
+  [INSPECTION_CONTINUATION_TOKEN_FIELD]: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Opaque continuation token returned by a prior same-endpoint glob-discovery response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
+    ),
   /**
    * Search roots.
    *
@@ -228,4 +263,6 @@ export const FindFilesByGlobResultSchema = z.object({
    * ```
    */
   truncated: z.boolean(),
+  admission: InspectionContinuationAdmissionSchema,
+  continuation: InspectionContinuationMetadataSchema,
 });

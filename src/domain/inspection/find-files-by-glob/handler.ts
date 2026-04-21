@@ -9,6 +9,11 @@ import {
   resolveTraversalWorkloadAdmissionDecision,
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
+import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
+import type {
+  InspectionContinuationAdmission,
+  InspectionContinuationMetadata,
+} from "@domain/shared/continuation/inspection-continuation-contract";
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
   assertTraversalRuntimeBudget,
@@ -27,6 +32,7 @@ import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execu
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
+import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
 
 import { minimatch } from "minimatch";
 
@@ -54,6 +60,8 @@ export interface FindFilesByGlobResult {
   roots: FindFilesByGlobRootResult[];
   totalMatches: number;
   truncated: boolean;
+  admission: InspectionContinuationAdmission;
+  continuation: InspectionContinuationMetadata;
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -289,13 +297,15 @@ async function getFormattedSearchGlobResult(
  * @returns Structured per-root glob-search results and aggregate totals.
  */
 export async function getFindFilesByGlobResult(
+  _continuationToken: string | undefined,
   searchPaths: string[],
   pattern: string,
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   maxResults: number,
-  allowedDirectories: string[]
+  allowedDirectories: string[],
+  _inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<FindFilesByGlobResult> {
   const roots = await Promise.all(
     searchPaths.map((searchPath) =>
@@ -315,6 +325,7 @@ export async function getFindFilesByGlobResult(
     roots,
     totalMatches: roots.reduce((total, root) => total + root.matches.length, 0),
     truncated: roots.some((root) => root.truncated),
+    ...createInlineContinuationEnvelope(),
   };
 }
 
@@ -336,13 +347,15 @@ export async function getFindFilesByGlobResult(
  * @returns Human-readable glob-search output bounded by the discovery-family text budget.
  */
 export async function handleSearchGlob(
+  continuationToken: string | undefined,
   searchPaths: string[],
   pattern: string,
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   maxResults: number,
-  allowedDirectories: string[]
+  allowedDirectories: string[],
+  inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<string> {
   if (searchPaths.length === 1) {
     const firstSearchPath = searchPaths[0];
@@ -389,6 +402,9 @@ export async function handleSearchGlob(
   );
 
   const output = formatBatchTextOperationResults("search glob", results);
+
+  void continuationToken;
+  void inspectionContinuationStore;
 
   assertActualTextBudget(
     "find_files_by_glob",

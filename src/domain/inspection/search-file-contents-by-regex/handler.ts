@@ -3,7 +3,9 @@ import { formatBatchTextOperationResults } from "@infrastructure/formatting/batc
 import { compileGuardrailedSearchRegex } from "@domain/shared/guardrails/regex-search-safety";
 import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
+import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
+import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
 
 import {
   createRegexSearchAggregateBudgetState,
@@ -175,6 +177,7 @@ export async function handleSearchRegex(
  * @returns Structured per-root results with preserved field names and harmonized failure semantics.
  */
 export async function getSearchRegexResult(
+  _continuationToken: string | undefined,
   searchPaths: string[],
   pattern: string,
   filePatterns: string[],
@@ -184,6 +187,7 @@ export async function getSearchRegexResult(
   maxResults: number,
   caseSensitive: boolean,
   allowedDirectories: string[],
+  _inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<SearchRegexResult> {
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
   const { aggregateBudgetState, executionPolicy } = createSharedRegexExecutionContext(
@@ -218,6 +222,7 @@ export async function getSearchRegexResult(
       totalLocations: result.matches.length,
       totalMatches: result.totalMatches,
       truncated: result.truncated,
+      ...createInlineContinuationEnvelope(),
     };
   }
 
@@ -253,5 +258,6 @@ export async function getSearchRegexResult(
     totalLocations: roots.reduce((total, root) => total + root.matches.length, 0),
     totalMatches: roots.reduce((total, root) => total + root.totalMatches, 0),
     truncated: roots.some((root) => root.truncated),
+    ...createInlineContinuationEnvelope(),
   };
 }

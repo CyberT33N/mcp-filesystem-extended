@@ -9,6 +9,34 @@ import {
   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
   SHORT_TEXT_MAX_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
+  INSPECTION_CONTINUATION_STATUSES,
+  INSPECTION_CONTINUATION_TOKEN_FIELD,
+} from "@domain/shared/continuation/inspection-continuation-contract";
+
+const InspectionContinuationAdmissionSchema = z.object({
+  outcome: z.enum([
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.INLINE,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+  ]),
+  guidanceText: z.string().nullable(),
+  resumable: z.boolean(),
+});
+
+const InspectionContinuationMetadataSchema = z.object({
+  continuationToken: z.string().nullable(),
+  familyMember: z.string().nullable(),
+  status: z.enum([
+    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
+    INSPECTION_CONTINUATION_STATUSES.CANCELLED,
+    INSPECTION_CONTINUATION_STATUSES.COMPLETED,
+    INSPECTION_CONTINUATION_STATUSES.EXPIRED,
+  ]).nullable(),
+  resumable: z.boolean(),
+  expiresAt: z.string().nullable(),
+});
 
 /**
  * Canonical request contract for guarded fixed-string content search.
@@ -17,7 +45,14 @@ import {
  * This endpoint mirrors the guarded search-family request surface where that alignment remains
  * semantically valid, but replaces free-regex input with one explicit literal-search field.
  */
-export const SearchFileContentsByFixedStringArgsSchema = z.object({
+const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
+  [INSPECTION_CONTINUATION_TOKEN_FIELD]: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Opaque continuation token returned by a prior same-endpoint fixed-string-search response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
+    ),
   roots: z
     .array(z.string().max(PATH_MAX_CHARS))
     .min(1)
@@ -78,6 +113,20 @@ export const SearchFileContentsByFixedStringArgsSchema = z.object({
     .describe("Whether fixed-string matching should remain case-sensitive."),
 });
 
+const SearchFileContentsByFixedStringContinuationArgsSchema = z.object({
+  [INSPECTION_CONTINUATION_TOKEN_FIELD]: z
+    .string()
+    .min(1)
+    .describe(
+      "Opaque continuation token returned by a prior same-endpoint fixed-string-search response. Continuation-only requests reload the persisted request context and must omit new query-defining fields."
+    ),
+}).strict();
+
+export const SearchFileContentsByFixedStringArgsSchema = z.union([
+  SearchFileContentsByFixedStringBaseArgsSchema,
+  SearchFileContentsByFixedStringContinuationArgsSchema,
+]);
+
 /**
  * Structured result contract for guarded fixed-string content search.
  *
@@ -106,4 +155,6 @@ export const SearchFileContentsByFixedStringResultSchema = z.object({
   totalLocations: z.number(),
   totalMatches: z.number(),
   truncated: z.boolean(),
+  admission: InspectionContinuationAdmissionSchema,
+  continuation: InspectionContinuationMetadataSchema,
 });

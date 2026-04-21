@@ -29,9 +29,15 @@ import {
   type FileSystemEntryMetadata,
   type FileSystemEntryMetadataSelection,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
+import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
+import type {
+  InspectionContinuationAdmission,
+  InspectionContinuationMetadata,
+} from "@domain/shared/continuation/inspection-continuation-contract";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
+import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
 
 /**
  * Structured directory entry returned by the `list_directory_entries` tool.
@@ -76,6 +82,10 @@ export interface ListDirectoryEntriesResult {
    * Listing roots in request order.
    */
   roots: ListedDirectoryRoot[];
+
+  admission: InspectionContinuationAdmission;
+
+  continuation: InspectionContinuationMetadata;
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -258,13 +268,15 @@ async function buildListedDirectoryRoot(
  * @returns Structured directory listing result.
  */
 export async function getListDirectoryEntriesResult(
+  _continuationToken: string | undefined,
   requestedPaths: string[],
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
-  allowedDirectories: string[]
+  allowedDirectories: string[],
+  _inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<ListDirectoryEntriesResult> {
   const roots = await Promise.all(
     requestedPaths.map((requestedPath) =>
@@ -282,6 +294,7 @@ export async function getListDirectoryEntriesResult(
 
   const result: ListDirectoryEntriesResult = {
     roots,
+    ...createInlineContinuationEnvelope(),
   };
 
   return result;
@@ -300,22 +313,26 @@ export async function getListDirectoryEntriesResult(
  * @returns TOON-encoded structured directory listing output.
  */
 export async function handleListDirectoryEntries(
+  continuationToken: string | undefined,
   requestedPaths: string[],
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
-  allowedDirectories: string[]
+  allowedDirectories: string[],
+  inspectionContinuationStore?: InspectionContinuationSqliteStore,
 ): Promise<string> {
   const result = await getListDirectoryEntriesResult(
+    continuationToken,
     requestedPaths,
     recursive,
     metadataSelection,
     excludePatterns,
     includeExcludedGlobs,
     respectGitIgnore,
-    allowedDirectories
+    allowedDirectories,
+    inspectionContinuationStore,
   );
 
   const output = encode(result);

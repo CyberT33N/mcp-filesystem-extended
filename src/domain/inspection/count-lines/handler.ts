@@ -4,6 +4,11 @@ import {
   DISCOVERY_RESPONSE_CAP_CHARS,
   INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
+import type {
+  InspectionContinuationAdmission,
+  InspectionContinuationMetadata,
+} from "@domain/shared/continuation/inspection-continuation-contract";
 import {
   buildTraversalNarrowingGuidance,
   resolveTraversalPreflightContext,
@@ -39,6 +44,7 @@ import { countTotalLinesInFile } from "@infrastructure/filesystem/streaming-line
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
+import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
 import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
 
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
@@ -79,6 +85,8 @@ export interface CountLinesResult {
   totalFiles: number;
   totalLines: number;
   totalMatchingLines: number;
+  admission: InspectionContinuationAdmission;
+  continuation: InspectionContinuationMetadata;
 }
 
 async function readInspectionContentSample(filePath: string): Promise<Uint8Array | null> {
@@ -286,6 +294,7 @@ async function getCountLinesPathResult(
  * @returns Human-readable count-lines output that respects the discovery-family text budget while preserving the split counting architecture.
  */
 export async function handleCountLines(
+  continuationToken: string | undefined,
   filePaths: string[],
   recursive: boolean,
   pattern: string | undefined,
@@ -294,9 +303,11 @@ export async function handleCountLines(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   ignoreEmptyLines: boolean,
+  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
   allowedDirectories: string[]
 ): Promise<string> {
   const structuredResult = await getCountLinesResult(
+    continuationToken,
     filePaths,
     recursive,
     pattern,
@@ -305,6 +316,7 @@ export async function handleCountLines(
     includeExcludedGlobs,
     respectGitIgnore,
     ignoreEmptyLines,
+    inspectionContinuationStore,
     allowedDirectories,
   );
 
@@ -330,6 +342,7 @@ export async function handleCountLines(
  * @returns Structured per-path and aggregate line-count totals.
  */
 export async function getCountLinesResult(
+  _continuationToken: string | undefined,
   filePaths: string[],
   recursive: boolean,
   pattern: string | undefined,
@@ -338,7 +351,8 @@ export async function getCountLinesResult(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   ignoreEmptyLines: boolean,
-  allowedDirectories: string[]
+  _inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  allowedDirectories: string[],
 ): Promise<CountLinesResult> {
   const paths = await Promise.all(
     filePaths.map((filePath) =>
@@ -364,6 +378,7 @@ export async function getCountLinesResult(
       (total, result) => total + result.totalMatchingLines,
       0
     ),
+    ...createInlineContinuationEnvelope(),
   };
 }
 

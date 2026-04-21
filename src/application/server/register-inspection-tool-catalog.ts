@@ -98,7 +98,7 @@ import { READ_ONLY_LOCAL_TOOL_ANNOTATIONS } from "./tool-registration-presets";
  * shared guardrail modules.
  */
 export function registerInspectionToolCatalog(context: RegisterToolCatalogContext): void {
-  const { server, allowedDirectories, executeTool } = context;
+  const { server, allowedDirectories, executeTool, inspectionContinuationStore } = context;
 
   server.registerTool(
     "read_files_with_line_numbers",
@@ -153,9 +153,10 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       inputSchema: ListDirectoryEntriesArgsSchema,
       outputSchema: ListDirectoryEntriesStructuredResultSchema,
     },
-    async ({ roots, recursive, metadata, excludeGlobs, respectGitIgnore, includeExcludedGlobs }) =>
+    async ({ continuationToken, roots, recursive, metadata, excludeGlobs, respectGitIgnore, includeExcludedGlobs }) =>
       executeTool("list_directory_entries", async () => {
         const result = await getListDirectoryEntriesResult(
+          continuationToken,
           roots,
           recursive,
           metadata,
@@ -163,8 +164,10 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           includeExcludedGlobs,
           respectGitIgnore,
           allowedDirectories,
+          inspectionContinuationStore,
         );
         const text = await handleListDirectoryEntries(
+          continuationToken,
           roots,
           recursive,
           metadata,
@@ -172,12 +175,15 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           includeExcludedGlobs,
           respectGitIgnore,
           allowedDirectories,
+          inspectionContinuationStore,
         );
 
         return {
           content: [{ type: "text", text }],
           structuredContent: {
             roots: result.roots,
+            admission: result.admission,
+            continuation: result.continuation,
           },
         };
       }),
@@ -195,22 +201,26 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       inputSchema: FindPathsByNameArgsSchema,
       outputSchema: FindPathsByNameResultSchema,
     },
-    async ({ roots, nameContains, excludeGlobs, includeExcludedGlobs, respectGitIgnore }) =>
+    async ({ continuationToken, roots, nameContains, excludeGlobs, includeExcludedGlobs, respectGitIgnore }) =>
       executeTool("find_paths_by_name", async () => {
         const result = await getFindPathsByNameResult(
+          continuationToken,
           roots,
           nameContains,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
+          inspectionContinuationStore,
           allowedDirectories,
         );
         const text = await handleSearchFiles(
+          continuationToken,
           roots,
           nameContains,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
+          inspectionContinuationStore,
           allowedDirectories,
         );
 
@@ -220,6 +230,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           roots: result.roots,
           totalMatches: result.totalMatches,
           truncated: result.truncated,
+          admission: result.admission,
+          continuation: result.continuation,
         },
       };
     }),
@@ -237,9 +249,10 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       inputSchema: FindFilesByGlobArgsSchema,
       outputSchema: FindFilesByGlobResultSchema,
     },
-    async ({ roots, glob, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
+    async ({ continuationToken, roots, glob, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
       executeTool("find_files_by_glob", async () => {
         const result = await getFindFilesByGlobResult(
+          continuationToken,
           roots,
           glob,
           excludeGlobs,
@@ -247,8 +260,10 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           respectGitIgnore,
           maxResults,
           allowedDirectories,
+          inspectionContinuationStore,
         );
         const text = await handleSearchGlob(
+          continuationToken,
           roots,
           glob,
           excludeGlobs,
@@ -256,6 +271,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           respectGitIgnore,
           maxResults,
           allowedDirectories,
+          inspectionContinuationStore,
         );
 
         return {
@@ -264,6 +280,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             roots: result.roots,
             totalMatches: result.totalMatches,
             truncated: result.truncated,
+            admission: result.admission,
+            continuation: result.continuation,
           },
         };
       }),
@@ -281,9 +299,20 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       inputSchema: SearchFileContentsByRegexArgsSchema,
       outputSchema: SearchFileContentsByRegexResultSchema,
     },
-    async ({ roots, regex, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults, caseSensitive }) =>
+    async (args) =>
       executeTool("search_file_contents_by_regex", async () => {
+        const continuationToken = args.continuationToken;
+        const roots = "roots" in args ? args.roots : [];
+        const regex = "regex" in args ? args.regex : "";
+        const includeGlobs = "includeGlobs" in args ? args.includeGlobs : [];
+        const excludeGlobs = "excludeGlobs" in args ? args.excludeGlobs : [];
+        const includeExcludedGlobs = "includeExcludedGlobs" in args ? args.includeExcludedGlobs : [];
+        const respectGitIgnore = "respectGitIgnore" in args ? args.respectGitIgnore : false;
+        const maxResults = "maxResults" in args ? args.maxResults : 100;
+        const caseSensitive = "caseSensitive" in args ? args.caseSensitive : false;
+
         const result = await getSearchRegexStructuredResult(
+          continuationToken,
           roots,
           regex,
           includeGlobs,
@@ -293,6 +322,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           maxResults,
           caseSensitive,
           allowedDirectories,
+          inspectionContinuationStore,
         );
         const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
         const text = assertFormattedRegexResponseBudget(
@@ -307,6 +337,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             totalLocations: result.totalLocations,
             totalMatches: result.totalMatches,
             truncated: result.truncated,
+            admission: result.admission,
+            continuation: result.continuation,
           },
         };
       }),
@@ -324,9 +356,20 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       inputSchema: SearchFileContentsByFixedStringArgsSchema,
       outputSchema: SearchFileContentsByFixedStringResultSchema,
     },
-    async ({ roots, fixedString, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults, caseSensitive }) =>
+    async (args) =>
       executeTool("search_file_contents_by_fixed_string", async () => {
+        const continuationToken = args.continuationToken;
+        const roots = "roots" in args ? args.roots : [];
+        const fixedString = "fixedString" in args ? args.fixedString : "";
+        const includeGlobs = "includeGlobs" in args ? args.includeGlobs : [];
+        const excludeGlobs = "excludeGlobs" in args ? args.excludeGlobs : [];
+        const includeExcludedGlobs = "includeExcludedGlobs" in args ? args.includeExcludedGlobs : [];
+        const respectGitIgnore = "respectGitIgnore" in args ? args.respectGitIgnore : false;
+        const maxResults = "maxResults" in args ? args.maxResults : 100;
+        const caseSensitive = "caseSensitive" in args ? args.caseSensitive : false;
+
         const result = await getSearchFixedStringStructuredResult(
+          continuationToken,
           roots,
           fixedString,
           includeGlobs,
@@ -336,6 +379,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           maxResults,
           caseSensitive,
           allowedDirectories,
+          inspectionContinuationStore,
         );
         const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
         const text = assertFormattedFixedStringResponseBudget(
@@ -350,6 +394,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             totalLocations: result.totalLocations,
             totalMatches: result.totalMatches,
             truncated: result.truncated,
+            admission: result.admission,
+            continuation: result.continuation,
           },
         };
       }),
@@ -367,9 +413,10 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       inputSchema: CountLinesArgsSchema,
       outputSchema: CountLinesResultSchema,
     },
-    async ({ paths, recursive, regex, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, ignoreEmptyLines }) =>
+    async ({ continuationToken, paths, recursive, regex, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, ignoreEmptyLines }) =>
       executeTool("count_lines", async () => {
         const result = await getCountLinesResult(
+          continuationToken,
           paths,
           recursive,
           regex,
@@ -378,6 +425,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           includeExcludedGlobs,
           respectGitIgnore,
           ignoreEmptyLines,
+          inspectionContinuationStore,
           allowedDirectories,
         );
         const text = formatCountLinesResultOutput(result, regex);
@@ -389,6 +437,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             totalFiles: result.totalFiles,
             totalLines: result.totalLines,
             totalMatchingLines: result.totalMatchingLines,
+            admission: result.admission,
+            continuation: result.continuation,
           },
         };
       }),

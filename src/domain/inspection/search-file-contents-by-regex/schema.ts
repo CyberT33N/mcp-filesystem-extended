@@ -9,6 +9,34 @@ import {
   REGEX_PATTERN_MAX_CHARS,
   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
+  INSPECTION_CONTINUATION_STATUSES,
+  INSPECTION_CONTINUATION_TOKEN_FIELD,
+} from "@domain/shared/continuation/inspection-continuation-contract";
+
+const InspectionContinuationAdmissionSchema = z.object({
+  outcome: z.enum([
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.INLINE,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+  ]),
+  guidanceText: z.string().nullable(),
+  resumable: z.boolean(),
+});
+
+const InspectionContinuationMetadataSchema = z.object({
+  continuationToken: z.string().nullable(),
+  familyMember: z.string().nullable(),
+  status: z.enum([
+    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
+    INSPECTION_CONTINUATION_STATUSES.CANCELLED,
+    INSPECTION_CONTINUATION_STATUSES.COMPLETED,
+    INSPECTION_CONTINUATION_STATUSES.EXPIRED,
+  ]).nullable(),
+  resumable: z.boolean(),
+  expiresAt: z.string().nullable(),
+});
 
 /**
  * Canonical request contract for guarded regex content search.
@@ -19,7 +47,14 @@ import {
  * response-budget enforcement, while the endpoint contract owns the architectural decision to
  * normalize mixed file-versus-directory search scopes instead of rejecting explicit file inputs.
  */
-export const SearchFileContentsByRegexArgsSchema = z.object({
+const SearchFileContentsByRegexBaseArgsSchema = z.object({
+  [INSPECTION_CONTINUATION_TOKEN_FIELD]: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Opaque continuation token returned by a prior same-endpoint regex-search response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
+    ),
   /**
    * Search scopes.
    *
@@ -187,6 +222,20 @@ export const SearchFileContentsByRegexArgsSchema = z.object({
    */
   caseSensitive: z.boolean().optional().default(false).describe("Whether the search should be case-sensitive"),
 });
+
+const SearchFileContentsByRegexContinuationArgsSchema = z.object({
+  [INSPECTION_CONTINUATION_TOKEN_FIELD]: z
+    .string()
+    .min(1)
+    .describe(
+      "Opaque continuation token returned by a prior same-endpoint regex-search response. Continuation-only requests reload the persisted request context and must omit new query-defining fields."
+    ),
+}).strict();
+
+export const SearchFileContentsByRegexArgsSchema = z.union([
+  SearchFileContentsByRegexBaseArgsSchema,
+  SearchFileContentsByRegexContinuationArgsSchema,
+]);
 
 export const SearchFileContentsByRegexResultSchema = z.object({
   /**
@@ -405,4 +454,6 @@ export const SearchFileContentsByRegexResultSchema = z.object({
    * ```
    */
   truncated: z.boolean(),
+  admission: InspectionContinuationAdmissionSchema,
+  continuation: InspectionContinuationMetadataSchema,
 });
