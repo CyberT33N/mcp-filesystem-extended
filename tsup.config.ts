@@ -44,7 +44,8 @@ interface ContextForOutPathGeneration {
 /**
  * ✅ TSUP CONFIGURATION.
  *
- * • target: 'node20', Defaults to compilerOptions.target in your tsconfig.json
+ * • target: 'node25.8', aligned with package.json engines and required so
+ *   `node:sqlite` stays a builtin runtime specifier in the generated output
  * • clean: True
  * • dts: \{ compilerOptions: \{ composite: false \}, resolve: true \}
  *   - dts: Lässt tsup deklarationsdateien (.d.ts) erzeugen/bündeln
@@ -106,6 +107,19 @@ const config = defineConfig({
         'cjs'
     ],
     minify: false,
+
+    /*
+     * The project runtime contract already requires Node >= 25.8.0.
+     * Keep the modern runtime target explicit and preserve builtin imports
+     * such as `node:sqlite` exactly as written in source.
+     */
+    target: 'node25.8',
+
+    /*
+     * tsup removes the `node:` protocol by default. That breaks builtins that
+     * only exist under the scheme form, such as `node:sqlite`.
+     */
+    removeNodeProtocol: false,
 
     /*
      * Why platform 'node' and skipNodeModulesBundle:
