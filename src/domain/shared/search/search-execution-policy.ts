@@ -1,8 +1,5 @@
 import {
   REGEX_SEARCH_MAX_CANDIDATE_BYTES,
-  TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES,
-  TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES,
-  TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
   CpuRegexTier,
@@ -14,6 +11,65 @@ import {
 const SEARCH_SYNC_COMFORT_WINDOW_SECONDS = 15;
 const SEARCH_TASK_RECOMMENDED_AFTER_SECONDS = 60;
 const SEARCH_PREVIEW_FIRST_RESPONSE_CAP_FRACTION = 0.5;
+const SEARCH_TASK_BACKED_RESPONSE_CAP_FRACTION = 0.85;
+
+const SEARCH_EXECUTION_POLICY_TIER_BUDGETS = {
+  [SourceReadTier.S]: {
+    regexSyncCandidateBytesCap: 32 * 1_024 * 1_024,
+    fixedStringSyncCandidateBytesCap: 64 * 1_024 * 1_024,
+    traversalInlineEntryBudget: 35_000,
+    traversalInlineDirectoryBudget: 3_500,
+    traversalInlineCandidateFileBudget: 12_000,
+    traversalInlineExecutionBudgetMs: 4_500,
+    traversalPreviewEntryBudget: 70_000,
+    traversalPreviewDirectoryBudget: 7_000,
+    traversalPreviewExecutionTimeBudgetMs: 4_500,
+  },
+  [SourceReadTier.A]: {
+    regexSyncCandidateBytesCap: 24 * 1_024 * 1_024,
+    fixedStringSyncCandidateBytesCap: 48 * 1_024 * 1_024,
+    traversalInlineEntryBudget: 25_000,
+    traversalInlineDirectoryBudget: 2_500,
+    traversalInlineCandidateFileBudget: 8_000,
+    traversalInlineExecutionBudgetMs: 4_000,
+    traversalPreviewEntryBudget: 55_000,
+    traversalPreviewDirectoryBudget: 5_500,
+    traversalPreviewExecutionTimeBudgetMs: 4_000,
+  },
+  [SourceReadTier.B]: {
+    regexSyncCandidateBytesCap: 16 * 1_024 * 1_024,
+    fixedStringSyncCandidateBytesCap: 32 * 1_024 * 1_024,
+    traversalInlineEntryBudget: 18_000,
+    traversalInlineDirectoryBudget: 1_800,
+    traversalInlineCandidateFileBudget: 6_000,
+    traversalInlineExecutionBudgetMs: 3_500,
+    traversalPreviewEntryBudget: 40_000,
+    traversalPreviewDirectoryBudget: 4_000,
+    traversalPreviewExecutionTimeBudgetMs: 3_500,
+  },
+  [SourceReadTier.C]: {
+    regexSyncCandidateBytesCap: 12 * 1_024 * 1_024,
+    fixedStringSyncCandidateBytesCap: 24 * 1_024 * 1_024,
+    traversalInlineEntryBudget: 12_000,
+    traversalInlineDirectoryBudget: 1_200,
+    traversalInlineCandidateFileBudget: 4_000,
+    traversalInlineExecutionBudgetMs: 3_000,
+    traversalPreviewEntryBudget: 30_000,
+    traversalPreviewDirectoryBudget: 3_000,
+    traversalPreviewExecutionTimeBudgetMs: 3_000,
+  },
+  [SourceReadTier.D]: {
+    regexSyncCandidateBytesCap: 8 * 1_024 * 1_024,
+    fixedStringSyncCandidateBytesCap: 16 * 1_024 * 1_024,
+    traversalInlineEntryBudget: 8_000,
+    traversalInlineDirectoryBudget: 800,
+    traversalInlineCandidateFileBudget: 3_000,
+    traversalInlineExecutionBudgetMs: 2_500,
+    traversalPreviewEntryBudget: 20_000,
+    traversalPreviewDirectoryBudget: 2_000,
+    traversalPreviewExecutionTimeBudgetMs: 2_500,
+  },
+} as const;
 
 /**
  * Shared execution-policy contract for native-search workloads.
@@ -21,7 +77,10 @@ const SEARCH_PREVIEW_FIRST_RESPONSE_CAP_FRACTION = 0.5;
  * @remarks
  * Later regex, fixed-string, content-read, and count workflows should consume one policy
  * vocabulary for sync comfort, preview-first behavior, and task escalation instead of
- * introducing endpoint-local thresholds.
+ * introducing endpoint-local thresholds. The calibrated lookup tables are intentionally higher for
+ * valid local recursive workloads, but the shared policy still keeps preview-first at the 50-84%
+ * band and reserves task-backed execution for the 85-100% band or for projected execution beyond
+ * the 60-second recommendation window.
  */
 export interface SearchExecutionPolicy {
   /**
@@ -53,6 +112,11 @@ export interface SearchExecutionPolicy {
    * Fraction of the response-family cap that triggers preview-first behavior.
    */
   previewFirstResponseCapFraction: number;
+
+  /**
+   * Fraction of the response-family cap that marks the task-backed escalation band.
+   */
+  taskBackedResponseCapFraction: number;
 
   /**
    * Candidate-byte ceiling for synchronous regex execution.
@@ -128,6 +192,7 @@ function downgradeSourceReadTierForConfidence(
 ): SourceReadTier {
   switch (confidence) {
     case RuntimeConfidenceTier.HIGH:
+    case RuntimeConfidenceTier.LOW:
       return tier;
     case RuntimeConfidenceTier.MEDIUM:
       switch (tier) {
@@ -140,7 +205,6 @@ function downgradeSourceReadTierForConfidence(
         default:
           return SourceReadTier.D;
       }
-    case RuntimeConfidenceTier.LOW:
     case RuntimeConfidenceTier.UNKNOWN:
       return SourceReadTier.D;
   }
@@ -152,6 +216,7 @@ function downgradeCpuRegexTierForConfidence(
 ): CpuRegexTier {
   switch (confidence) {
     case RuntimeConfidenceTier.HIGH:
+    case RuntimeConfidenceTier.LOW:
       return tier;
     case RuntimeConfidenceTier.MEDIUM:
       switch (tier) {
@@ -164,7 +229,6 @@ function downgradeCpuRegexTierForConfidence(
         default:
           return CpuRegexTier.D;
       }
-    case RuntimeConfidenceTier.LOW:
     case RuntimeConfidenceTier.UNKNOWN:
       return CpuRegexTier.D;
   }
@@ -213,143 +277,18 @@ function resolveMoreConservativeTier(
   return cpuAsSourceTier;
 }
 
-function resolveRegexSyncCandidateBytesCap(tier: SourceReadTier): number {
-  switch (tier) {
-    case SourceReadTier.S:
-      return 16 * 1_024 * 1_024;
-    case SourceReadTier.A:
-      return 12 * 1_024 * 1_024;
-    case SourceReadTier.B:
-      return 8 * 1_024 * 1_024;
-    case SourceReadTier.C:
-      return 4 * 1_024 * 1_024;
-    case SourceReadTier.D:
-      return 2 * 1_024 * 1_024;
-  }
-}
-
-function resolveFixedStringSyncCandidateBytesCap(tier: SourceReadTier): number {
-  switch (tier) {
-    case SourceReadTier.S:
-      return 24 * 1_024 * 1_024;
-    case SourceReadTier.A:
-      return 16 * 1_024 * 1_024;
-    case SourceReadTier.B:
-      return 12 * 1_024 * 1_024;
-    case SourceReadTier.C:
-      return 8 * 1_024 * 1_024;
-    case SourceReadTier.D:
-      return 4 * 1_024 * 1_024;
-  }
-}
-
-function resolveTraversalInlineEntryBudget(tier: SourceReadTier): number {
-  switch (tier) {
-    case SourceReadTier.S:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.35));
-    case SourceReadTier.A:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.25));
-    case SourceReadTier.B:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.18));
-    case SourceReadTier.C:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.12));
-    case SourceReadTier.D:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.08));
-  }
-}
-
-function resolveTraversalInlineDirectoryBudget(tier: SourceReadTier): number {
-  switch (tier) {
-    case SourceReadTier.S:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.35));
-    case SourceReadTier.A:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.25));
-    case SourceReadTier.B:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.18));
-    case SourceReadTier.C:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.12));
-    case SourceReadTier.D:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.08));
-  }
-}
-
-function resolveTraversalInlineCandidateFileBudget(tier: SourceReadTier): number {
-  switch (tier) {
-    case SourceReadTier.S:
-      return 6_000;
-    case SourceReadTier.A:
-      return 4_000;
-    case SourceReadTier.B:
-      return 2_500;
-    case SourceReadTier.C:
-      return 1_500;
-    case SourceReadTier.D:
-      return 800;
-  }
-}
-
-function resolveTraversalInlineExecutionBudgetMs(tier: SourceReadTier): number {
-  switch (tier) {
-    case SourceReadTier.S:
-      return 3_500;
-    case SourceReadTier.A:
-      return 3_000;
-    case SourceReadTier.B:
-      return 2_500;
-    case SourceReadTier.C:
-      return 2_000;
-    case SourceReadTier.D:
-      return 1_500;
-  }
-}
-
-function resolveTraversalPreviewFirstEntryBudget(tier: SourceReadTier): number {
-  switch (tier) {
-    case SourceReadTier.S:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.6));
-    case SourceReadTier.A:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.5));
-    case SourceReadTier.B:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.4));
-    case SourceReadTier.C:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.28));
-    case SourceReadTier.D:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES * 0.2));
-  }
-}
-
-function resolveTraversalPreviewFirstDirectoryBudget(tier: SourceReadTier): number {
-  switch (tier) {
-    case SourceReadTier.S:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.6));
-    case SourceReadTier.A:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.48));
-    case SourceReadTier.B:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.35));
-    case SourceReadTier.C:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.25));
-    case SourceReadTier.D:
-      return Math.max(1, Math.floor(TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES * 0.16));
-  }
-}
-
-function resolveTraversalPreviewExecutionTimeBudgetMs(tier: SourceReadTier): number {
-  switch (tier) {
-    case SourceReadTier.S:
-      return Math.min(2_500, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
-    case SourceReadTier.A:
-      return Math.min(2_000, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
-    case SourceReadTier.B:
-      return Math.min(1_500, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
-    case SourceReadTier.C:
-      return Math.min(1_250, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
-    case SourceReadTier.D:
-      return Math.min(1_000, TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS - 500);
-  }
+function resolveSearchExecutionTierBudget(tier: SourceReadTier) {
+  return SEARCH_EXECUTION_POLICY_TIER_BUDGETS[tier];
 }
 
 /**
  * Resolves the shared search execution policy from the current runtime capability profile.
+ *
+ * @remarks
+ * Proven local static discovery may now carry a `LOW` confidence floor without collapsing back to
+ * tier `D`. The higher tier tables keep valid recursive workloads inline and preview-first longer,
+ * while the explicit `0.50` and `0.85` band fractions preserve deterministic escalation semantics.
+ * The deeper runtime fuse remains a later safeguard rather than the primary caller-facing band.
  *
  * @param profile - Conservative runtime capability profile produced by the runtime detector.
  * @returns Deterministic sync, preview-first, task, and hard-gap policy values for search workloads.
@@ -369,6 +308,8 @@ export function resolveSearchExecutionPolicy(
     effectiveSourceReadTier,
     effectiveCpuRegexTier,
   );
+  const effectiveTierBudget = resolveSearchExecutionTierBudget(effectiveSourceReadTier);
+  const regexTierBudget = resolveSearchExecutionTierBudget(regexExecutionTier);
 
   return {
     effectiveSourceReadTier,
@@ -377,28 +318,19 @@ export function resolveSearchExecutionPolicy(
     syncComfortWindowSeconds: SEARCH_SYNC_COMFORT_WINDOW_SECONDS,
     taskRecommendedAfterSeconds: SEARCH_TASK_RECOMMENDED_AFTER_SECONDS,
     previewFirstResponseCapFraction: SEARCH_PREVIEW_FIRST_RESPONSE_CAP_FRACTION,
-    regexSyncCandidateBytesCap: resolveRegexSyncCandidateBytesCap(regexExecutionTier),
-    fixedStringSyncCandidateBytesCap: resolveFixedStringSyncCandidateBytesCap(effectiveSourceReadTier),
+    taskBackedResponseCapFraction: SEARCH_TASK_BACKED_RESPONSE_CAP_FRACTION,
+    regexSyncCandidateBytesCap: regexTierBudget.regexSyncCandidateBytesCap,
+    fixedStringSyncCandidateBytesCap: effectiveTierBudget.fixedStringSyncCandidateBytesCap,
     regexServiceHardGapBytes: REGEX_SEARCH_MAX_CANDIDATE_BYTES,
     fixedStringServiceHardGapBytes: REGEX_SEARCH_MAX_CANDIDATE_BYTES,
-    traversalInlineEntryBudget: resolveTraversalInlineEntryBudget(effectiveSourceReadTier),
-    traversalInlineDirectoryBudget: resolveTraversalInlineDirectoryBudget(effectiveSourceReadTier),
-    traversalInlineCandidateFileBudget: resolveTraversalInlineCandidateFileBudget(
-      effectiveSourceReadTier,
-    ),
-    traversalInlineExecutionBudgetMs: resolveTraversalInlineExecutionBudgetMs(
-      effectiveSourceReadTier,
-    ),
-    traversalPreviewFirstEntryBudget: resolveTraversalPreviewFirstEntryBudget(effectiveSourceReadTier),
-    traversalPreviewFirstDirectoryBudget: resolveTraversalPreviewFirstDirectoryBudget(effectiveSourceReadTier),
-    traversalPreviewExecutionEntryBudget: resolveTraversalPreviewFirstEntryBudget(
-      effectiveSourceReadTier,
-    ),
-    traversalPreviewExecutionDirectoryBudget: resolveTraversalPreviewFirstDirectoryBudget(
-      effectiveSourceReadTier,
-    ),
-    traversalPreviewExecutionTimeBudgetMs: resolveTraversalPreviewExecutionTimeBudgetMs(
-      effectiveSourceReadTier,
-    ),
+    traversalInlineEntryBudget: effectiveTierBudget.traversalInlineEntryBudget,
+    traversalInlineDirectoryBudget: effectiveTierBudget.traversalInlineDirectoryBudget,
+    traversalInlineCandidateFileBudget: effectiveTierBudget.traversalInlineCandidateFileBudget,
+    traversalInlineExecutionBudgetMs: effectiveTierBudget.traversalInlineExecutionBudgetMs,
+    traversalPreviewFirstEntryBudget: effectiveTierBudget.traversalPreviewEntryBudget,
+    traversalPreviewFirstDirectoryBudget: effectiveTierBudget.traversalPreviewDirectoryBudget,
+    traversalPreviewExecutionEntryBudget: effectiveTierBudget.traversalPreviewEntryBudget,
+    traversalPreviewExecutionDirectoryBudget: effectiveTierBudget.traversalPreviewDirectoryBudget,
+    traversalPreviewExecutionTimeBudgetMs: effectiveTierBudget.traversalPreviewExecutionTimeBudgetMs,
   };
 }

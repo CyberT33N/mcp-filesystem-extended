@@ -102,6 +102,11 @@ export const SPOOL_WRITE_TIER_MINIMUM_BYTES_PER_SECOND = {
 
 /**
  * Conservative fallback CPU tier for environments that cannot prove a stronger regex lane.
+ *
+ * @remarks
+ * The shared runtime keeps the `D` CPU floor reserved for genuinely unresolved environments.
+ * Proven local startup discovery may materialize a higher conservative floor without weakening
+ * the all-`D` fallback for unknown hosts.
  */
 export const DEFAULT_CONSERVATIVE_CPU_REGEX_TIER = CpuRegexTier.D;
 
@@ -168,6 +173,27 @@ export const DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE = {
   runtimeConfidenceTier: RuntimeConfidenceTier.UNKNOWN,
   estimatedSourceReadBytesPerSecond: null,
   estimatedSpoolWriteBytesPerSecond: null,
+  sampleOrigin: IoCapabilitySampleOrigin.STATIC_DISCOVERY,
+  lastCalibratedAt: null,
+} as const satisfies IoCapabilityProfile;
+
+/**
+ * Static-discovery floor used when startup can prove the local Node.js plus native-search runtime.
+ *
+ * @remarks
+ * The shared runtime must stay conservative, but it must not collapse a proven local environment
+ * back into the all-`D` and `UNKNOWN` baseline. This floor keeps the startup model intentionally
+ * cautious at `C/C/C + LOW` while preserving the lower fallback profile for truly unresolved hosts.
+ */
+export const PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE = {
+  sourceReadTier: SourceReadTier.C,
+  spoolWriteTier: SpoolWriteTier.C,
+  cpuRegexTier: CpuRegexTier.C,
+  runtimeConfidenceTier: RuntimeConfidenceTier.LOW,
+  estimatedSourceReadBytesPerSecond:
+    SOURCE_READ_TIER_MINIMUM_BYTES_PER_SECOND[SourceReadTier.C],
+  estimatedSpoolWriteBytesPerSecond:
+    SPOOL_WRITE_TIER_MINIMUM_BYTES_PER_SECOND[SpoolWriteTier.C],
   sampleOrigin: IoCapabilitySampleOrigin.STATIC_DISCOVERY,
   lastCalibratedAt: null,
 } as const satisfies IoCapabilityProfile;

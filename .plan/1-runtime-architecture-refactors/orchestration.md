@@ -77,9 +77,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared admission planner plus recursive discovery/search/count consumers
   - Blocked By: none
   - Summary: Close the residual admission-to-execution gap by introducing shared root-level workload admission and binding all recursive consumers to it before traversal begins.
-- [ ] **1.7 Traversal admission threshold recalibration and TSDoc hardening** → [`1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md`](./1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md)
+- [~] **1.7 Traversal admission threshold recalibration and TSDoc hardening** → [`1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md`](./1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: IN_PROGRESS
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: shared runtime ceilings, capability flooring, and execution-policy tables

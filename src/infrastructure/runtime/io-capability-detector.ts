@@ -4,6 +4,7 @@ import {
   DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE,
   type IoCapabilityProfile,
   IoCapabilitySampleOrigin,
+  PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
   RuntimeConfidenceTier,
   SourceReadTier,
   SOURCE_READ_TIER_MINIMUM_BYTES_PER_SECOND,
@@ -109,6 +110,25 @@ function normalizePositiveNumber(value: number | undefined): number | null {
   return value;
 }
 
+function resolveStaticDiscoveryInput(
+  input: IoCapabilityDetectorInput,
+): IoCapabilityStaticDiscoveryInput | undefined {
+  if (input.staticDiscovery !== undefined) {
+    return input.staticDiscovery;
+  }
+
+  return {
+    estimatedSourceReadBytesPerSecond:
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE.estimatedSourceReadBytesPerSecond
+      ?? undefined,
+    estimatedSpoolWriteBytesPerSecond:
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE.estimatedSpoolWriteBytesPerSecond
+      ?? undefined,
+    detectedCpuRegexTier:
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE.cpuRegexTier,
+  };
+}
+
 function hasStaticDiscoveryData(input: IoCapabilityStaticDiscoveryInput | undefined): boolean {
   return (
     normalizePositiveNumber(input?.estimatedSourceReadBytesPerSecond) !== null
@@ -194,6 +214,8 @@ function resolveSampleOrigin(input: IoCapabilityDetectorInput): IoCapabilitySamp
 }
 
 function resolveRuntimeConfidenceTier(input: IoCapabilityDetectorInput): RuntimeConfidenceTier {
+  const staticDiscoveryInput = resolveStaticDiscoveryInput(input);
+
   if (hasTelemetryData(input.telemetry)) {
     return RuntimeConfidenceTier.HIGH;
   }
@@ -202,7 +224,7 @@ function resolveRuntimeConfidenceTier(input: IoCapabilityDetectorInput): Runtime
     return RuntimeConfidenceTier.MEDIUM;
   }
 
-  if (hasStaticDiscoveryData(input.staticDiscovery)) {
+  if (hasStaticDiscoveryData(staticDiscoveryInput)) {
     return RuntimeConfidenceTier.LOW;
   }
 
@@ -210,23 +232,29 @@ function resolveRuntimeConfidenceTier(input: IoCapabilityDetectorInput): Runtime
 }
 
 function resolveSourceReadBytesPerSecond(input: IoCapabilityDetectorInput): number | null {
+  const staticDiscoveryInput = resolveStaticDiscoveryInput(input);
+
   return normalizePositiveNumber(input.telemetry?.observedSourceReadBytesPerSecond)
     ?? normalizePositiveNumber(input.calibration?.measuredSourceReadBytesPerSecond)
-    ?? normalizePositiveNumber(input.staticDiscovery?.estimatedSourceReadBytesPerSecond)
+    ?? normalizePositiveNumber(staticDiscoveryInput?.estimatedSourceReadBytesPerSecond)
     ?? DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE.estimatedSourceReadBytesPerSecond;
 }
 
 function resolveSpoolWriteBytesPerSecond(input: IoCapabilityDetectorInput): number | null {
+  const staticDiscoveryInput = resolveStaticDiscoveryInput(input);
+
   return normalizePositiveNumber(input.telemetry?.observedSpoolWriteBytesPerSecond)
     ?? normalizePositiveNumber(input.calibration?.measuredSpoolWriteBytesPerSecond)
-    ?? normalizePositiveNumber(input.staticDiscovery?.estimatedSpoolWriteBytesPerSecond)
+    ?? normalizePositiveNumber(staticDiscoveryInput?.estimatedSpoolWriteBytesPerSecond)
     ?? DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE.estimatedSpoolWriteBytesPerSecond;
 }
 
 function resolveCpuRegexTier(input: IoCapabilityDetectorInput): CpuRegexTier {
+  const staticDiscoveryInput = resolveStaticDiscoveryInput(input);
+
   return input.telemetry?.detectedCpuRegexTier
     ?? input.calibration?.detectedCpuRegexTier
-    ?? input.staticDiscovery?.detectedCpuRegexTier
+    ?? staticDiscoveryInput?.detectedCpuRegexTier
     ?? DEFAULT_CONSERVATIVE_CPU_REGEX_TIER;
 }
 
@@ -244,6 +272,12 @@ function resolveLastCalibratedAt(input: IoCapabilityDetectorInput): string | nul
 
 /**
  * Detects the current runtime I/O capability profile without performing per-request probes.
+ *
+ * @remarks
+ * The zero-argument path materializes the proven local static-discovery floor for the application-
+ * owned Node.js plus native-search runtime. Callers that truly cannot prove their startup
+ * environment may still supply an explicit unresolved `staticDiscovery` surface and keep the
+ * all-`D` and `UNKNOWN` fallback profile.
  *
  * @param input - Structured static-discovery, calibration, and telemetry inputs.
  * @returns A conservative runtime capability profile that later execution policy resolution can consume.

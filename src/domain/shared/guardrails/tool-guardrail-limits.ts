@@ -620,75 +620,86 @@ export const LINE_REPLACEMENT_TOTAL_INPUT_CHARS = 300_000;
  * @remarks
  * This ceiling belongs to the metadata-first admission layer and exists specifically to make
  * server-side scope governance visible before recursive consumers enter their full traversal loop.
- * The budget stays materially below the deeper runtime traversal ceiling so broad-root refusals can
- * fail early as preflight decisions instead of surfacing first as runtime-budget exhaustion.
+ * The budget is intentionally higher because the shared admission planner now models downstream
+ * traversal cost before execution begins, but it still stays materially below the deeper runtime
+ * traversal ceiling so broad-root refusals can fail early as preflight decisions instead of
+ * surfacing first as runtime-budget exhaustion.
  *
  * @example
  * `assertTraversalScopePreflightBudget(toolName, requestedRoot, state)`
  */
-export const TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES = 25_000;
+export const TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES = 100_000;
 
 /**
  * Maximum number of directories that one shared traversal-scope preflight probe may inspect
  * before the server rejects the traversal root as too broad for immediate recursive execution.
  *
  * @remarks
- * The preflight directory ceiling is intentionally lower than the deeper runtime traversal budget so
- * wide recursive directory trees can be rejected up front with narrowing guidance rather than first
- * surfacing as timeout-shaped runtime failures.
+ * The preflight directory ceiling is intentionally higher than the earlier conservative discovery
+ * gate because validated local recursive workloads should stay inline longer before preview-first
+ * or narrowing takes over. It still remains materially lower than the deeper runtime traversal
+ * budget so wide recursive directory trees can be rejected up front when they truly exceed the safe
+ * admission envelope.
  *
  * @example
  * `assertTraversalScopePreflightBudget(toolName, requestedRoot, state)`
  */
-export const TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES = 2_500;
+export const TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES = 10_000;
 
 /**
  * Soft wall-clock runtime budget for one shared traversal-scope preflight probe.
  *
  * @remarks
  * This budget constrains only the early server-side admission probe, not the deeper guarded
- * traversal itself. Keeping the probe budget materially below the later runtime safeguard preserves
- * preflight-first refusal semantics for broad invalid traversal roots.
+ * traversal itself. The probe window is intentionally higher because the shared admission planner
+ * now performs richer downstream cost modeling before execution begins, but it remains materially
+ * below the later runtime safeguard so preflight-first refusal semantics stay intact for broad
+ * invalid traversal roots.
  *
  * @example
  * `assertTraversalScopePreflightBudget(toolName, requestedRoot, state)`
  */
-export const TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS = 750;
+export const TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS = 1_500;
 
 /**
  * Maximum number of filesystem entries that one guarded traversal may visit before the shared
  * runtime-budget layer must refuse further fan-out.
  *
  * @remarks
- * This ceiling is tuned for high-scale local traversal while still failing deterministically before
+ * This ceiling is intentionally higher than the earlier conservative breadth cap because valid
+ * large local traversal should stay available after the admission planner has already established
+ * that inline execution remains safe enough. The limit still fails deterministically before
  * broad-root directory walks collapse into environment timeouts.
  *
  * @example
  * `assertTraversalRuntimeBudget(toolName, state)`
  */
-export const TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES = 250_000;
+export const TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES = 500_000;
 
 /**
  * Maximum number of directories that one guarded traversal may descend into before the shared
  * runtime-budget layer must refuse further traversal.
  *
  * @remarks
- * The directory ceiling stays intentionally lower than the entry ceiling so wide fan-out across
- * nested directory trees can fail deterministically before downstream endpoint work explodes.
+ * The directory ceiling is intentionally higher than the earlier conservative breadth cap for the
+ * same reason: once the admission planner has allowed execution, legitimate large local trees
+ * should not trip the deeper safeguard prematurely. The ceiling still stays lower than the entry
+ * ceiling so wide fan-out across nested directory trees can fail deterministically before
+ * downstream endpoint work explodes.
  *
  * @example
  * `assertTraversalRuntimeBudget(toolName, state)`
  */
-export const TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES = 25_000;
+export const TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES = 50_000;
 
 /**
  * Soft wall-clock runtime budget for one guarded traversal before deterministic refusal takes over.
  *
  * @remarks
- * This soft budget exists as a deeper emergency safeguard after server-side preflight and
- * traversal-scope handling have already admitted the workload. The limit remains high enough for
- * legitimate large local inspection while still protecting the shared guardrail model from
- * timeout-shaped behavior.
+ * This soft budget remains the deeper emergency safeguard after server-side preflight and
+ * traversal-scope handling have already admitted the workload. The breadth ceilings above are
+ * intentionally higher, but this wall-clock fuse stays unchanged so the final runtime backstop
+ * still trips deterministically before pathological traversal can destabilize the process.
  *
  * @example
  * `assertTraversalRuntimeBudget(toolName, state)`
