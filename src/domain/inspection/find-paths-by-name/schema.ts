@@ -60,10 +60,11 @@ export const FindPathsByNameArgsSchema = z.object({
    */
   roots: z
     .array(z.string().max(PATH_MAX_CHARS))
-    .min(1)
     .max(MAX_DISCOVERY_ROOTS_PER_REQUEST)
+    .optional()
+    .default([])
     .describe(
-      "Root paths to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Pass one path for a single search scope or multiple paths for batch path searches."
+      "Root paths to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single search scope or multiple paths for batch path searches; continuation-only requests omit this field and reload the persisted request context."
     ),
   /**
    * Name substring filter.
@@ -82,8 +83,10 @@ export const FindPathsByNameArgsSchema = z.object({
   nameContains: z
     .string()
     .max(LABEL_MAX_CHARS)
+    .optional()
+    .default("")
     .describe(
-      "Case-insensitive substring matched against file and directory names. This field is plain text, not regex syntax."
+      "Case-insensitive substring matched against file and directory names. Base requests provide this field for the initial name search; continuation-only requests omit it and reload the persisted request context."
     ),
   /**
    * Exclusion globs.
@@ -169,6 +172,40 @@ export const FindPathsByNameArgsSchema = z.object({
     .optional()
     .default(DISCOVERY_MAX_RESULTS_HARD_CAP)
     .describe("Maximum number of path results to return before truncation."),
+}).superRefine((args, ctx) => {
+  const continuationRequest = args.continuationToken !== undefined;
+  const hasQueryDefiningFields =
+    args.roots.length > 0
+    || args.nameContains !== ""
+    || args.excludeGlobs.length > 0
+    || args.respectGitIgnore
+    || args.includeExcludedGlobs.length > 0
+    || args.maxResults !== DISCOVERY_MAX_RESULTS_HARD_CAP;
+
+  if (!continuationRequest && args.roots.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must provide at least one search root.",
+      path: ["roots"],
+    });
+  }
+
+  if (!continuationRequest && args.nameContains === "") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must provide a nameContains filter.",
+      path: ["nameContains"],
+    });
+  }
+
+  if (continuationRequest && hasQueryDefiningFields) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Continuation-only requests must omit new query-defining fields and rely on the persisted request context.",
+      path: [INSPECTION_CONTINUATION_TOKEN_FIELD],
+    });
+  }
 });
 
 export const FindPathsByNameResultSchema = z.object({

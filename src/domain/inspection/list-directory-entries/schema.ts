@@ -48,7 +48,7 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .min(1)
     .optional()
     .describe(
-      "Opaque continuation token returned by a prior same-endpoint directory-listing response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
+      "Opaque continuation token returned by a prior same-endpoint directory-listing response. Continuation-only requests reload the persisted request context and must omit new query-defining fields."
     ),
   /**
    * Listing roots.
@@ -66,10 +66,11 @@ export const ListDirectoryEntriesArgsSchema = z.object({
    */
   roots: z
     .array(z.string().max(PATH_MAX_CHARS))
-    .min(1)
     .max(MAX_DISCOVERY_ROOTS_PER_REQUEST)
+    .optional()
+    .default([])
     .describe(
-      "Paths to directories to list. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Pass one path for a single listing root or multiple paths for batch listing roots."
+      "Paths to directories to list. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single listing root or multiple paths for batch listing roots; continuation-only requests omit this field and reload the persisted request context."
     ),
   /**
    * Recursive traversal mode.
@@ -175,6 +176,31 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .describe(
       "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this listing request without broadening the full root scope."
     ),
+}).superRefine((args, ctx) => {
+  const continuationRequest = args.continuationToken !== undefined;
+  const hasQueryDefiningFields =
+    args.roots.length > 0
+    || args.recursive
+    || args.excludeGlobs.length > 0
+    || args.respectGitIgnore
+    || args.includeExcludedGlobs.length > 0;
+
+  if (!continuationRequest && args.roots.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must provide at least one directory root.",
+      path: ["roots"],
+    });
+  }
+
+  if (continuationRequest && hasQueryDefiningFields) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Continuation-only requests must omit new query-defining fields and rely on the persisted request context.",
+      path: [INSPECTION_CONTINUATION_TOKEN_FIELD],
+    });
+  }
 });
 
 /**

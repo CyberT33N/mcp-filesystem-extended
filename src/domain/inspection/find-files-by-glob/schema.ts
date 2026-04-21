@@ -59,10 +59,11 @@ export const FindFilesByGlobArgsSchema = z.object({
    */
   roots: z
     .array(z.string().max(PATH_MAX_CHARS))
-    .min(1)
     .max(MAX_DISCOVERY_ROOTS_PER_REQUEST)
+    .optional()
+    .default([])
     .describe(
-      "Root directories to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Pass one path for a single glob search scope or multiple paths for batch glob searches."
+      "Root directories to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single glob search scope or multiple paths for batch glob searches; continuation-only requests omit this field and reload the persisted request context."
     ),
   /**
    * Match glob.
@@ -81,8 +82,10 @@ export const FindFilesByGlobArgsSchema = z.object({
   glob: z
     .string()
     .max(GLOB_PATTERN_MAX_CHARS)
+    .optional()
+    .default("")
     .describe(
-      "Glob pattern used for path matching, for example '**/*.ts'. This field is evaluated against paths, not file contents."
+      "Glob pattern used for path matching, for example '**/*.ts'. Base requests provide this field for path matching; continuation-only requests omit it and reload the persisted request context."
     ),
   /**
    * Exclusion globs.
@@ -168,6 +171,40 @@ export const FindFilesByGlobArgsSchema = z.object({
     .optional()
     .default(DISCOVERY_MAX_RESULTS_HARD_CAP)
     .describe("Maximum number of path results to return before truncation."),
+}).superRefine((args, ctx) => {
+  const continuationRequest = args.continuationToken !== undefined;
+  const hasQueryDefiningFields =
+    args.roots.length > 0
+    || args.glob !== ""
+    || args.excludeGlobs.length > 0
+    || args.respectGitIgnore
+    || args.includeExcludedGlobs.length > 0
+    || args.maxResults !== DISCOVERY_MAX_RESULTS_HARD_CAP;
+
+  if (!continuationRequest && args.roots.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must provide at least one directory root.",
+      path: ["roots"],
+    });
+  }
+
+  if (!continuationRequest && args.glob === "") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must provide a glob pattern.",
+      path: ["glob"],
+    });
+  }
+
+  if (continuationRequest && hasQueryDefiningFields) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Continuation-only requests must omit new query-defining fields and rely on the persisted request context.",
+      path: [INSPECTION_CONTINUATION_TOKEN_FIELD],
+    });
+  }
 });
 
 export const FindFilesByGlobResultSchema = z.object({

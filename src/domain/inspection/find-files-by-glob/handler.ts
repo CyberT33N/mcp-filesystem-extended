@@ -9,7 +9,12 @@ import {
   resolveTraversalWorkloadAdmissionDecision,
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
-import { createInlineContinuationEnvelope } from "@domain/shared/continuation/inspection-continuation-contract";
+import {
+  createContinuationEnvelope,
+  createInlineContinuationEnvelope,
+  createPersistedContinuationEnvelope,
+  getContinuationNotFoundMessage,
+} from "@domain/shared/continuation/inspection-continuation-contract";
 import type {
   InspectionContinuationAdmission,
   InspectionContinuationMetadata,
@@ -64,6 +69,27 @@ export interface FindFilesByGlobResult {
   continuation: InspectionContinuationMetadata;
 }
 
+interface FindFilesByGlobRequestPayload {
+  searchPaths: string[];
+  pattern: string;
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+}
+
+interface FindFilesByGlobContinuationState {
+  rootMatchOffsets: Record<string, number>;
+}
+
+interface FindFilesByGlobRootExecutionResult extends FindFilesByGlobRootResult {
+  admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+}
+
+const FIND_FILES_BY_GLOB_FAMILY_MEMBER = "find_files_by_glob";
+const FIND_FILES_BY_GLOB_CONTINUATION_GUIDANCE =
+  "Resume the same glob-discovery request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.";
+
 function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
@@ -76,7 +102,7 @@ async function getFindFilesByGlobRootResult(
   respectGitIgnore: boolean,
   maxResults: number,
   allowedDirectories: string[]
-): Promise<FindFilesByGlobRootResult> {
+): Promise<FindFilesByGlobRootExecutionResult> {
   const traversalPreflightContext = await resolveTraversalPreflightContext(
     "find_files_by_glob",
     searchPath,
@@ -106,7 +132,7 @@ async function getFindFilesByGlobRootResult(
     executionPolicy,
     consumerCapabilities: {
       toolName: "find_files_by_glob",
-      previewFirstSupported: false,
+      previewFirstSupported: true,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
       executionTimeCostMultiplier:
         TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.executionTimeCostMultiplier,
@@ -118,7 +144,9 @@ async function getFindFilesByGlobRootResult(
 
   if (
     traversalAdmissionDecision.outcome
-    !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED
+    || traversalAdmissionDecision.outcome
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED
   ) {
     throw new Error(
       traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(searchPath),
@@ -225,6 +253,7 @@ async function getFindFilesByGlobRootResult(
     root: searchPath,
     matches: results,
     truncated: searchAborted,
+    admissionOutcome: traversalAdmissionDecision.outcome,
   };
 }
 

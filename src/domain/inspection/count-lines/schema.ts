@@ -70,7 +70,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  paths: z.array(z.string().max(PATH_MAX_CHARS)).min(1).max(MAX_GENERIC_PATHS_PER_REQUEST).describe("Paths to files or directories to count. Broad directory roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Pass one path for a single count scope or multiple paths for batch line counting."),
+  paths: z.array(z.string().max(PATH_MAX_CHARS)).max(MAX_GENERIC_PATHS_PER_REQUEST).optional().default([]).describe("Paths to files or directories to count. Broad directory roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single count scope or multiple paths for batch line counting; continuation-only requests omit this field and reload the persisted request context."),
   /**
    * Recursive traversal switch.
    *
@@ -100,7 +100,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  regex: z.string().max(REGEX_PATTERN_MAX_CHARS).optional().describe("Regular expression applied to counted lines. This field uses regex syntax, not glob syntax and not plain substring matching."),
+  regex: z.string().max(REGEX_PATTERN_MAX_CHARS).optional().default("").describe("Regular expression applied to counted lines. Base requests provide this field when regex-based line filtering is required; continuation-only requests omit it and reload the persisted request context."),
   /**
    * Include glob filters.
    *
@@ -115,7 +115,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  includeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_INCLUDE_GLOBS_PER_REQUEST).optional().default(["**"]).describe("Glob patterns used to limit which files are included when counting recursively. These file filters do not reopen default-excluded trees by themselves."),
+  includeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_INCLUDE_GLOBS_PER_REQUEST).optional().default([]).describe("Glob patterns used to limit which files are included when counting recursively. These file filters do not reopen default-excluded trees by themselves, and continuation-only requests omit them in favor of the persisted request context."),
   /**
    * Exclude glob filters.
    *
@@ -190,6 +190,34 @@ export const CountLinesArgsSchema = z.object({
    * ```
    */
   ignoreEmptyLines: z.boolean().optional().default(false).describe("Whether to ignore empty lines"),
+}).superRefine((args, ctx) => {
+  const continuationRequest = args.continuationToken !== undefined;
+  const hasQueryDefiningFields =
+    args.paths.length > 0
+    || args.recursive
+    || args.regex !== ""
+    || args.includeGlobs.length > 0
+    || args.excludeGlobs.length > 0
+    || args.respectGitIgnore
+    || args.includeExcludedGlobs.length > 0
+    || args.ignoreEmptyLines;
+
+  if (!continuationRequest && args.paths.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must provide at least one count scope path.",
+      path: ["paths"],
+    });
+  }
+
+  if (continuationRequest && hasQueryDefiningFields) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Continuation-only requests must omit new query-defining fields and rely on the persisted request context.",
+      path: [INSPECTION_CONTINUATION_TOKEN_FIELD],
+    });
+  }
 });
 
 /**

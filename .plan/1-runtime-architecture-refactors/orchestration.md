@@ -85,9 +85,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared runtime ceilings, capability flooring, and execution-policy tables
   - Blocked By: none
   - Summary: Recalibrate the shared traversal-admission values upward, bind the explicit 50% / 85% response-band thresholds, and harden the TSDoc rationale for the higher values without weakening the deeper fuse.
-- [ ] **1.8 Continuation token and SQLite resume architecture** → [`1.8-continuation-token-and-sqlite-resume-architecture.md`](./1.8-continuation-token-and-sqlite-resume-architecture.md)
+- [~] **1.8 Continuation token and SQLite resume architecture** → [`1.8-continuation-token-and-sqlite-resume-architecture.md`](./1.8-continuation-token-and-sqlite-resume-architecture.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: IN_PROGRESS
   - Complexity: HIGH
   - Execution Surface Band: YELLOW
   - Files Modified: shared continuation contracts, SQLite-backed persistence, affected inspection schemas/handlers, and application-shell integration
