@@ -4,13 +4,13 @@ file_id: "1"
 unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
- unit_status: "done"
-  total_tasks: 6
+ unit_status: "in_progress"
+  total_tasks: 8
   completed_tasks: 6
  has_sub_units: false
  sub_unit_count: 0
-  resume_frontier_task: "1.6"
-  next_frontier_task: "1.6"
+  resume_frontier_task: "1.7"
+  next_frontier_task: "1.7"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,12 +20,12 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** done
-- **Progress:** 6/6 tasks
+- **Unit Status:** in_progress
+- **Progress:** 6/8 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.6`
-- **Next Frontier Task:** `1.6`
+- **Resume Frontier Task:** `1.7`
+- **Next Frontier Task:** `1.7`
 - **Todo Window Mode:** `inherit`
 
 ## Tasks
@@ -77,6 +77,22 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared admission planner plus recursive discovery/search/count consumers
   - Blocked By: none
   - Summary: Close the residual admission-to-execution gap by introducing shared root-level workload admission and binding all recursive consumers to it before traversal begins.
+- [ ] **1.7 Traversal admission threshold recalibration and TSDoc hardening** → [`1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md`](./1.7-traversal-admission-threshold-recalibration-and-tsdoc-hardening.md)
+  - Classification: SEQUENTIAL
+  - Status: pending
+  - Complexity: HIGH
+  - Execution Surface Band: GREEN
+  - Files Modified: shared runtime ceilings, capability flooring, and execution-policy tables
+  - Blocked By: none
+  - Summary: Recalibrate the shared traversal-admission values upward, bind the explicit 50% / 85% response-band thresholds, and harden the TSDoc rationale for the higher values without weakening the deeper fuse.
+- [ ] **1.8 Continuation token and SQLite resume architecture** → [`1.8-continuation-token-and-sqlite-resume-architecture.md`](./1.8-continuation-token-and-sqlite-resume-architecture.md)
+  - Classification: SEQUENTIAL
+  - Status: pending
+  - Complexity: HIGH
+  - Execution Surface Band: YELLOW
+  - Files Modified: shared continuation contracts, SQLite-backed persistence, affected inspection schemas/handlers, and application-shell integration
+  - Blocked By: 1.7
+  - Summary: Add same-endpoint continuation-token resume contracts, local SQLite persistence, deterministic error behavior, and preview/task-backed continuation workflow integration for the affected inspection families.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
@@ -86,6 +102,8 @@ todo_window_mode_override: "inherit"
 | D3 | 1.4 | 1.3 | SEQUENTIAL | RESOLVED | Read-core SSOT refactor depends on the finalized inspection-state and execution-lane rules. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
 | D4 | 1.5 | 1.4 | SEQUENTIAL | RESOLVED | Traversal governance refactor should land after state and read-core semantics are stabilized. | `src/domain/shared/guardrails/tool-guardrail-limits.ts` |
 | D5 | 1.6 | 1.5 | SEQUENTIAL | RESOLVED | Shared workload admission and recursive lane routing close the residual runtime-control-plane gap left after the phase-one traversal refactor. | `src/domain/shared/guardrails/filesystem-preflight.ts`, `src/domain/shared/search/search-execution-policy.ts` |
+| D6 | 1.7 | 1.6 | SEQUENTIAL | RESOLVED | Admission-threshold recalibration depends on the finalized shared planner and recursive consumer routing from task `1.6`. | `src/domain/shared/guardrails/tool-guardrail-limits.ts`, `src/domain/shared/runtime/io-capability-profile.ts`, `src/domain/shared/search/search-execution-policy.ts` |
+| D7 | 1.8 | 1.7 | SEQUENTIAL | UNRESOLVED | Same-endpoint continuation tokens and SQLite-backed resume depend on the recalibrated admission bands and higher shared thresholds from task `1.7`. | `src/domain/shared/search/search-execution-policy.ts`, `src/domain/shared/continuation/**`, `src/infrastructure/persistence/**` |
 
 ## Execution Order
 1. 1.1
@@ -94,9 +112,13 @@ todo_window_mode_override: "inherit"
 4. 1.4
 5. 1.5
 6. 1.6
+7. 1.7
+8. 1.8
 
 ## Notes for Orchestrating Agent
 - Re-reference [`__bak__/plan-ugrep/PLAN.md`](../../__bak__/plan-ugrep/PLAN.md) only as historical implementation evidence.
 - No task in this unit may collapse the separate public read endpoints into a single public mega-endpoint.
-- Task `1.5` remains the phase-one traversal refactor, but unit 1 is not final until task `1.6` closes the residual admission-to-execution control-plane gap for broad recursive workloads.
+- Task `1.5` remains the phase-one traversal refactor, and task `1.6` remains the shared admission-planner closure, but unit 1 is not final until task `1.7` recalibrates the admission values and task `1.8` adds the same-endpoint continuation-token contract.
+- Task `1.7` must not solve the low-threshold problem by merely raising the deeper runtime fuse.
+- Task `1.8` must use builtin `node:sqlite` for local persistence and must not introduce a separate public continuation endpoint.
 
