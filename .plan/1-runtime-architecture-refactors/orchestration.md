@@ -4,13 +4,13 @@ file_id: "1"
 unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
- unit_status: "done"
-  total_tasks: 8
+ unit_status: "in_progress"
+  total_tasks: 9
   completed_tasks: 8
  has_sub_units: false
  sub_unit_count: 0
-  resume_frontier_task: "1.8"
-  next_frontier_task: "1.8"
+  resume_frontier_task: "1.9"
+  next_frontier_task: "1.9"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,12 +20,12 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** done
-- **Progress:** 8/8 tasks
+- **Unit Status:** in_progress
+- **Progress:** 8/9 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.8`
-- **Next Frontier Task:** `1.8`
+- **Resume Frontier Task:** `1.9`
+- **Next Frontier Task:** `1.9`
 - **Todo Window Mode:** `inherit`
 
 ## Tasks
@@ -93,6 +93,14 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared continuation contracts, SQLite-backed persistence, affected inspection schemas/handlers, and application-shell integration
   - Blocked By: none
   - Summary: Add same-endpoint continuation-token resume contracts, local SQLite persistence, deterministic error behavior, and preview/task-backed continuation workflow integration for the affected inspection families.
+- [ ] **1.9 Preview continuation delivery and response-budget hardening** → [`1.9-preview-continuation-delivery-and-response-budget-hardening.md`](./1.9-preview-continuation-delivery-and-response-budget-hardening.md)
+  - Classification: SEQUENTIAL
+  - Status: pending
+  - Complexity: HIGH
+  - Execution Surface Band: YELLOW
+  - Files Modified: continuation-aware discovery/search delivery surfaces and caller-visible inspection contract wording
+  - Blocked By: none
+  - Summary: Harden continuation-bearing preview delivery so valid same-endpoint resume responses survive caller-visible text shaping without cap inflation or fuse weakening.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
@@ -104,6 +112,7 @@ todo_window_mode_override: "inherit"
 | D5 | 1.6 | 1.5 | SEQUENTIAL | RESOLVED | Shared workload admission and recursive lane routing close the residual runtime-control-plane gap left after the phase-one traversal refactor. | `src/domain/shared/guardrails/filesystem-preflight.ts`, `src/domain/shared/search/search-execution-policy.ts` |
 | D6 | 1.7 | 1.6 | SEQUENTIAL | RESOLVED | Admission-threshold recalibration depends on the finalized shared planner and recursive consumer routing from task `1.6`. | `src/domain/shared/guardrails/tool-guardrail-limits.ts`, `src/domain/shared/runtime/io-capability-profile.ts`, `src/domain/shared/search/search-execution-policy.ts` |
 | D7 | 1.8 | 1.7 | SEQUENTIAL | RESOLVED | Same-endpoint continuation tokens and SQLite-backed resume depend on the recalibrated admission bands and higher shared thresholds from task `1.7`. | `src/domain/shared/search/search-execution-policy.ts`, `src/domain/shared/continuation/**`, `src/infrastructure/persistence/**` |
+| D8 | 1.9 | 1.8 | SEQUENTIAL | RESOLVED | Continuation-delivery hardening depends on the already landed same-endpoint continuation-token runtime contract from task `1.8`. | `src/domain/shared/continuation/**`, `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
 
 ## Execution Order
 1. 1.1
@@ -114,11 +123,13 @@ todo_window_mode_override: "inherit"
 6. 1.6
 7. 1.7
 8. 1.8
+9. 1.9
 
 ## Notes for Orchestrating Agent
 - Re-reference [`__bak__/plan-ugrep/PLAN.md`](../../__bak__/plan-ugrep/PLAN.md) only as historical implementation evidence.
 - No task in this unit may collapse the separate public read endpoints into a single public mega-endpoint.
-- Task `1.5` remains the phase-one traversal refactor, and task `1.6` remains the shared admission-planner closure, but unit 1 is not final until task `1.7` recalibrates the admission values and task `1.8` adds the same-endpoint continuation-token contract.
+- Task `1.5` remains the phase-one traversal refactor, task `1.6` remains the shared admission-planner closure, task `1.7` remains the calibrated band correction layer, task `1.8` remains the same-endpoint continuation-token runtime contract, and unit 1 is not final until task `1.9` hardens caller-visible continuation delivery on the affected preview-capable families.
 - Task `1.7` must not solve the low-threshold problem by merely raising the deeper runtime fuse.
 - Task `1.8` must use builtin `node:sqlite` for local persistence and must not introduce a separate public continuation endpoint.
+- Downstream discovery/search documentation and caller-visible public contract alignment must now anchor to task `1.9`, not to task `1.8` alone.
 
