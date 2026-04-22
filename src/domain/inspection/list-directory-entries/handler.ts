@@ -141,6 +141,10 @@ const LIST_DIRECTORY_ENTRIES_INLINE_PERMISSION_METADATA_CHARS = 32;
 function formatListDirectoryEntriesTextOutput(
   result: ListDirectoryEntriesResult,
 ): string {
+  const hasResumableContinuation =
+    result.continuation.resumable
+    && result.continuation.continuationToken !== null;
+
   if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
     return encode(result);
   }
@@ -150,6 +154,14 @@ function formatListDirectoryEntriesTextOutput(
     0,
   );
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+
+  if (!hasResumableContinuation) {
+    return [
+      `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} top-level entries in this bounded chunk.`,
+      "No active continuation token remains for this bounded chunk.",
+      "The authoritative directory-entry payload remains in structuredContent.",
+    ].join("\n");
+  }
 
   return [
     `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} top-level entries in this bounded chunk.`,

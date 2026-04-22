@@ -108,6 +108,10 @@ function formatFindFilesByGlobTextOutput(
   pattern: string,
   maxResults: number,
 ): string {
+  const hasResumableContinuation =
+    result.continuation.resumable
+    && result.continuation.continuationToken !== null;
+
   if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
     return result.roots.length === 1
       ? formatFindFilesByGlobRootOutput(result.roots[0]!, pattern, maxResults)
@@ -122,6 +126,14 @@ function formatFindFilesByGlobTextOutput(
 
   const totalMatches = result.totalMatches;
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+
+  if (!hasResumableContinuation) {
+    return [
+      `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,
+      "No active continuation token remains for this bounded chunk.",
+      "The authoritative match payload remains in structuredContent.",
+    ].join("\n");
+  }
 
   return [
     `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,

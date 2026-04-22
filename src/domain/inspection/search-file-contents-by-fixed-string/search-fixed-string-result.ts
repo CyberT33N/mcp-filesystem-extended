@@ -191,11 +191,23 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
   fixedString: string,
   effectiveMaxResults: number,
 ): string {
+  const hasResumableContinuation =
+    result.continuation.resumable
+    && result.continuation.continuationToken !== null;
+
   if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
     return formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
   }
 
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+
+  if (!hasResumableContinuation) {
+    return [
+      `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`,
+      "No active continuation token remains for this bounded chunk.",
+      "The authoritative match payload remains in structuredContent.",
+    ].join("\n");
+  }
 
   return [
     `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`,

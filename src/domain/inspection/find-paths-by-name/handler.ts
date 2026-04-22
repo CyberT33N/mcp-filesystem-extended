@@ -86,6 +86,10 @@ function formatFindPathsByNameTextOutput(
   result: FindPathsByNameResult,
   maxResults: number,
 ): string {
+  const hasResumableContinuation =
+    result.continuation.resumable
+    && result.continuation.continuationToken !== null;
+
   if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
     if (result.roots.length === 1) {
       const firstRootResult = result.roots[0];
@@ -108,6 +112,14 @@ function formatFindPathsByNameTextOutput(
 
   const totalMatches = result.totalMatches;
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+
+  if (!hasResumableContinuation) {
+    return [
+      `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,
+      "No active continuation token remains for this bounded chunk.",
+      "The authoritative match payload remains in structuredContent.",
+    ].join("\n");
+  }
 
   return [
     `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,
