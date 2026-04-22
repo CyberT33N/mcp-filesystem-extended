@@ -199,15 +199,11 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
     return formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
   }
 
-  const rootLabel = result.roots.length === 1 ? "root" : "roots";
-
   if (!hasResumableContinuation) {
-    return [
-      `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`,
-      "No active continuation token remains for this bounded chunk.",
-      "The authoritative match payload remains in structuredContent.",
-    ].join("\n");
+    return formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
   }
+
+  const rootLabel = result.roots.length === 1 ? "root" : "roots";
 
   return [
     `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`,

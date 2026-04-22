@@ -1,16 +1,16 @@
 ---
 file_type: "orchestration"
 file_id: "1"
-unit_name: "Runtime Architecture Refactors"
+ unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
- unit_status: "done"
-  total_tasks: 9
-  completed_tasks: 9
+  unit_status: "done"
+  total_tasks: 10
+  completed_tasks: 10
  has_sub_units: false
  sub_unit_count: 0
-  resume_frontier_task: "1.9"
-  next_frontier_task: "1.9"
+  resume_frontier_task: "1.10"
+  next_frontier_task: "1.10"
 todo_window_mode_override: "inherit"
 ---
 
@@ -21,11 +21,11 @@ todo_window_mode_override: "inherit"
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
 - **Unit Status:** done
-- **Progress:** 9/9 tasks
+- **Progress:** 10/10 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.9`
-- **Next Frontier Task:** `1.9`
+- **Resume Frontier Task:** `1.10`
+- **Next Frontier Task:** `1.10`
 - **Todo Window Mode:** `inherit`
 
 ## Tasks
@@ -101,6 +101,14 @@ todo_window_mode_override: "inherit"
   - Files Modified: continuation-aware discovery/search delivery surfaces and caller-visible inspection contract wording
   - Blocked By: none
   - Summary: Harden continuation-bearing preview delivery so valid same-endpoint resume responses survive caller-visible text shaping without cap inflation or fuse weakening.
+- [x] **1.10 Continuation response contract and consumer alignment** → [`1.10-continuation-response-contract-and-consumer-alignment.md`](./1.10-continuation-response-contract-and-consumer-alignment.md)
+  - Classification: SEQUENTIAL
+  - Status: DONE
+  - Complexity: HIGH
+  - Execution Surface Band: YELLOW
+  - Files Modified: preview-family formatter truth, caller-visible runtime wording, and the explicit consumer-authority audit boundary
+  - Blocked By: none
+  - Summary: Align preview-family resume guidance to actual continuation metadata, preserve `structuredContent` as authoritative, and make any remaining downstream consumer boundary explicit.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
@@ -113,6 +121,7 @@ todo_window_mode_override: "inherit"
 | D6 | 1.7 | 1.6 | SEQUENTIAL | RESOLVED | Admission-threshold recalibration depends on the finalized shared planner and recursive consumer routing from task `1.6`. | `src/domain/shared/guardrails/tool-guardrail-limits.ts`, `src/domain/shared/runtime/io-capability-profile.ts`, `src/domain/shared/search/search-execution-policy.ts` |
 | D7 | 1.8 | 1.7 | SEQUENTIAL | RESOLVED | Same-endpoint continuation tokens and SQLite-backed resume depend on the recalibrated admission bands and higher shared thresholds from task `1.7`. | `src/domain/shared/search/search-execution-policy.ts`, `src/domain/shared/continuation/**`, `src/infrastructure/persistence/**` |
 | D8 | 1.9 | 1.8 | SEQUENTIAL | RESOLVED | Continuation-delivery hardening depends on the already landed same-endpoint continuation-token runtime contract from task `1.8`. | `src/domain/shared/continuation/**`, `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
+| D9 | 1.10 | 1.9 | SEQUENTIAL | RESOLVED | Consumer-alignment closure depends on the already landed continuation-delivery hardening from task `1.9`. | `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
 
 ## Execution Order
 1. 1.1
@@ -124,12 +133,13 @@ todo_window_mode_override: "inherit"
 7. 1.7
 8. 1.8
 9. 1.9
+10. 1.10
 
 ## Notes for Orchestrating Agent
 - Re-reference [`__bak__/plan-ugrep/PLAN.md`](../../__bak__/plan-ugrep/PLAN.md) only as historical implementation evidence.
 - No task in this unit may collapse the separate public read endpoints into a single public mega-endpoint.
-- Task `1.5` remains the phase-one traversal refactor, task `1.6` remains the shared admission-planner closure, task `1.7` remains the calibrated band correction layer, task `1.8` remains the same-endpoint continuation-token runtime contract, and unit 1 is not final until task `1.9` hardens caller-visible continuation delivery on the affected preview-capable families.
+- Task `1.5` remains the phase-one traversal refactor, task `1.6` remains the shared admission-planner closure, task `1.7` remains the calibrated band correction layer, task `1.8` remains the same-endpoint continuation-token runtime contract, task `1.9` remains the caller-visible delivery hardening layer, and unit 1 is not final until task `1.10` closes the continuation-response truth and consumer-authority boundary.
 - Task `1.7` must not solve the low-threshold problem by merely raising the deeper runtime fuse.
 - Task `1.8` must use builtin `node:sqlite` for local persistence and must not introduce a separate public continuation endpoint.
-- Downstream discovery/search documentation and caller-visible public contract alignment must now anchor to task `1.9`, not to task `1.8` alone.
+- Downstream discovery/search documentation and caller-visible public contract alignment must now anchor to task `1.10`, not to task `1.9` alone.
 

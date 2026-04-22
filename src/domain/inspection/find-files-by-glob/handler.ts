@@ -124,16 +124,20 @@ function formatFindFilesByGlobTextOutput(
         );
   }
 
+  if (!hasResumableContinuation) {
+    return result.roots.length === 1
+      ? formatFindFilesByGlobRootOutput(result.roots[0]!, pattern, maxResults)
+      : formatBatchTextOperationResults(
+          "search glob",
+          result.roots.map((rootResult) => ({
+            label: rootResult.root,
+            output: formatFindFilesByGlobRootOutput(rootResult, pattern, maxResults),
+          })),
+        );
+  }
+
   const totalMatches = result.totalMatches;
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
-
-  if (!hasResumableContinuation) {
-    return [
-      `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,
-      "No active continuation token remains for this bounded chunk.",
-      "The authoritative match payload remains in structuredContent.",
-    ].join("\n");
-  }
 
   return [
     `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,

@@ -106,20 +106,32 @@ function formatFindPathsByNameTextOutput(
       result.roots.map((rootResult) => ({
         label: rootResult.root,
         output: formatFindPathsByNameRootOutput(rootResult, maxResults),
+        })),
+    );
+  }
+
+  if (!hasResumableContinuation) {
+    if (result.roots.length === 1) {
+      const firstRootResult = result.roots[0];
+
+      if (firstRootResult === undefined) {
+        throw new Error("Expected one root result for name-based search.");
+      }
+
+      return formatFindPathsByNameRootOutput(firstRootResult, maxResults);
+    }
+
+    return formatBatchTextOperationResults(
+      "search files",
+      result.roots.map((rootResult) => ({
+        label: rootResult.root,
+        output: formatFindPathsByNameRootOutput(rootResult, maxResults),
       })),
     );
   }
 
   const totalMatches = result.totalMatches;
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
-
-  if (!hasResumableContinuation) {
-    return [
-      `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,
-      "No active continuation token remains for this bounded chunk.",
-      "The authoritative match payload remains in structuredContent.",
-    ].join("\n");
-  }
 
   return [
     `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,

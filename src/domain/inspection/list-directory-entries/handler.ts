@@ -149,19 +149,15 @@ function formatListDirectoryEntriesTextOutput(
     return encode(result);
   }
 
+  if (!hasResumableContinuation) {
+    return encode(result);
+  }
+
   const totalListedEntries = result.roots.reduce(
     (entryCount, root) => entryCount + root.entries.length,
     0,
   );
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
-
-  if (!hasResumableContinuation) {
-    return [
-      `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} top-level entries in this bounded chunk.`,
-      "No active continuation token remains for this bounded chunk.",
-      "The authoritative directory-entry payload remains in structuredContent.",
-    ].join("\n");
-  }
 
   return [
     `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} top-level entries in this bounded chunk.`,
