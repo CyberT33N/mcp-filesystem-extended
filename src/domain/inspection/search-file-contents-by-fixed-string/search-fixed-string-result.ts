@@ -178,6 +178,34 @@ export function formatSearchFixedStringResultOutput(
 }
 
 /**
+ * Formats the fixed-string search result into a continuation-aware caller-visible text surface.
+ *
+ * @param result - Structured fixed-string search result across all requested roots.
+ * @param fixedString - Exact literal string supplied by the caller.
+ * @param effectiveMaxResults - Effective hard-capped result limit applied by the handler.
+ * @returns Compact guidance when continuation remains active; otherwise the normal formatted output.
+ */
+export function formatSearchFixedStringContinuationAwareTextOutput(
+  result: SearchFixedStringResult,
+  fixedString: string,
+  effectiveMaxResults: number,
+): string {
+  if (!result.continuation.resumable) {
+    return formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
+  }
+
+  const rootLabel = result.roots.length === 1 ? "root" : "roots";
+
+  return [
+    `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`,
+    result.admission.guidanceText
+      ?? "Resume the same fixed-string-search request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.",
+    "The authoritative match payload remains in structuredContent.",
+    "Resume the same request by sending only continuationToken on this endpoint.",
+  ].join("\n");
+}
+
+/**
  * Enforces the formatted text-response budget for the fixed-string search family surface.
  *
  * @param toolName - Exact MCP tool name that owns the formatted response.

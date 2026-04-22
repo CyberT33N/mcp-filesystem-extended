@@ -14,6 +14,7 @@ import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability
 import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
 import {
   assertFormattedFixedStringResponseBudget,
+  formatSearchFixedStringContinuationAwareTextOutput,
   formatSearchFixedStringPathOutput,
   type SearchFixedStringPathResult,
   type SearchFixedStringResult,
@@ -241,27 +242,12 @@ export async function handleSearchFixedString(
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
   const effectiveFixedString = executionContext.requestPayload.fixedString;
 
-  if (structuredResult.roots.length === 1) {
-    const firstRootResult = structuredResult.roots[0];
-
-    if (firstRootResult === undefined) {
-      throw new Error("Expected one root result for fixed-string formatting.");
-    }
-
-    return assertFormattedFixedStringResponseBudget(
-      SEARCH_FIXED_STRING_TOOL_NAME,
-      formatSearchFixedStringPathOutput(firstRootResult, effectiveFixedString, effectiveMaxResults),
-    );
-  }
-
   return assertFormattedFixedStringResponseBudget(
     SEARCH_FIXED_STRING_TOOL_NAME,
-    formatBatchTextOperationResults(
-      "search fixed string",
-      structuredResult.roots.map((rootResult) => ({
-        label: rootResult.root,
-        output: formatSearchFixedStringPathOutput(rootResult, effectiveFixedString, effectiveMaxResults),
-      })),
+    formatSearchFixedStringContinuationAwareTextOutput(
+      structuredResult,
+      effectiveFixedString,
+      effectiveMaxResults,
     ),
   );
 }

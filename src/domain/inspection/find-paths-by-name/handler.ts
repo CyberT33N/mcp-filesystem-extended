@@ -82,6 +82,41 @@ interface FindPathsByNameRootExecutionResult extends FindPathsByNameRootResult {
 const FIND_PATHS_BY_NAME_CONTINUATION_GUIDANCE =
   "Resume the same name-discovery request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.";
 
+function formatFindPathsByNameTextOutput(
+  result: FindPathsByNameResult,
+  maxResults: number,
+): string {
+  if (!result.continuation.resumable) {
+    if (result.roots.length === 1) {
+      const firstRootResult = result.roots[0];
+
+      if (firstRootResult === undefined) {
+        throw new Error("Expected one root result for name-based search.");
+      }
+
+      return formatFindPathsByNameRootOutput(firstRootResult, maxResults);
+    }
+
+    return formatBatchTextOperationResults(
+      "search files",
+      result.roots.map((rootResult) => ({
+        label: rootResult.root,
+        output: formatFindPathsByNameRootOutput(rootResult, maxResults),
+      })),
+    );
+  }
+
+  const totalMatches = result.totalMatches;
+  const rootLabel = result.roots.length === 1 ? "root" : "roots";
+
+  return [
+    `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,
+    result.admission.guidanceText ?? FIND_PATHS_BY_NAME_CONTINUATION_GUIDANCE,
+    "The authoritative match payload remains in structuredContent.",
+    "Resume the same request by sending only continuationToken on this endpoint.",
+  ].join("\n");
+}
+
 function resolveFindPathsByNameExecutionContext(
   continuationToken: string | undefined,
   directoryPaths: string[],
@@ -417,31 +452,7 @@ export async function handleSearchFiles(
     maxResults,
   );
 
-  if (result.roots.length === 1) {
-    const firstRootResult = result.roots[0];
-
-    if (firstRootResult === undefined) {
-      throw new Error("Expected one root result for name-based search.");
-    }
-
-    const output = formatFindPathsByNameRootOutput(firstRootResult, maxResults);
-
-    assertActualTextBudget(
-      FIND_PATHS_BY_NAME_FAMILY_MEMBER,
-      output.length,
-      DISCOVERY_RESPONSE_CAP_CHARS,
-      "formatted name-based search results",
-    );
-
-    return output;
-  }
-
-  const results = result.roots.map((rootResult) => ({
-    label: rootResult.root,
-    output: formatFindPathsByNameRootOutput(rootResult, maxResults),
-  }));
-
-  const output = formatBatchTextOperationResults("search files", results);
+  const output = formatFindPathsByNameTextOutput(result, maxResults);
 
   assertActualTextBudget(
     FIND_PATHS_BY_NAME_FAMILY_MEMBER,

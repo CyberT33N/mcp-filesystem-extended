@@ -93,9 +93,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared continuation contracts, SQLite-backed persistence, affected inspection schemas/handlers, and application-shell integration
   - Blocked By: none
   - Summary: Add same-endpoint continuation-token resume contracts, local SQLite persistence, deterministic error behavior, and preview/task-backed continuation workflow integration for the affected inspection families.
-- [ ] **1.9 Preview continuation delivery and response-budget hardening** → [`1.9-preview-continuation-delivery-and-response-budget-hardening.md`](./1.9-preview-continuation-delivery-and-response-budget-hardening.md)
+- [~] **1.9 Preview continuation delivery and response-budget hardening** → [`1.9-preview-continuation-delivery-and-response-budget-hardening.md`](./1.9-preview-continuation-delivery-and-response-budget-hardening.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: IN_PROGRESS
   - Complexity: HIGH
   - Execution Surface Band: YELLOW
   - Files Modified: continuation-aware discovery/search delivery surfaces and caller-visible inspection contract wording

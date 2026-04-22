@@ -102,6 +102,34 @@ const FIND_FILES_BY_GLOB_FAMILY_MEMBER = "find_files_by_glob";
 const FIND_FILES_BY_GLOB_CONTINUATION_GUIDANCE =
   "Resume the same glob-discovery request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.";
 
+function formatFindFilesByGlobTextOutput(
+  result: FindFilesByGlobResult,
+  pattern: string,
+  maxResults: number,
+): string {
+  if (!result.continuation.resumable) {
+    return result.roots.length === 1
+      ? formatFindFilesByGlobRootOutput(result.roots[0]!, pattern, maxResults)
+      : formatBatchTextOperationResults(
+          "search glob",
+          result.roots.map((rootResult) => ({
+            label: rootResult.root,
+            output: formatFindFilesByGlobRootOutput(rootResult, pattern, maxResults),
+          })),
+        );
+  }
+
+  const totalMatches = result.totalMatches;
+  const rootLabel = result.roots.length === 1 ? "root" : "roots";
+
+  return [
+    `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,
+    result.admission.guidanceText ?? FIND_FILES_BY_GLOB_CONTINUATION_GUIDANCE,
+    "The authoritative match payload remains in structuredContent.",
+    "Resume the same request by sending only continuationToken on this endpoint.",
+  ].join("\n");
+}
+
 function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
@@ -660,23 +688,11 @@ export async function handleSearchGlob(
   );
   const effectivePattern = executionContext.requestPayload.pattern;
   const effectiveMaxResults = executionContext.requestPayload.maxResults;
-  const output = result.roots.length === 1
-    ? formatFindFilesByGlobRootOutput(
-        result.roots[0]!,
-        effectivePattern,
-        effectiveMaxResults,
-      )
-    : formatBatchTextOperationResults(
-        "search glob",
-        result.roots.map((rootResult) => ({
-          label: rootResult.root,
-          output: formatFindFilesByGlobRootOutput(
-            rootResult,
-            effectivePattern,
-            effectiveMaxResults,
-          ),
-        })),
-      );
+  const output = formatFindFilesByGlobTextOutput(
+    result,
+    effectivePattern,
+    effectiveMaxResults,
+  );
 
   assertActualTextBudget(
     "find_files_by_glob",

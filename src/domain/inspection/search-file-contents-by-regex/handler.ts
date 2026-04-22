@@ -22,6 +22,7 @@ import {
 } from "./search-regex-path-result";
 import {
   assertFormattedRegexResponseBudget,
+  formatSearchRegexContinuationAwareTextOutput,
   formatSearchRegexPathOutput,
   type SearchRegexPathResult,
   type SearchRegexResult,
@@ -278,27 +279,12 @@ export async function handleSearchRegex(
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
   const effectivePattern = executionContext.requestPayload.pattern;
 
-  if (structuredResult.roots.length === 1) {
-    const firstRootResult = structuredResult.roots[0];
-
-    if (firstRootResult === undefined) {
-      throw new Error("Expected one root result for regex-search formatting.");
-    }
-
-    return assertFormattedRegexResponseBudget(
-      SEARCH_REGEX_TOOL_NAME,
-      formatSearchRegexPathOutput(firstRootResult, effectivePattern, effectiveMaxResults),
-    );
-  }
-
   return assertFormattedRegexResponseBudget(
     SEARCH_REGEX_TOOL_NAME,
-    formatBatchTextOperationResults(
-      "search regex",
-      structuredResult.roots.map((rootResult) => ({
-        label: rootResult.root,
-        output: formatSearchRegexPathOutput(rootResult, effectivePattern, effectiveMaxResults),
-      })),
+    formatSearchRegexContinuationAwareTextOutput(
+      structuredResult,
+      effectivePattern,
+      effectiveMaxResults,
     ),
   );
 }

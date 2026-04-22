@@ -190,6 +190,34 @@ export function formatSearchRegexResultOutput(
 }
 
 /**
+ * Formats the regex-search result into a continuation-aware caller-visible text surface.
+ *
+ * @param result - Structured regex-search result across all requested roots.
+ * @param pattern - Raw regex pattern supplied by the caller.
+ * @param effectiveMaxResults - Effective hard-capped result limit applied by the handler.
+ * @returns Compact guidance when continuation remains active; otherwise the normal formatted output.
+ */
+export function formatSearchRegexContinuationAwareTextOutput(
+  result: SearchRegexResult,
+  pattern: string,
+  effectiveMaxResults: number,
+): string {
+  if (!result.continuation.resumable) {
+    return formatSearchRegexResultOutput(result, pattern, effectiveMaxResults);
+  }
+
+  const rootLabel = result.roots.length === 1 ? "root" : "roots";
+
+  return [
+    `Regex-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`,
+    result.admission.guidanceText
+      ?? "Resume the same regex-search request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.",
+    "The authoritative match payload remains in structuredContent.",
+    "Resume the same request by sending only continuationToken on this endpoint.",
+  ].join("\n");
+}
+
+/**
  * Enforces the formatted text-response budget for the regex-search family.
  *
  * @param toolName - Exact MCP tool name that owns the formatted response.

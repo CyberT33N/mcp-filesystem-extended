@@ -134,6 +134,27 @@ const LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER = "list_directory_entries";
 const LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE =
   "Resume the same directory-listing request by sending only continuationToken to the same endpoint to receive the next bounded chunk of entries.";
 
+function formatListDirectoryEntriesTextOutput(
+  result: ListDirectoryEntriesResult,
+): string {
+  if (!result.continuation.resumable) {
+    return encode(result);
+  }
+
+  const totalListedEntries = result.roots.reduce(
+    (entryCount, root) => entryCount + root.entries.length,
+    0,
+  );
+  const rootLabel = result.roots.length === 1 ? "root" : "roots";
+
+  return [
+    `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} top-level entries in this bounded chunk.`,
+    result.admission.guidanceText ?? LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE,
+    "The authoritative directory-entry payload remains in structuredContent.",
+    "Resume the same request by sending only continuationToken on this endpoint.",
+  ].join("\n");
+}
+
 function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
@@ -734,7 +755,7 @@ export async function handleListDirectoryEntries(
     inspectionContinuationStore,
   );
 
-  const output = encode(result);
+  const output = formatListDirectoryEntriesTextOutput(result);
 
   assertActualTextBudget(
     LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
