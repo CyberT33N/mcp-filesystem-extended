@@ -149,20 +149,28 @@ function formatListDirectoryEntriesTextOutput(
     return encode(result);
   }
 
-  if (!hasResumableContinuation) {
-    return encode(result);
-  }
-
   const totalListedEntries = result.roots.reduce(
     (entryCount, root) => entryCount + root.entries.length,
     0,
   );
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+  const previewSummary =
+    `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} top-level entries in this bounded chunk.`;
+  const structuredPayloadGuidance =
+    "The authoritative directory-entry payload remains in structuredContent.";
+
+  if (!hasResumableContinuation) {
+    return [
+      previewSummary,
+      structuredPayloadGuidance,
+      "This preview-first response is finalized and exposes no active continuation token.",
+    ].join("\n");
+  }
 
   return [
-    `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} top-level entries in this bounded chunk.`,
+    previewSummary,
     result.admission.guidanceText ?? LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE,
-    "The authoritative directory-entry payload remains in structuredContent.",
+    structuredPayloadGuidance,
     "Resume the same request by sending only continuationToken on this endpoint.",
   ].join("\n");
 }
@@ -846,7 +854,7 @@ export async function handleListDirectoryEntries(
     LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
     output.length,
     DISCOVERY_RESPONSE_CAP_CHARS,
-    "encoded structured directory listing output",
+    "directory-listing text output",
   );
 
   return output;

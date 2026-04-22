@@ -211,17 +211,24 @@ export function formatSearchRegexContinuationAwareTextOutput(
     return formatSearchRegexResultOutput(result, pattern, effectiveMaxResults);
   }
 
+  const rootLabel = result.roots.length === 1 ? "root" : "roots";
+  const previewSummary =
+    `Regex-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`;
+  const structuredPayloadGuidance = "The authoritative match payload remains in structuredContent.";
+
   if (!hasResumableContinuation) {
-    return formatSearchRegexResultOutput(result, pattern, effectiveMaxResults);
+    return [
+      previewSummary,
+      structuredPayloadGuidance,
+      "This preview-first response is finalized and exposes no active continuation token.",
+    ].join("\n");
   }
 
-  const rootLabel = result.roots.length === 1 ? "root" : "roots";
-
   return [
-    `Regex-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`,
+    previewSummary,
     result.admission.guidanceText
       ?? "Resume the same regex-search request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.",
-    "The authoritative match payload remains in structuredContent.",
+    structuredPayloadGuidance,
     "Resume the same request by sending only continuationToken on this endpoint.",
   ].join("\n");
 }

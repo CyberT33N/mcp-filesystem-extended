@@ -107,36 +107,27 @@ function formatFindPathsByNameTextOutput(
         label: rootResult.root,
         output: formatFindPathsByNameRootOutput(rootResult, maxResults),
         })),
-    );
-  }
-
-  if (!hasResumableContinuation) {
-    if (result.roots.length === 1) {
-      const firstRootResult = result.roots[0];
-
-      if (firstRootResult === undefined) {
-        throw new Error("Expected one root result for name-based search.");
-      }
-
-      return formatFindPathsByNameRootOutput(firstRootResult, maxResults);
-    }
-
-    return formatBatchTextOperationResults(
-      "search files",
-      result.roots.map((rootResult) => ({
-        label: rootResult.root,
-        output: formatFindPathsByNameRootOutput(rootResult, maxResults),
-      })),
-    );
+        );
   }
 
   const totalMatches = result.totalMatches;
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+  const previewSummary =
+    `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`;
+  const structuredPayloadGuidance = "The authoritative match payload remains in structuredContent.";
+
+  if (!hasResumableContinuation) {
+    return [
+      previewSummary,
+      structuredPayloadGuidance,
+      "This preview-first response is finalized and exposes no active continuation token.",
+    ].join("\n");
+  }
 
   return [
-    `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,
+    previewSummary,
     result.admission.guidanceText ?? FIND_PATHS_BY_NAME_CONTINUATION_GUIDANCE,
-    "The authoritative match payload remains in structuredContent.",
+    structuredPayloadGuidance,
     "Resume the same request by sending only continuationToken on this endpoint.",
   ].join("\n");
 }
@@ -485,7 +476,7 @@ export async function handleSearchFiles(
     FIND_PATHS_BY_NAME_FAMILY_MEMBER,
     output.length,
     DISCOVERY_RESPONSE_CAP_CHARS,
-    "formatted batched name-based search results",
+    "name-discovery text output",
   );
 
   return output;

@@ -124,25 +124,24 @@ function formatFindFilesByGlobTextOutput(
         );
   }
 
-  if (!hasResumableContinuation) {
-    return result.roots.length === 1
-      ? formatFindFilesByGlobRootOutput(result.roots[0]!, pattern, maxResults)
-      : formatBatchTextOperationResults(
-          "search glob",
-          result.roots.map((rootResult) => ({
-            label: rootResult.root,
-            output: formatFindFilesByGlobRootOutput(rootResult, pattern, maxResults),
-          })),
-        );
-  }
-
   const totalMatches = result.totalMatches;
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+  const previewSummary =
+    `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`;
+  const structuredPayloadGuidance = "The authoritative match payload remains in structuredContent.";
+
+  if (!hasResumableContinuation) {
+    return [
+      previewSummary,
+      structuredPayloadGuidance,
+      "This preview-first response is finalized and exposes no active continuation token.",
+    ].join("\n");
+  }
 
   return [
-    `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`,
+    previewSummary,
     result.admission.guidanceText ?? FIND_FILES_BY_GLOB_CONTINUATION_GUIDANCE,
-    "The authoritative match payload remains in structuredContent.",
+    structuredPayloadGuidance,
     "Resume the same request by sending only continuationToken on this endpoint.",
   ].join("\n");
 }
@@ -733,7 +732,7 @@ export async function handleSearchGlob(
     "find_files_by_glob",
     output.length,
     DISCOVERY_RESPONSE_CAP_CHARS,
-    "formatted batched glob search results",
+    "glob-discovery text output",
   );
 
   return output;
