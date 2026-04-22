@@ -4,13 +4,13 @@ file_id: "1"
  unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-  unit_status: "done"
-  total_tasks: 11
+  unit_status: "in_progress"
+  total_tasks: 12
   completed_tasks: 11
  has_sub_units: false
  sub_unit_count: 0
-  resume_frontier_task: "1.11"
-  next_frontier_task: "1.11"
+  resume_frontier_task: "1.12"
+  next_frontier_task: "1.12"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,12 +20,12 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** done
-- **Progress:** 11/11 tasks
+- **Unit Status:** in_progress
+- **Progress:** 11/12 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.11`
-- **Next Frontier Task:** `1.11`
+- **Resume Frontier Task:** `1.12`
+- **Next Frontier Task:** `1.12`
 - **Todo Window Mode:** `inherit`
 
 ## Tasks
@@ -117,6 +117,14 @@ todo_window_mode_override: "inherit"
   - Files Modified: `list_directory_entries` runtime surfacing plus caller-visible directory-listing contract wording
   - Blocked By: none
   - Summary: Surface the bounded preview chunk and any active `continuationToken` to the real MCP client path for `list_directory_entries` without changing same-endpoint continuation semantics or guardrail caps.
+- [ ] **1.12 Resume-session dual delivery, cursor-precision hardening, and endpoint guidance architecture** → [`1.12-resume-session-dual-delivery-and-endpoint-guidance-architecture.md`](./1.12-resume-session-dual-delivery-and-endpoint-guidance-architecture.md)
+  - Classification: SEQUENTIAL
+  - Status: pending
+  - Complexity: HIGH
+  - Execution Surface Band: YELLOW
+  - Files Modified: shared resume-session contracts, preview-family schemas/handlers/result surfaces, `count_lines`, and caller-visible server/endpoint guidance wording
+  - Blocked By: none
+  - Summary: Replace the chunk-only continuation vocabulary with a cleaner resume-session model, add dual preview-family resume intents plus completion-backed `count_lines` semantics, harden family-wide cursor precision, and align server plus endpoint guidance to prompt-efficient autonomous agent use.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
@@ -131,6 +139,7 @@ todo_window_mode_override: "inherit"
 | D8 | 1.9 | 1.8 | SEQUENTIAL | RESOLVED | Continuation-delivery hardening depends on the already landed same-endpoint continuation-token runtime contract from task `1.8`. | `src/domain/shared/continuation/**`, `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
 | D9 | 1.10 | 1.9 | SEQUENTIAL | RESOLVED | Consumer-alignment closure depends on the already landed continuation-delivery hardening from task `1.9`. | `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
 | D10 | 1.11 | 1.10 | SEQUENTIAL | RESOLVED | End-to-end real-client surfacing for `list_directory_entries` depends on the already landed continuation response-contract and consumer-alignment layer from task `1.10`. | `src/domain/inspection/list-directory-entries/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts`, `src/application/server/filesystem-server.ts`, `src/application/server/register-tool-catalog.ts` |
+| D11 | 1.12 | 1.11 | SEQUENTIAL | RESOLVED | The clean target-state remodel depends on the already landed same-endpoint continuation baseline from tasks `1.8` through `1.11`, but supersedes its public continuation vocabulary with a resume-session model, dual preview-family delivery intents, completion-backed `count_lines` semantics, and family-wide frontier hardening. | `src/domain/shared/continuation/**`, `src/domain/shared/resume/**`, `src/infrastructure/persistence/**`, `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/domain/inspection/count-lines/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
 
 ## Execution Order
 1. 1.1
@@ -144,6 +153,7 @@ todo_window_mode_override: "inherit"
 9. 1.9
 10. 1.10
 11. 1.11
+12. 1.12
 
 ## Notes for Orchestrating Agent
 - Re-reference [`__bak__/plan-ugrep/PLAN.md`](../../__bak__/plan-ugrep/PLAN.md) only as historical implementation evidence.
@@ -151,6 +161,6 @@ todo_window_mode_override: "inherit"
 - Task `1.5` remains the phase-one traversal refactor, task `1.6` remains the shared admission-planner closure, task `1.7` remains the calibrated band correction layer, task `1.8` remains the same-endpoint continuation-token runtime contract, task `1.9` remains the caller-visible delivery hardening layer, and unit 1 is not final until task `1.10` closes the continuation-response truth and consumer-authority boundary.
 - Task `1.7` must not solve the low-threshold problem by merely raising the deeper runtime fuse.
 - Task `1.8` must use builtin `node:sqlite` for local persistence and must not introduce a separate public continuation endpoint.
-- Task `1.11` closes the real-client `list_directory_entries` continuation-surfacing layer without changing same-endpoint continuation semantics or cap ownership.
-- Downstream directory-listing documentation and caller-visible contract alignment that touch this endpoint must now anchor to task `1.11`, not to task `1.10` alone.
+- Task `1.11` closes the real-client `list_directory_entries` continuation-surfacing layer inside the current continuation vocabulary, but unit 1 is no longer final until task `1.12` lands the clean resume-session remodel, dual preview-family delivery intents, completion-backed `count_lines` model, family-wide frontier hardening, and endpoint-specific guidance architecture.
+- Downstream discovery/search/count documentation and caller-visible contract alignment must now anchor to task `1.12`, because tasks `1.8` through `1.11` are implementation-history baselines rather than the final public target-state contract.
 
