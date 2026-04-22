@@ -76,6 +76,11 @@ export interface TraversalWorkloadAdmissionConsumerCapabilities {
   inlineCandidateFileBudget?: number | null;
 
   /**
+   * Caller-visible text-response ceiling for the inline lane of this consumer.
+   */
+  inlineTextResponseCapChars?: number | null;
+
+  /**
    * Multiplier that projects bounded probe time into conservative lane-local execution time.
    */
   executionTimeCostMultiplier?: number | null;
@@ -114,6 +119,11 @@ export interface TraversalWorkloadAdmissionInput {
    * Execution-aware candidate-workload evidence collected before full traversal begins.
    */
   candidateWorkloadEvidence?: TraversalCandidateWorkloadEvidence | null;
+
+  /**
+   * Family-local projection of the caller-visible inline text surface.
+   */
+  projectedInlineTextChars?: number | null;
 
   /**
    * Shared execution-policy vocabulary derived from runtime capability signals.
@@ -224,11 +234,31 @@ function exceedsInlineExecutionTimeBudget(
   return estimatedInlineExecutionCostMs > input.executionPolicy.traversalInlineExecutionBudgetMs;
 }
 
+function exceedsInlineResponseTextBudget(
+  input: TraversalWorkloadAdmissionInput,
+): boolean {
+  const projectedInlineTextChars = input.projectedInlineTextChars ?? null;
+  const inlineTextResponseCapChars = input.consumerCapabilities.inlineTextResponseCapChars ?? null;
+
+  if (projectedInlineTextChars === null || inlineTextResponseCapChars === null) {
+    return false;
+  }
+
+  return projectedInlineTextChars > inlineTextResponseCapChars;
+}
+
 function buildPreviewFirstAdmissionGuidance(
   requestedRoot: string,
   toolName: string,
 ): string {
   return `Broad recursive traversal for root '${requestedRoot}' is being admitted in preview-first mode for ${toolName}. The bounded preview lane will stop before the deeper runtime safeguard becomes the dominant caller-facing control.`;
+}
+
+function buildPreviewFirstResponseBudgetGuidance(
+  requestedRoot: string,
+  toolName: string,
+): string {
+  return `Projected caller-visible inline output for root '${requestedRoot}' exceeds the bounded inline response surface for ${toolName}. The request is being admitted in preview-first mode so structured data can remain authoritative while text delivery stays compact.`;
 }
 
 function buildTaskBackedRequiredGuidance(
@@ -272,7 +302,29 @@ export function buildTraversalPreviewFirstTruncationGuidance(
 export function resolveTraversalWorkloadAdmissionDecision(
   input: TraversalWorkloadAdmissionInput,
 ): TraversalWorkloadAdmissionDecision {
+  const inlineResponseTextBudgetExceeded = exceedsInlineResponseTextBudget(input);
+
   if (input.rootEntry.type !== "directory" || input.admissionEvidence === null) {
+    if (inlineResponseTextBudgetExceeded && input.consumerCapabilities.previewFirstSupported) {
+      return {
+        outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+        guidanceText: buildPreviewFirstResponseBudgetGuidance(
+          input.requestedRoot,
+          input.consumerCapabilities.toolName,
+        ),
+      };
+    }
+
+    if (inlineResponseTextBudgetExceeded && input.consumerCapabilities.taskBackedExecutionSupported) {
+      return {
+        outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+        guidanceText: buildTaskBackedRequiredGuidance(
+          input.requestedRoot,
+          input.consumerCapabilities.toolName,
+        ),
+      };
+    }
+
     return {
       outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE,
       guidanceText: null,
@@ -287,6 +339,7 @@ export function resolveTraversalWorkloadAdmissionDecision(
     !inlineCandidateBudgetExceeded
     && !inlineCandidateFileBudgetExceeded
     && !inlineExecutionTimeBudgetExceeded
+    && !inlineResponseTextBudgetExceeded
     && isWithinInlineAdmissionBand(input.admissionEvidence, input.executionPolicy)
   ) {
     return {
@@ -301,15 +354,21 @@ export function resolveTraversalWorkloadAdmissionDecision(
       inlineCandidateBudgetExceeded
       || inlineCandidateFileBudgetExceeded
       || inlineExecutionTimeBudgetExceeded
+      || inlineResponseTextBudgetExceeded
       || isWithinPreviewFirstAdmissionBand(input.admissionEvidence, input.executionPolicy)
     )
   ) {
     return {
       outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST,
-      guidanceText: buildPreviewFirstAdmissionGuidance(
-        input.requestedRoot,
-        input.consumerCapabilities.toolName,
-      ),
+      guidanceText: inlineResponseTextBudgetExceeded
+        ? buildPreviewFirstResponseBudgetGuidance(
+            input.requestedRoot,
+            input.consumerCapabilities.toolName,
+          )
+        : buildPreviewFirstAdmissionGuidance(
+            input.requestedRoot,
+            input.consumerCapabilities.toolName,
+          ),
     };
   }
 

@@ -29,6 +29,7 @@ import {
   INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
   INSPECTION_CONTINUATION_STATUSES,
 } from "@domain/shared/continuation/inspection-continuation-contract";
+import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
@@ -59,6 +60,7 @@ export interface FindPathsByNameContinuationState {
 }
 
 export const FIND_PATHS_BY_NAME_FAMILY_MEMBER = "find_paths_by_name";
+const FIND_PATHS_BY_NAME_INLINE_RESPONSE_OVERHEAD_CHARS = 64;
 
 interface FindPathsByNameRequestPayload {
   rootPath: string;
@@ -234,6 +236,7 @@ function buildFindPathsByNameContinuationEnvelope(
  * @param respectGitIgnore - Indicates whether optional root-local `.gitignore` enrichment should participate in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param maxResults - Maximum number of collected matches before truncation.
+ * @param batchRootCount - Number of roots participating in the current caller-visible batch surface.
  * @returns Helper-level matches and truncation state for the traversal.
  */
 export async function searchFiles(
@@ -244,6 +247,7 @@ export async function searchFiles(
   respectGitIgnore: boolean,
   allowedDirectories: string[],
   maxResults: number,
+  batchRootCount: number = 1,
   continuationState: FindPathsByNameContinuationState | null = null,
 ): Promise<SearchFilesResult> {
   const results: string[] = [];
@@ -258,6 +262,7 @@ export async function searchFiles(
     ["directory"],
   );
   const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
+  const normalizedPattern = pattern.toLowerCase();
   const candidateWorkloadEvidence = await collectTraversalCandidateWorkloadEvidence({
     validRootPath: traversalPreflightContext.rootEntry.validPath,
     traversalScopePolicyResolution: traversalPreflightContext.traversalScopePolicyResolution,
@@ -268,17 +273,33 @@ export async function searchFiles(
     },
     inlineCandidateByteBudget: null,
     fileMatcher: () => true,
+    responseSurfaceEstimator: {
+      shouldCountEntry: (_candidateRelativePath, entry) =>
+        entry.name.toLowerCase().includes(normalizedPattern),
+      estimateEntryResponseChars: (candidateRelativePath) =>
+        traversalPreflightContext.rootEntry.validPath.length + candidateRelativePath.length + 3,
+    },
   });
+  const projectedInlineTextChars = candidateWorkloadEvidence.estimatedResponseChars === null
+    ? null
+    : FIND_PATHS_BY_NAME_INLINE_RESPONSE_OVERHEAD_CHARS
+      + candidateWorkloadEvidence.estimatedResponseChars;
+  const inlineTextResponseCapChars = Math.max(
+    1,
+    Math.floor(DISCOVERY_RESPONSE_CAP_CHARS / Math.max(1, batchRootCount)),
+  );
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: rootPath,
     rootEntry: traversalPreflightContext.rootEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
     candidateWorkloadEvidence,
+    projectedInlineTextChars,
     executionPolicy,
     consumerCapabilities: {
       toolName: FIND_PATHS_BY_NAME_FAMILY_MEMBER,
       previewFirstSupported: true,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+      inlineTextResponseCapChars,
       executionTimeCostMultiplier:
         TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.executionTimeCostMultiplier,
       estimatedPerCandidateFileCostMs:

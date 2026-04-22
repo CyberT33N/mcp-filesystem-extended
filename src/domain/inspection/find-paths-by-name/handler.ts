@@ -86,7 +86,7 @@ function formatFindPathsByNameTextOutput(
   result: FindPathsByNameResult,
   maxResults: number,
 ): string {
-  if (!result.continuation.resumable) {
+  if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
     if (result.roots.length === 1) {
       const firstRootResult = result.roots[0];
 
@@ -250,6 +250,7 @@ async function getFindPathsByNameRootResult(
   respectGitIgnore: boolean,
   allowedDirectories: string[],
   maxResults: number,
+  batchRootCount: number,
   continuationState: FindPathsByNameContinuationState | null = null,
 ): Promise<FindPathsByNameRootExecutionResult> {
   const result = await searchFiles(
@@ -260,6 +261,7 @@ async function getFindPathsByNameRootResult(
     respectGitIgnore,
     allowedDirectories,
     maxResults,
+    batchRootCount,
     continuationState,
   );
 
@@ -370,6 +372,7 @@ export async function getFindPathsByNameResult(
         executionContext.requestPayload.respectGitIgnore,
         allowedDirectories,
         executionContext.requestPayload.maxResults,
+        activeDirectoryPaths.length,
         executionContext.continuationState?.rootTraversalStates[directoryPath] ?? null,
       )
     )

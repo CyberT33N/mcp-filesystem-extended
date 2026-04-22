@@ -31,7 +31,10 @@ import {
   resolveSearchExecutionPolicy,
   type SearchExecutionPolicy,
 } from "@domain/shared/search/search-execution-policy";
-import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
+  REGEX_SEARCH_RESPONSE_CAP_CHARS,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import { minimatch } from "minimatch";
 
@@ -47,6 +50,8 @@ import { collectFixedStringMatchesFromFileEntry } from "./fixed-string-search-fi
 import { getValidatedPreflightEntry } from "./fixed-string-search-support";
 
 const SEARCH_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string";
+const SEARCH_FIXED_STRING_INLINE_RESPONSE_OVERHEAD_CHARS = 96;
+const SEARCH_FIXED_STRING_INLINE_MATCH_RESPONSE_CHARS = 400;
 
 interface SearchFixedStringTraversalFrame {
   directoryRelativePath: string;
@@ -106,6 +111,7 @@ function matchesPreviewLaneFilePatterns(
  * @param maxResults - Caller-requested maximum number of returned locations per root.
  * @param caseSensitive - Whether literal matching should preserve case sensitivity.
  * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
+ * @param batchRootCount - Number of roots participating in the current caller-visible batch surface.
  * @param executionPolicy - Shared runtime execution policy for the current request.
  * @param aggregateBudgetState - Request-level aggregate byte accounting surface.
  * @returns Structured per-root fixed-string output that later text and structured surfaces consume.
@@ -124,6 +130,7 @@ export async function getSearchFixedStringPathResult(
     detectIoCapabilityProfile(),
   ),
   aggregateBudgetState: FixedStringSearchAggregateBudgetState = createFixedStringSearchAggregateBudgetState(),
+  batchRootCount: number = 1,
   continuationState: SearchFixedStringRootContinuationState | null = null,
 ): Promise<SearchFixedStringPathResult & {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
@@ -155,17 +162,26 @@ export async function getSearchFixedStringPathResult(
           matchesPreviewLaneFilePatterns(candidateRelativePath, filePatterns),
       })
     : null;
+  const projectedInlineTextChars =
+    SEARCH_FIXED_STRING_INLINE_RESPONSE_OVERHEAD_CHARS
+    + effectiveMaxResults * SEARCH_FIXED_STRING_INLINE_MATCH_RESPONSE_CHARS;
+  const inlineTextResponseCapChars = Math.max(
+    1,
+    Math.floor(REGEX_SEARCH_RESPONSE_CAP_CHARS / Math.max(1, batchRootCount)),
+  );
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: searchPath,
     rootEntry: searchScopeEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
     candidateWorkloadEvidence,
+    projectedInlineTextChars,
     executionPolicy,
     consumerCapabilities: {
       toolName: SEARCH_FIXED_STRING_TOOL_NAME,
       previewFirstSupported: true,
       inlineCandidateByteBudget: executionPolicy.fixedStringSyncCandidateBytesCap,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+      inlineTextResponseCapChars,
       executionTimeCostMultiplier:
         TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.LITERAL_SEARCH.executionTimeCostMultiplier,
       estimatedPerCandidateFileCostMs:

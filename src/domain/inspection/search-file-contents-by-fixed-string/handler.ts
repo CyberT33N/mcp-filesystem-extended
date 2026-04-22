@@ -336,6 +336,7 @@ export async function getSearchFixedStringResult(
         allowedDirectories,
         executionPolicy,
         aggregateBudgetState,
+        activeSearchPaths.length,
         executionContext.continuationState?.rootTraversalStates[searchPath] ?? null,
       );
 

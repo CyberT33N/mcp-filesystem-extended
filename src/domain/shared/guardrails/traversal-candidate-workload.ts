@@ -32,6 +32,12 @@ export interface TraversalCandidateWorkloadEvidence {
   matchedCandidateFiles: number;
 
   /**
+   * Projected caller-visible inline text characters derived from the bounded probe when a family
+   * supplies a response-surface estimator.
+   */
+  estimatedResponseChars: number | null;
+
+  /**
    * Wall-clock time spent by the bounded candidate-workload probe.
    */
   probeElapsedMs: number;
@@ -70,6 +76,14 @@ export interface CollectTraversalCandidateWorkloadEvidenceInput {
    * Lane-specific file matcher applied to candidate paths relative to the requested root.
    */
   fileMatcher: (candidateRelativePath: string) => boolean;
+
+  /**
+   * Optional family-local response-surface estimator evaluated during the bounded probe.
+   */
+  responseSurfaceEstimator?: {
+    shouldCountEntry: (candidateRelativePath: string, entry: import("fs").Dirent<string>) => boolean;
+    estimateEntryResponseChars: (candidateRelativePath: string, entry: import("fs").Dirent<string>) => number;
+  } | null;
 }
 
 /**
@@ -83,8 +97,10 @@ export async function collectTraversalCandidateWorkloadEvidence(
 ): Promise<TraversalCandidateWorkloadEvidence> {
   const startedAtMs = Date.now();
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
+  const responseSurfaceEstimator = input.responseSurfaceEstimator ?? null;
   let estimatedCandidateBytes = 0;
   let matchedCandidateFiles = 0;
+  let estimatedResponseChars = responseSurfaceEstimator === null ? null : 0;
   let probeTruncated = false;
 
   async function collectDirectory(
@@ -164,6 +180,15 @@ export async function collectTraversalCandidateWorkloadEvidence(
         continue;
       }
 
+      if (
+        responseSurfaceEstimator !== null
+        && responseSurfaceEstimator.shouldCountEntry(candidateRelativePath, entry)
+      ) {
+        estimatedResponseChars =
+          (estimatedResponseChars ?? 0)
+          + responseSurfaceEstimator.estimateEntryResponseChars(candidateRelativePath, entry);
+      }
+
       const candidateAbsolutePath = path.join(directoryPath, entry.name);
 
       if (entry.isDirectory()) {
@@ -204,6 +229,7 @@ export async function collectTraversalCandidateWorkloadEvidence(
   return {
     estimatedCandidateBytes,
     matchedCandidateFiles,
+    estimatedResponseChars,
     probeElapsedMs: Date.now() - startedAtMs,
     probeTruncated,
   };

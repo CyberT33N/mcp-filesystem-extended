@@ -15,7 +15,7 @@ const SERVER_INSTRUCTION_LINES = [
   "- replace_file_line_ranges uses 1-based inclusive line ranges and does not accept unified diff patch text.",
   "- Read-only tools are marked through annotations; destructive or state-changing tools are local-only and closed-world.",
   "- The global response fuse remains the final non-bypassable response safety floor after family-specific guardrails.",
-  "- Continuation-bearing responses may summarize the bounded chunk in `content.text` while leaving the full machine-readable payload authoritative in `structuredContent`.",
+  "- Preview-first and continuation-bearing responses may summarize the bounded chunk in `content.text` while leaving the full machine-readable payload authoritative in `structuredContent`.",
   "- When a tool exposes structuredContent, treat the structured object as the authoritative result shape.",
 ] as const;
 

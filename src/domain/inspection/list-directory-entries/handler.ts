@@ -133,11 +133,15 @@ interface ListDirectoryEntriesRootExecutionResult extends ListedDirectoryRoot {
 const LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER = "list_directory_entries";
 const LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE =
   "Resume the same directory-listing request by sending only continuationToken to the same endpoint to receive the next bounded chunk of entries.";
+const LIST_DIRECTORY_ENTRIES_INLINE_RESPONSE_OVERHEAD_CHARS = 256;
+const LIST_DIRECTORY_ENTRIES_INLINE_ENTRY_BASE_CHARS = 96;
+const LIST_DIRECTORY_ENTRIES_INLINE_TIMESTAMP_METADATA_CHARS = 96;
+const LIST_DIRECTORY_ENTRIES_INLINE_PERMISSION_METADATA_CHARS = 32;
 
 function formatListDirectoryEntriesTextOutput(
   result: ListDirectoryEntriesResult,
 ): string {
-  if (!result.continuation.resumable) {
+  if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
     return encode(result);
   }
 
@@ -153,6 +157,58 @@ function formatListDirectoryEntriesTextOutput(
     "The authoritative directory-entry payload remains in structuredContent.",
     "Resume the same request by sending only continuationToken on this endpoint.",
   ].join("\n");
+}
+
+function estimateListDirectoryEntryInlineResponseChars(
+  candidateRelativePath: string,
+  entryName: string,
+  metadataSelection: FileSystemEntryMetadataSelection,
+): number {
+  return (
+    LIST_DIRECTORY_ENTRIES_INLINE_ENTRY_BASE_CHARS
+    + candidateRelativePath.length
+    + entryName.length
+    + (metadataSelection.timestamps ? LIST_DIRECTORY_ENTRIES_INLINE_TIMESTAMP_METADATA_CHARS : 0)
+    + (metadataSelection.permissions ? LIST_DIRECTORY_ENTRIES_INLINE_PERMISSION_METADATA_CHARS : 0)
+  );
+}
+
+function createListDirectoryEntriesResponseSurfaceEstimator(
+  metadataSelection: FileSystemEntryMetadataSelection,
+): NonNullable<Parameters<typeof collectTraversalCandidateWorkloadEvidence>[0]["responseSurfaceEstimator"]> {
+  return {
+    shouldCountEntry: () => true,
+    estimateEntryResponseChars: (candidateRelativePath, entry) =>
+      estimateListDirectoryEntryInlineResponseChars(
+        candidateRelativePath,
+        entry.name,
+        metadataSelection,
+      ),
+  };
+}
+
+async function estimateNonRecursiveListDirectoryEntriesInlineTextChars(
+  rootAbsolutePath: string,
+  metadataSelection: FileSystemEntryMetadataSelection,
+  traversalScopePolicyResolution: TraversalScopePolicyResolution,
+): Promise<number> {
+  const entries = await readSortedDirectoryEntries(rootAbsolutePath);
+
+  const estimatedEntryChars = entries.reduce((totalChars, entry) => {
+    const relativePath = normalizeRelativePath(entry.name);
+
+    if (
+      shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
+      && !shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution)
+    ) {
+      return totalChars;
+    }
+
+    return totalChars
+      + estimateListDirectoryEntryInlineResponseChars(relativePath, entry.name, metadataSelection);
+  }, 0);
+
+  return LIST_DIRECTORY_ENTRIES_INLINE_RESPONSE_OVERHEAD_CHARS + estimatedEntryChars;
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -544,6 +600,7 @@ async function buildListedDirectoryRoot(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   allowedDirectories: string[],
+  batchRootCount: number,
   continuationState: ListDirectoryEntriesRootContinuationState | null = null,
 ): Promise<ListDirectoryEntriesRootExecutionResult> {
   const traversalPreflightContext = await resolveTraversalPreflightContext(
@@ -568,18 +625,37 @@ async function buildListedDirectoryRoot(
         },
         inlineCandidateByteBudget: null,
         fileMatcher: () => true,
+        responseSurfaceEstimator: createListDirectoryEntriesResponseSurfaceEstimator(
+          metadataSelection,
+        ),
       })
     : null;
+  const projectedInlineTextChars = recursive
+    ? candidateWorkloadEvidence?.estimatedResponseChars === null
+      ? null
+      : LIST_DIRECTORY_ENTRIES_INLINE_RESPONSE_OVERHEAD_CHARS
+        + (candidateWorkloadEvidence?.estimatedResponseChars ?? 0)
+    : await estimateNonRecursiveListDirectoryEntriesInlineTextChars(
+        traversalPreflightContext.rootEntry.validPath,
+        metadataSelection,
+        traversalPreflightContext.traversalScopePolicyResolution,
+      );
+  const inlineTextResponseCapChars = Math.max(
+    1,
+    Math.floor(DISCOVERY_RESPONSE_CAP_CHARS / Math.max(1, batchRootCount)),
+  );
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: requestedPath,
     rootEntry: traversalPreflightContext.rootEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
     candidateWorkloadEvidence,
+    projectedInlineTextChars,
     executionPolicy,
     consumerCapabilities: {
       toolName: LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
       previewFirstSupported: true,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+      inlineTextResponseCapChars,
       executionTimeCostMultiplier:
         TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.executionTimeCostMultiplier,
       estimatedPerCandidateFileCostMs:
@@ -694,6 +770,7 @@ export async function getListDirectoryEntriesResult(
         executionContext.requestPayload.includeExcludedGlobs,
         executionContext.requestPayload.respectGitIgnore,
         allowedDirectories,
+        activeRequestedPaths.length,
         executionContext.continuationState?.rootTraversalStates[requestedPath] ?? null,
       ),
     ),

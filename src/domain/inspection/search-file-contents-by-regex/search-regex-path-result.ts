@@ -42,7 +42,10 @@ import {
   INSPECTION_CONTENT_STATE_LITERALS,
   type InspectionContentStateClassification,
 } from "@domain/shared/search/inspection-content-state";
-import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
+  REGEX_SEARCH_RESPONSE_CAP_CHARS,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
 import { buildUgrepCommand } from "@infrastructure/search/ugrep-command-builder";
 import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
@@ -51,6 +54,8 @@ import { minimatch } from "minimatch";
 import { type RegexSearchMatch, type SearchRegexPathResult } from "./search-regex-result";
 
 const TEXT_BINARY_PROBE_SAMPLE_BYTES = 4_096;
+const SEARCH_REGEX_INLINE_RESPONSE_OVERHEAD_CHARS = 96;
+const SEARCH_REGEX_INLINE_MATCH_RESPONSE_CHARS = 400;
 
 /**
  * Mutable aggregate budget state shared across all requested regex roots.
@@ -460,6 +465,7 @@ async function collectRegexMatchesFromFileEntry(
  * @param maxResults - Caller-requested maximum number of returned locations per root.
  * @param caseSensitive - Whether regex compilation should preserve case sensitivity.
  * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
+ * @param batchRootCount - Number of roots participating in the current caller-visible batch surface.
  * @returns Structured per-root regex output that later text and structured response surfaces consume.
  */
 export async function getSearchRegexPathResult(
@@ -477,6 +483,7 @@ export async function getSearchRegexPathResult(
     detectIoCapabilityProfile(),
   ),
   aggregateBudgetState: RegexSearchAggregateBudgetState = createRegexSearchAggregateBudgetState(),
+  batchRootCount: number = 1,
   continuationState: SearchRegexRootContinuationState | null = null,
 ): Promise<SearchRegexPathResult & {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
@@ -509,17 +516,26 @@ export async function getSearchRegexPathResult(
           matchesIncludedFilePatterns(candidateRelativePath, filePatterns),
       })
     : null;
+  const projectedInlineTextChars =
+    SEARCH_REGEX_INLINE_RESPONSE_OVERHEAD_CHARS
+    + effectiveMaxResults * SEARCH_REGEX_INLINE_MATCH_RESPONSE_CHARS;
+  const inlineTextResponseCapChars = Math.max(
+    1,
+    Math.floor(REGEX_SEARCH_RESPONSE_CAP_CHARS / Math.max(1, batchRootCount)),
+  );
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: searchPath,
     rootEntry: searchScopeEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
     candidateWorkloadEvidence,
+    projectedInlineTextChars,
     executionPolicy,
     consumerCapabilities: {
       toolName,
       previewFirstSupported: true,
       inlineCandidateByteBudget: executionPolicy.regexSyncCandidateBytesCap,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+      inlineTextResponseCapChars,
       executionTimeCostMultiplier:
         TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.REGEX_SEARCH.executionTimeCostMultiplier,
       estimatedPerCandidateFileCostMs:

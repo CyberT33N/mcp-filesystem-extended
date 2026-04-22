@@ -101,13 +101,14 @@ interface FindFilesByGlobRootExecutionResult extends FindFilesByGlobRootResult {
 const FIND_FILES_BY_GLOB_FAMILY_MEMBER = "find_files_by_glob";
 const FIND_FILES_BY_GLOB_CONTINUATION_GUIDANCE =
   "Resume the same glob-discovery request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.";
+const FIND_FILES_BY_GLOB_INLINE_RESPONSE_OVERHEAD_CHARS = 96;
 
 function formatFindFilesByGlobTextOutput(
   result: FindFilesByGlobResult,
   pattern: string,
   maxResults: number,
 ): string {
-  if (!result.continuation.resumable) {
+  if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
     return result.roots.length === 1
       ? formatFindFilesByGlobRootOutput(result.roots[0]!, pattern, maxResults)
       : formatBatchTextOperationResults(
@@ -319,6 +320,7 @@ async function getFindFilesByGlobRootResult(
   respectGitIgnore: boolean,
   maxResults: number,
   allowedDirectories: string[],
+  batchRootCount: number,
   continuationState: FindFilesByGlobRootContinuationState | null = null,
 ): Promise<FindFilesByGlobRootExecutionResult> {
   const traversalPreflightContext = await resolveTraversalPreflightContext(
@@ -341,17 +343,33 @@ async function getFindFilesByGlobRootResult(
     },
     inlineCandidateByteBudget: null,
     fileMatcher: (candidateRelativePath) => minimatch(candidateRelativePath, pattern, { dot: true }),
+    responseSurfaceEstimator: {
+      shouldCountEntry: (candidateRelativePath, entry) =>
+        entry.isFile() && minimatch(candidateRelativePath, pattern, { dot: true }),
+      estimateEntryResponseChars: (candidateRelativePath) =>
+        traversalPreflightContext.rootEntry.validPath.length + candidateRelativePath.length + 3,
+    },
   });
+  const projectedInlineTextChars = candidateWorkloadEvidence.estimatedResponseChars === null
+    ? null
+    : FIND_FILES_BY_GLOB_INLINE_RESPONSE_OVERHEAD_CHARS
+      + candidateWorkloadEvidence.estimatedResponseChars;
+  const inlineTextResponseCapChars = Math.max(
+    1,
+    Math.floor(DISCOVERY_RESPONSE_CAP_CHARS / Math.max(1, batchRootCount)),
+  );
   const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
     requestedRoot: searchPath,
     rootEntry: traversalPreflightContext.rootEntry,
     admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
     candidateWorkloadEvidence,
+    projectedInlineTextChars,
     executionPolicy,
     consumerCapabilities: {
       toolName: "find_files_by_glob",
       previewFirstSupported: true,
       inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+      inlineTextResponseCapChars,
       executionTimeCostMultiplier:
         TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.executionTimeCostMultiplier,
       estimatedPerCandidateFileCostMs:
@@ -595,6 +613,7 @@ export async function getFindFilesByGlobResult(
         executionContext.requestPayload.respectGitIgnore,
         executionContext.requestPayload.maxResults,
         allowedDirectories,
+        activeSearchPaths.length,
         executionContext.continuationState?.rootTraversalStates[requestedSearchPath] ?? null,
       ),
     ),

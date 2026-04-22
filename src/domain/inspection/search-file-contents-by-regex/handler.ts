@@ -382,6 +382,7 @@ export async function getSearchRegexResult(
         allowedDirectories,
         executionPolicy,
         aggregateBudgetState,
+        activeSearchPaths.length,
         executionContext.continuationState?.rootTraversalStates[searchPath] ?? null,
       );
 

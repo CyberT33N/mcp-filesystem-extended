@@ -1,9 +1,10 @@
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
-import { REGEX_SEARCH_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
-import type {
-  InspectionContinuationAdmission,
-  InspectionContinuationMetadata,
+import {
+  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
+  type InspectionContinuationAdmission,
+  type InspectionContinuationMetadata,
 } from "@domain/shared/continuation/inspection-continuation-contract";
+import { REGEX_SEARCH_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 
 /**
  * Describes one collected regex match location.
@@ -202,7 +203,7 @@ export function formatSearchRegexContinuationAwareTextOutput(
   pattern: string,
   effectiveMaxResults: number,
 ): string {
-  if (!result.continuation.resumable) {
+  if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
     return formatSearchRegexResultOutput(result, pattern, effectiveMaxResults);
   }
 
