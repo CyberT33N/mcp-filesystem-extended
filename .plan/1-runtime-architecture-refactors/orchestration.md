@@ -4,9 +4,9 @@ file_id: "1"
 unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
- unit_status: "in_progress"
+ unit_status: "done"
   total_tasks: 9
-  completed_tasks: 8
+  completed_tasks: 9
  has_sub_units: false
  sub_unit_count: 0
   resume_frontier_task: "1.9"
@@ -20,8 +20,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** in_progress
-- **Progress:** 8/9 tasks
+- **Unit Status:** done
+- **Progress:** 9/9 tasks
 
 ## Execution Frontier
 - **Resume Frontier Task:** `1.9`
@@ -93,9 +93,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared continuation contracts, SQLite-backed persistence, affected inspection schemas/handlers, and application-shell integration
   - Blocked By: none
   - Summary: Add same-endpoint continuation-token resume contracts, local SQLite persistence, deterministic error behavior, and preview/task-backed continuation workflow integration for the affected inspection families.
-- [~] **1.9 Preview continuation delivery and response-budget hardening** → [`1.9-preview-continuation-delivery-and-response-budget-hardening.md`](./1.9-preview-continuation-delivery-and-response-budget-hardening.md)
+- [x] **1.9 Preview continuation delivery and response-budget hardening** → [`1.9-preview-continuation-delivery-and-response-budget-hardening.md`](./1.9-preview-continuation-delivery-and-response-budget-hardening.md)
   - Classification: SEQUENTIAL
-  - Status: IN_PROGRESS
+  - Status: DONE
   - Complexity: HIGH
   - Execution Surface Band: YELLOW
   - Files Modified: continuation-aware discovery/search delivery surfaces and caller-visible inspection contract wording
