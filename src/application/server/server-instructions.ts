@@ -9,6 +9,8 @@ const SERVER_INSTRUCTION_LINES = [
   "- Metadata-first admission control applies to file-read-style operations, and callers should switch to narrower ranges or cursor modes when inline full responses are not allowed.",
   "- Large valid text workloads may degrade into preview-first or task-backed behavior under family guardrails, and continuation-bearing responses may use compact text guidance while unsupported or over-hard-gap workloads still refuse.",
   "- When a tool returns additive `admission` and `continuation` metadata, `structuredContent.admission` and `structuredContent.continuation` remain authoritative.",
+  "- For `list_directory_entries`, preview-first responses may also surface the current bounded directory-entry chunk and any active `continuationToken` in `content.text` so text-only consumers keep a usable same-endpoint continuation path while `structuredContent` remains authoritative.",
+  "- A preview-first response may be finalized and non-resumable when the current bounded final payload is already present in `structuredContent`; do not infer missing payload or broken resume behavior from compact text alone.",
   "- Resume the same request on the same public endpoint by sending only `continuationToken` when `continuation.resumable` is true and a non-null token is present; do not treat preview-first admission alone as resumable guidance and do not resend the original query-defining fields.",
   "- Invalid, expired, deleted, wrong-family, or otherwise unusable continuation tokens collapse into one server-owned not-found-class continuation failure instead of exposing token-state details.",
   "- Regex content search may refuse structurally unsafe patterns before runtime execution begins.",
@@ -18,6 +20,7 @@ const SERVER_INSTRUCTION_LINES = [
   "- The global response fuse remains the final non-bypassable response safety floor after family-specific guardrails.",
   "- Preview-first and continuation-bearing responses may summarize the bounded chunk in `content.text`, but callers must not infer continuation truth from text alone.",
   "- When a tool exposes structuredContent, treat the structured object as the authoritative result shape.",
+  "- Downstream consumers or adapters that expose only `content.text` while dropping `structuredContent` are outside this server-owned result contract and are responsible for any apparent continuation-token or bounded-payload loss.",
 ] as const;
 
 /**

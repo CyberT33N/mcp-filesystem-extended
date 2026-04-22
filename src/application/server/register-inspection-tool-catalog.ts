@@ -85,6 +85,15 @@ const STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION =
 const TOKEN_ONLY_RESUME_DESCRIPTION =
   "Resume only when `structuredContent.continuation.resumable` is true and a non-null `continuationToken` is present, using the same endpoint and only that token.";
 
+const FINAL_PREVIEW_FIRST_DESCRIPTION =
+  "A preview-first response may finalize without an active continuation token only when the current bounded final payload is already present in `structuredContent` and no further resume step exists.";
+
+const EXTERNAL_CONSUMER_BOUNDARY_DESCRIPTION =
+  "Consumers that expose only `content.text` while dropping `structuredContent` are outside this server-owned contract and are responsible for any apparent continuation-token or bounded-payload loss.";
+
+const LIST_DIRECTORY_ENTRIES_TEXT_SURFACING_DESCRIPTION =
+  "For `list_directory_entries`, preview-first responses may also surface the current bounded directory-entry chunk and any active `continuationToken` in `content.text` so text-only consumers keep a usable same-endpoint continuation path while `structuredContent` remains authoritative.";
+
 /**
  * Registers only the inspection tool family on the application-layer MCP server shell.
  *
@@ -146,7 +155,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         "Lists structured directory entries for one or more directory roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly. " +
         "Valid broad listing workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `continuation` metadata support same-endpoint resume through `continuationToken`; no separate continuation endpoint exists. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ${TOKEN_ONLY_RESUME_DESCRIPTION}`,
+        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ${LIST_DIRECTORY_ENTRIES_TEXT_SURFACING_DESCRIPTION} ${FINAL_PREVIEW_FIRST_DESCRIPTION} ${TOKEN_ONLY_RESUME_DESCRIPTION} ${EXTERNAL_CONSUMER_BOUNDARY_DESCRIPTION}`,
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ListDirectoryEntriesArgsSchema,
       outputSchema: ListDirectoryEntriesStructuredResultSchema,

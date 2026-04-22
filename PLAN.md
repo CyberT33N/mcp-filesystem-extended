@@ -8,7 +8,7 @@ created: "2026-04-18T00:00:00Z"
  total_units: 11
   completed_units: 1
  total_tasks_all_levels: 37
-  completed_tasks_all_levels: 10
+  completed_tasks_all_levels: 11
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
@@ -42,7 +42,7 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Total Units:** 11
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 10/37 tasks completed
+- **Progress:** 11/37 tasks completed
 - **Historical Backup Plan:** [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md)
 
 ## Execution Frontier
@@ -52,15 +52,15 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Resume Frontier Task:** `2.1`
 - **Next Frontier Task:** `2.1`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
-- **Frontier Rule:** Unit 1 completion is restored only after the continuation response-contract and consumer-alignment task `1.10`. Downstream discovery/search docs and public contract alignment now re-anchor to the final continuation-response truth, starting with unit 2 task `2.1`.
+- **Frontier Rule:** Unit 1 completion is restored only after the end-to-end directory-listing continuation-surfacing task `1.11`. Downstream directory-listing discovery docs and caller-visible contract alignment for that endpoint now re-anchor to the final real-client truth from task `1.11`, starting with unit 2 task `2.1`.
 
 ## Units
 [INTENT: REFERENCE]
 
 - [x] **1. Runtime Architecture Refactors** → [`.plan/1-runtime-architecture-refactors/orchestration.md`](.plan/1-runtime-architecture-refactors/orchestration.md)
   - Classification: Mixed
-  - Status: done | Tasks: 10 | Completed: 10
-  - Summary: Introduce the shared inspection content-state model, hybrid-aware routing, internal read-core SSOT, traversal/preflight governance refactors, recalibrated admission thresholds, the same-endpoint continuation-token runtime contract, the caller-visible continuation-delivery hardening layer, and the final continuation response-contract / consumer-alignment closure for the affected recursive inspection families.
+  - Status: done | Tasks: 11 | Completed: 11
+  - Summary: Introduce the shared inspection content-state model, hybrid-aware routing, internal read-core SSOT, traversal/preflight governance refactors, recalibrated admission thresholds, the same-endpoint continuation-token runtime contract, the caller-visible continuation-delivery hardening layer, the continuation response-contract / consumer-alignment closure, and the final end-to-end `list_directory_entries` response-surfacing closure for real MCP clients.
 - [ ] **2. Inspection Discovery Docs** → [`.plan/2-inspection-discovery-docs/orchestration.md`](.plan/2-inspection-discovery-docs/orchestration.md)
   - Classification: ISOLATED
   - Status: pending | Tasks: 3 | Completed: 0
@@ -107,13 +107,13 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 
 | ID | Source | Target | Type | Status | Description | Shared Files |
 |----|--------|--------|------|--------|-------------|--------------|
-| D1 | 2.1-2.3 | 1.10 | WAITING | RESOLVED | Discovery-endpoint documentation must now re-anchor the final continuation-response truth contract from task `1.10`, not task `1.9` alone. | `src/domain/shared/continuation/**`, `src/infrastructure/persistence/inspection-continuation-sqlite-store.ts`, `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
+| D1 | 2.1-2.3 | 1.11 | WAITING | RESOLVED | Discovery-endpoint documentation that covers `list_directory_entries` must now re-anchor the final real-client continuation-surfacing truth from task `1.11`, not task `1.10` alone. | `src/domain/shared/continuation/**`, `src/infrastructure/persistence/inspection-continuation-sqlite-store.ts`, `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
 | D2 | 4.1-4.3 | 1.10 | WAITING | RESOLVED | Search/count documentation must now re-anchor the final continuation-response truth contract from task `1.10`, while preserving the distinct task-backed semantics of `count_lines`. | `src/domain/shared/continuation/**`, `src/infrastructure/persistence/inspection-continuation-sqlite-store.ts`, `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/domain/inspection/count-lines/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
 | D3 | 5.1-5.2 | 1.4 | WAITING | RESOLVED | Read-endpoint documentation now re-anchors the finalized public split and internal shared read-core refactor from completed unit 1. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
 | D4 | 10.1 | 2.1 | WAITING | UNRESOLVED | Root conventions cannot become the SSOT TOC until endpoint-local conventions exist. | `CONVENTIONS.md` |
 | D5 | 10.2 | 2.1 | WAITING | UNRESOLVED | Root description cannot become the SSOT TOC until endpoint-local descriptions exist. | `DESCRIPTION.md` |
 | D6 | 10.3 | 2.1 | WAITING | UNRESOLVED | Root README cannot become the DX TOC until endpoint-local READMEs exist. | `README.md` |
-| D7 | 11.1 | 1.10 | WAITING | RESOLVED | Public tool descriptions and server instructions must now align to the final continuation-response contract from task `1.10`, not to task `1.9` alone. | `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts`, `src/application/server/filesystem-server.ts`, `src/domain/shared/continuation/**` |
+| D7 | 11.1 | 1.11 | WAITING | RESOLVED | Public tool descriptions and server instructions that cover real client-visible directory-listing continuation behavior must now align to the final end-to-end surfacing truth from task `1.11`, not to task `1.10` alone. | `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts`, `src/application/server/filesystem-server.ts`, `src/domain/shared/continuation/**`, `src/domain/inspection/list-directory-entries/**` |
 | D8 | 11.2 | 10.3 | WAITING | UNRESOLVED | The backup-reference policy and root-to-endpoint link audit require the completed root TOC surfaces. | `README.md`, `DESCRIPTION.md`, `CONVENTIONS.md` |
 | D9 | 11.3 | 11.2 | WAITING | UNRESOLVED | Final architecture validation runs only after code-contract alignment and link-policy validation complete. | `PLAN.md`, `.plan/**`, root docs, endpoint docs |
 
@@ -152,7 +152,7 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 [INTENT: CONSTRAINT]
 
 - Preserve the public endpoint split between [`read_files_with_line_numbers`](src/application/server/register-inspection-tool-catalog.ts:102) and [`read_file_content`](src/application/server/register-inspection-tool-catalog.ts:117) while refactoring only the internal shared business logic.
-- Do not treat task [`1.5-traversal-preflight-and-runtime-budget-refactor.md`](.plan/1-runtime-architecture-refactors/1.5-traversal-preflight-and-runtime-budget-refactor.md) as the final traversal authority; task `1.6` closes the shared admission planner, task `1.7` recalibrates the admission values, task `1.8` lands the same-endpoint continuation-token runtime contract, task `1.9` hardens caller-visible continuation-bearing delivery, and task `1.10` closes the remaining continuation response-truth / consumer-authority gap before downstream docs or public contract alignment proceed.
+- Do not treat task [`1.5-traversal-preflight-and-runtime-budget-refactor.md`](.plan/1-runtime-architecture-refactors/1.5-traversal-preflight-and-runtime-budget-refactor.md) as the final traversal authority; task `1.6` closes the shared admission planner, task `1.7` recalibrates the admission values, task `1.8` lands the same-endpoint continuation-token runtime contract, task `1.9` hardens caller-visible continuation-bearing delivery, task `1.10` closes the continuation response-truth / consumer-authority gap, and task `1.11` closes the remaining end-to-end `list_directory_entries` real-client surfacing gap before downstream directory-listing docs or caller-visible contract alignment for that endpoint proceed.
 - Treat [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) and its child task files as historical implementation references only; they are never the authoritative target-state contract for this plan.
 - Use builtin `node:sqlite` for the local continuation store introduced by task `1.8`; do not introduce a second public continuation endpoint or an external database dependency for that runtime layer.
 - Do not solve the residual continuation-delivery conflict by raising family response caps or weakening the global response fuse; the target fix is compact caller-visible text shaping with authoritative `structuredContent` preservation.

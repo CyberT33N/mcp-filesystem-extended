@@ -137,6 +137,15 @@ const LIST_DIRECTORY_ENTRIES_INLINE_RESPONSE_OVERHEAD_CHARS = 256;
 const LIST_DIRECTORY_ENTRIES_INLINE_ENTRY_BASE_CHARS = 96;
 const LIST_DIRECTORY_ENTRIES_INLINE_TIMESTAMP_METADATA_CHARS = 96;
 const LIST_DIRECTORY_ENTRIES_INLINE_PERMISSION_METADATA_CHARS = 32;
+const LIST_DIRECTORY_ENTRIES_PREVIEW_TEXT_RESPONSE_OVERHEAD_CHARS = 512;
+
+function formatListDirectoryEntriesChunkPayload(
+  result: ListDirectoryEntriesResult,
+): string {
+  return encode({
+    roots: result.roots,
+  });
+}
 
 function formatListDirectoryEntriesTextOutput(
   result: ListDirectoryEntriesResult,
@@ -155,23 +164,33 @@ function formatListDirectoryEntriesTextOutput(
   );
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
   const previewSummary =
-    `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} top-level entries in this bounded chunk.`;
-  const structuredPayloadGuidance =
-    "The authoritative directory-entry payload remains in structuredContent.";
+    `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.`;
+  const previewChunkPayload = formatListDirectoryEntriesChunkPayload(result);
 
   if (!hasResumableContinuation) {
     return [
       previewSummary,
-      structuredPayloadGuidance,
-      "This preview-first response is finalized and exposes no active continuation token.",
+      "Final bounded directory-entry payload:",
+      previewChunkPayload,
+    ].join("\n");
+  }
+
+  const activeContinuationToken = result.continuation.continuationToken;
+
+  if (activeContinuationToken === null) {
+    return [
+      previewSummary,
+      "Bounded directory-entry payload:",
+      previewChunkPayload,
     ].join("\n");
   }
 
   return [
     previewSummary,
+    "Bounded directory-entry payload:",
+    previewChunkPayload,
+    `Active continuationToken: ${activeContinuationToken}`,
     result.admission.guidanceText ?? LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE,
-    structuredPayloadGuidance,
-    "Resume the same request by sending only continuationToken on this endpoint.",
   ].join("\n");
 }
 
@@ -399,6 +418,7 @@ async function collectDirectoryEntriesPreviewChunk(
     maxVisitedDirectories: number;
     softTimeBudgetMs: number;
   },
+  maxPreviewTextResponseChars: number,
   continuationState: ListDirectoryEntriesRootContinuationState | null,
 ): Promise<{
   entries: ListedDirectoryEntry[];
@@ -408,6 +428,7 @@ async function collectDirectoryEntriesPreviewChunk(
     ? createInitialListDirectoryEntriesTraversalFrames()
     : cloneListDirectoryEntriesTraversalFrames(continuationState.traversalFrames);
   const listedEntries: ListedDirectoryEntry[] = [];
+  let estimatedResponseChars = LIST_DIRECTORY_ENTRIES_PREVIEW_TEXT_RESPONSE_OVERHEAD_CHARS;
   let previewAborted = false;
 
   while (traversalFrames.length > 0 && !previewAborted) {
@@ -486,10 +507,23 @@ async function collectDirectoryEntriesPreviewChunk(
         ? entry.name
         : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
       const relativePath = normalizeRelativePath(rawRelativePath);
+      const estimatedEntryResponseChars = estimateListDirectoryEntryInlineResponseChars(
+        relativePath,
+        entry.name,
+        metadataSelection,
+      );
       const shouldTraverseExcludedDirectory =
         recursive
         && entry.isDirectory()
         && shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
+
+      if (
+        listedEntries.length > 0
+        && estimatedResponseChars + estimatedEntryResponseChars > maxPreviewTextResponseChars
+      ) {
+        previewAborted = true;
+        break;
+      }
 
       if (
         shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
@@ -505,6 +539,7 @@ async function collectDirectoryEntriesPreviewChunk(
         metadataSelection,
       );
       listedEntries.push(listedEntry);
+      estimatedResponseChars += estimatedEntryResponseChars;
 
       if (recursive && entry.isDirectory()) {
         traversalFrames.push({
@@ -708,6 +743,7 @@ async function buildListedDirectoryRoot(
       traversalRuntimeBudgetState,
       traversalNarrowingGuidance,
       previewExecutionRuntimeBudgetLimits,
+      inlineTextResponseCapChars,
       continuationState,
     );
 
