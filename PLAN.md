@@ -3,18 +3,18 @@ file_type: "master"
 file_id: "filesystem-mcp-enterprise-runtime-and-documentation-plan"
 plan_version: 1
 created: "2026-04-18T00:00:00Z"
- last_updated: "2026-04-22T00:00:00Z"
-  status: "in_progress"
+ last_updated: "2026-04-26T00:00:00Z"
+   status: "in_progress"
  total_units: 11
-  completed_units: 0
+   completed_units: 1
  total_tasks_all_levels: 38
-  completed_tasks_all_levels: 11
+   completed_tasks_all_levels: 12
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-   resume_frontier_unit: "1"
-   resume_frontier_task: "1.12"
-   next_frontier_task: "1.12"
+   resume_frontier_unit: "2"
+   resume_frontier_task: "2.1"
+   next_frontier_task: "2.1"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -57,9 +57,9 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 ## Units
 [INTENT: REFERENCE]
 
-- [~] **1. Runtime Architecture Refactors** → [`.plan/1-runtime-architecture-refactors/orchestration.md`](.plan/1-runtime-architecture-refactors/orchestration.md)
+- [x] **1. Runtime Architecture Refactors** → [`.plan/1-runtime-architecture-refactors/orchestration.md`](.plan/1-runtime-architecture-refactors/orchestration.md)
   - Classification: Mixed
-  - Status: in_progress | Tasks: 12 | Completed: 11
+  - Status: done | Tasks: 12 | Completed: 12
   - Summary: Introduce the shared inspection content-state model, hybrid-aware routing, internal read-core SSOT, traversal/preflight governance refactors, recalibrated admission thresholds, the same-endpoint continuation baseline, the caller-visible continuation-delivery and consumer-alignment hardening layers, the end-to-end `list_directory_entries` response-surfacing closure, and the final clean resume-session dual-delivery architecture with family-specific guidance and cursor hardening.
 - [ ] **2. Inspection Discovery Docs** → [`.plan/2-inspection-discovery-docs/orchestration.md`](.plan/2-inspection-discovery-docs/orchestration.md)
   - Classification: ISOLATED

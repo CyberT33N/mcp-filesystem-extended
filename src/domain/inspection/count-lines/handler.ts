@@ -5,17 +5,20 @@ import {
   INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
-  createContinuationEnvelope,
-  createInlineContinuationEnvelope,
-  createPersistedContinuationEnvelope,
-  getContinuationNotFoundMessage,
-  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
-  INSPECTION_CONTINUATION_STATUSES,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  createInlineResumeEnvelope,
+  createPersistedResumeEnvelope,
+  createResumeEnvelope,
+  getResumeSessionNotFoundMessage,
+  INSPECTION_COMPLETION_ONLY_RESUME_MODES,
+  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  INSPECTION_RESUME_MODES,
+  INSPECTION_RESUME_STATUSES,
+} from "@domain/shared/resume/inspection-resume-contract";
 import type {
-  InspectionContinuationAdmission,
-  InspectionContinuationMetadata,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  InspectionResumeAdmission,
+  InspectionResumeMetadata,
+  InspectionResumeMode,
+} from "@domain/shared/resume/inspection-resume-contract";
 import {
   buildTraversalNarrowingGuidance,
   resolveTraversalPreflightContext,
@@ -53,7 +56,7 @@ import { countTotalLinesInFile } from "@infrastructure/filesystem/streaming-line
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
-import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
+import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
 import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
 
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
@@ -94,8 +97,8 @@ export interface CountLinesResult {
   totalFiles: number;
   totalLines: number;
   totalMatchingLines: number;
-  admission: InspectionContinuationAdmission;
-  continuation: InspectionContinuationMetadata;
+  admission: InspectionResumeAdmission;
+  resume: InspectionResumeMetadata;
 }
 
 interface CountLinesTraversalFrame {
@@ -129,8 +132,9 @@ interface CountLinesRequestPayload {
 interface CountLinesExecutionContext {
   requestPayload: CountLinesRequestPayload;
   continuationState: CountLinesContinuationState | null;
-  activeContinuationToken: string | null;
-  activeContinuationExpiresAt: string | null;
+  activeResumeToken: string | null;
+  activeResumeExpiresAt: string | null;
+  requestedResumeMode: InspectionResumeMode | null;
 }
 
 interface CountLinesPathExecutionResult extends CountLinesPathResult {
@@ -140,7 +144,7 @@ interface CountLinesPathExecutionResult extends CountLinesPathResult {
 
 const COUNT_LINES_FAMILY_MEMBER = "count_lines";
 const COUNT_LINES_CONTINUATION_GUIDANCE =
-  "Resume the same count-lines request by sending only continuationToken to the same endpoint to continue task-backed execution without resending the original query.";
+  "Resume the same count-lines request by sending only resumeToken with resumeMode='complete-result' to the same endpoint so the server can continue completion-backed execution without resending the original query.";
 
 function cloneCountLinesTraversalFrames(
   traversalFrames: CountLinesTraversalFrame[],
@@ -177,7 +181,8 @@ function toCountLinesPathResult(
 }
 
 function resolveCountLinesExecutionContext(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   filePaths: string[],
   recursive: boolean,
   pattern: string | undefined,
@@ -186,10 +191,10 @@ function resolveCountLinesExecutionContext(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   ignoreEmptyLines: boolean,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   now: Date,
 ): CountLinesExecutionContext {
-  if (continuationToken === undefined) {
+  if (resumeToken === undefined) {
     return {
       requestPayload: {
         filePaths,
@@ -202,108 +207,124 @@ function resolveCountLinesExecutionContext(
         ignoreEmptyLines,
       },
       continuationState: null,
-      activeContinuationToken: null,
-      activeContinuationExpiresAt: null,
+      activeResumeToken: null,
+      activeResumeExpiresAt: null,
+      requestedResumeMode: null,
     };
   }
 
-  if (inspectionContinuationStore === undefined) {
-    throw new Error("Continuation storage is unavailable for count_lines resume requests.");
+  if (inspectionResumeSessionStore === undefined) {
+    throw new Error("Resume-session storage is unavailable for count_lines resume requests.");
   }
 
-  const continuationSession = inspectionContinuationStore.loadActiveSession<
+  const resumeSession = inspectionResumeSessionStore.loadActiveSession<
     CountLinesRequestPayload,
     CountLinesContinuationState
   >(
-    continuationToken,
+    resumeToken,
     COUNT_LINES_FAMILY_MEMBER,
     COUNT_LINES_FAMILY_MEMBER,
     now,
   );
 
-  if (continuationSession === null) {
-    throw new Error(getContinuationNotFoundMessage(COUNT_LINES_FAMILY_MEMBER));
+  if (resumeSession === null) {
+    throw new Error(getResumeSessionNotFoundMessage(COUNT_LINES_FAMILY_MEMBER));
   }
 
   return {
-    requestPayload: continuationSession.requestPayload,
-    continuationState: continuationSession.continuationState,
-    activeContinuationToken: continuationSession.continuationToken,
-    activeContinuationExpiresAt: continuationSession.expiresAt,
+    requestPayload: resumeSession.requestPayload,
+    continuationState: resumeSession.resumeState,
+    activeResumeToken: resumeSession.resumeToken,
+    activeResumeExpiresAt: resumeSession.expiresAt,
+    requestedResumeMode:
+      resumeMode
+      ?? resumeSession.lastRequestedResumeMode
+      ?? INSPECTION_RESUME_MODES.COMPLETE_RESULT,
   };
 }
 
 function buildCountLinesContinuationEnvelope(
-  continuationToken: string | null,
-  continuationExpiresAt: string | null,
+  resumeToken: string | null,
+  resumeExpiresAt: string | null,
   nextContinuationState: CountLinesContinuationState | null,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   requestPayload: CountLinesRequestPayload,
   pathResults: CountLinesPathExecutionResult[],
   now: Date,
-): Pick<CountLinesResult, "admission" | "continuation"> {
+): Pick<CountLinesResult, "admission" | "resume"> {
   const taskBackedActive =
-    continuationToken !== null
+    resumeToken !== null
     || pathResults.some(
       (pathResult) =>
-        pathResult.admissionOutcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+        pathResult.admissionOutcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
     );
 
   if (!taskBackedActive) {
-    return createInlineContinuationEnvelope();
+    return createInlineResumeEnvelope();
   }
 
   if (nextContinuationState === null) {
-    if (continuationToken !== null && inspectionContinuationStore !== undefined) {
-      inspectionContinuationStore.markSessionCompleted(continuationToken, now);
+    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
     }
 
-    return createContinuationEnvelope(
-      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
-      null,
+    return createResumeEnvelope(
+      INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+      COUNT_LINES_CONTINUATION_GUIDANCE,
+      "Scope reduction alternative: narrow paths, reduce recursive breadth, or constrain files with includeGlobs.",
       null,
     );
   }
 
-  if (inspectionContinuationStore === undefined) {
-    throw new Error("Continuation storage is unavailable for task-backed count_lines execution.");
+  if (inspectionResumeSessionStore === undefined) {
+    throw new Error("Resume-session storage is unavailable for completion-backed count_lines execution.");
   }
 
-  if (continuationToken === null) {
-    const continuationSession = inspectionContinuationStore.createSession(
+  if (resumeToken === null) {
+    const resumeSession = inspectionResumeSessionStore.createSession(
       {
         endpointName: COUNT_LINES_FAMILY_MEMBER,
         familyMember: COUNT_LINES_FAMILY_MEMBER,
         requestPayload,
-        continuationState: nextContinuationState,
-        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+        resumeState: nextContinuationState,
+        admissionOutcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+        lastRequestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
       },
       now,
     );
 
-    return createPersistedContinuationEnvelope(
-      COUNT_LINES_FAMILY_MEMBER,
-      continuationSession.continuationToken,
-      continuationSession.status,
-      continuationSession.expiresAt,
+    return createPersistedResumeEnvelope(
+      resumeSession.resumeToken,
+      resumeSession.status,
+      resumeSession.expiresAt,
+      INSPECTION_COMPLETION_ONLY_RESUME_MODES,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
       COUNT_LINES_CONTINUATION_GUIDANCE,
-      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+      "Scope reduction alternative: narrow paths, reduce recursive breadth, or constrain files with includeGlobs.",
+      INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
     );
   }
 
-  if (continuationExpiresAt === null) {
-    throw new Error("Active count-lines continuation session is missing an expiration timestamp.");
+  if (resumeExpiresAt === null) {
+    throw new Error("Active count-lines resume session is missing an expiration timestamp.");
   }
 
-  inspectionContinuationStore.updateContinuationState(continuationToken, nextContinuationState, now);
+  inspectionResumeSessionStore.updateResumeState(
+    resumeToken,
+    nextContinuationState,
+    now,
+    INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+  );
 
-  return createPersistedContinuationEnvelope(
-    COUNT_LINES_FAMILY_MEMBER,
-    continuationToken,
-    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
-    continuationExpiresAt,
+  return createPersistedResumeEnvelope(
+    resumeToken,
+    INSPECTION_RESUME_STATUSES.ACTIVE,
+    resumeExpiresAt,
+    INSPECTION_COMPLETION_ONLY_RESUME_MODES,
+    INSPECTION_RESUME_MODES.COMPLETE_RESULT,
     COUNT_LINES_CONTINUATION_GUIDANCE,
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+    "Scope reduction alternative: narrow paths, reduce recursive breadth, or constrain files with includeGlobs.",
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
   );
 }
 
@@ -382,8 +403,8 @@ export function formatCountLinesResultOutput(
   pattern: string | undefined,
 ): string {
   if (
-    result.admission.outcome === INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED
-    && result.continuation.resumable
+    result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+    && result.resume.resumable
     && result.paths.length === 0
   ) {
     return result.admission.guidanceText ?? COUNT_LINES_CONTINUATION_GUIDANCE;
@@ -536,7 +557,7 @@ async function getCountLinesPathResult(
 
     admissionOutcome = traversalAdmissionDecision.outcome;
 
-    if (traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED) {
+    if (traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED) {
       const taskBackedResult = await countLinesInDirectoryTaskBacked(
         filePath,
         filePatterns,
@@ -617,7 +638,8 @@ async function getCountLinesPathResult(
  * @returns Human-readable count-lines output that respects the discovery-family text budget while preserving the split counting architecture.
  */
 export async function handleCountLines(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   filePaths: string[],
   recursive: boolean,
   pattern: string | undefined,
@@ -626,11 +648,12 @@ export async function handleCountLines(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   ignoreEmptyLines: boolean,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   allowedDirectories: string[]
 ): Promise<string> {
   const structuredResult = await getCountLinesResult(
-    continuationToken,
+    resumeToken,
+    resumeMode,
     filePaths,
     recursive,
     pattern,
@@ -639,7 +662,7 @@ export async function handleCountLines(
     includeExcludedGlobs,
     respectGitIgnore,
     ignoreEmptyLines,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
     allowedDirectories,
   );
 
@@ -665,7 +688,8 @@ export async function handleCountLines(
  * @returns Structured per-path and aggregate line-count totals.
  */
 export async function getCountLinesResult(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   filePaths: string[],
   recursive: boolean,
   pattern: string | undefined,
@@ -674,12 +698,13 @@ export async function getCountLinesResult(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   ignoreEmptyLines: boolean,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   allowedDirectories: string[],
 ): Promise<CountLinesResult> {
   const now = new Date();
   const executionContext = resolveCountLinesExecutionContext(
-    continuationToken,
+    resumeToken,
+    resumeMode,
     filePaths,
     recursive,
     pattern,
@@ -688,7 +713,7 @@ export async function getCountLinesResult(
     includeExcludedGlobs,
     respectGitIgnore,
     ignoreEmptyLines,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
     now,
   );
   const persistedPathStates: Record<string, CountLinesPathContinuationState> = {};
@@ -739,10 +764,10 @@ export async function getCountLinesResult(
     ? { pathStates: persistedPathStates }
     : null;
   const continuationEnvelope = buildCountLinesContinuationEnvelope(
-    executionContext.activeContinuationToken,
-    executionContext.activeContinuationExpiresAt,
+    executionContext.activeResumeToken,
+    executionContext.activeResumeExpiresAt,
     nextContinuationState,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
     executionContext.requestPayload,
     pathResults,
     now,

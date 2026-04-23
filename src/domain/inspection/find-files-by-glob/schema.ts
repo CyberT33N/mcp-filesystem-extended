@@ -7,41 +7,64 @@ import {
   PATH_MAX_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
-  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
-  INSPECTION_CONTINUATION_STATUSES,
-  INSPECTION_CONTINUATION_TOKEN_FIELD,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  INSPECTION_RESUME_MODES,
+  INSPECTION_RESUME_MODE_FIELD,
+  INSPECTION_RESUME_STATUSES,
+  INSPECTION_RESUME_TOKEN_FIELD,
+} from "@domain/shared/resume/inspection-resume-contract";
 
-const InspectionContinuationAdmissionSchema = z.object({
+const InspectionResumeAdmissionSchema = z.object({
   outcome: z.enum([
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.INLINE,
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.NARROWING_REQUIRED,
   ]),
   guidanceText: z.string().nullable(),
-  resumable: z.boolean(),
+  scopeReductionGuidanceText: z.string().nullable(),
 });
 
-const InspectionContinuationMetadataSchema = z.object({
-  continuationToken: z.string().nullable(),
-  familyMember: z.string().nullable(),
+const InspectionResumeMetadataSchema = z.object({
+  resumeToken: z.string().nullable(),
+  supportedResumeModes: z.array(
+    z.enum([
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+    ]),
+  ),
+  recommendedResumeMode: z
+    .enum([
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+    ])
+    .nullable(),
   status: z.enum([
-    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
-    INSPECTION_CONTINUATION_STATUSES.CANCELLED,
-    INSPECTION_CONTINUATION_STATUSES.COMPLETED,
-    INSPECTION_CONTINUATION_STATUSES.EXPIRED,
+    INSPECTION_RESUME_STATUSES.ACTIVE,
+    INSPECTION_RESUME_STATUSES.CANCELLED,
+    INSPECTION_RESUME_STATUSES.COMPLETED,
+    INSPECTION_RESUME_STATUSES.EXPIRED,
   ]).nullable(),
   resumable: z.boolean(),
   expiresAt: z.string().nullable(),
 });
 
 export const FindFilesByGlobArgsSchema = z.object({
-  [INSPECTION_CONTINUATION_TOKEN_FIELD]: z
+  [INSPECTION_RESUME_TOKEN_FIELD]: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "Opaque continuation token returned by a prior same-endpoint glob-discovery response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
+      "Opaque resume token returned by a prior same-endpoint glob-discovery response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
+    ),
+  [INSPECTION_RESUME_MODE_FIELD]: z
+    .enum([
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+    ])
+    .optional()
+    .describe(
+      "Resume intent for a persisted same-endpoint glob-discovery session. Resume-only requests must provide either `next-chunk` or `complete-result`."
     ),
   /**
    * Search roots.
@@ -63,7 +86,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Root directories to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single glob search scope or multiple paths for batch glob searches; continuation-only requests omit this field and reload the persisted request context."
+      "Root directories to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single glob search scope or multiple paths for batch glob searches; resume-only requests omit this field and reload the persisted request context."
     ),
   /**
    * Match glob.
@@ -85,7 +108,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .optional()
     .default("")
     .describe(
-      "Glob pattern used for path matching, for example '**/*.ts'. Base requests provide this field for path matching; continuation-only requests omit it and reload the persisted request context."
+      "Glob pattern used for path matching, for example '**/*.ts'. Base requests provide this field for path matching; resume-only requests omit it and reload the persisted request context."
     ),
   /**
    * Exclusion globs.
@@ -172,7 +195,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .default(DISCOVERY_MAX_RESULTS_HARD_CAP)
     .describe("Maximum number of path results to return before truncation."),
 }).superRefine((args, ctx) => {
-  const continuationRequest = args.continuationToken !== undefined;
+  const resumeRequest = args.resumeToken !== undefined;
   const hasQueryDefiningFields =
     args.roots.length > 0
     || args.glob !== ""
@@ -181,7 +204,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     || args.includeExcludedGlobs.length > 0
     || args.maxResults !== DISCOVERY_MAX_RESULTS_HARD_CAP;
 
-  if (!continuationRequest && args.roots.length === 0) {
+  if (!resumeRequest && args.roots.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Base requests must provide at least one directory root.",
@@ -189,7 +212,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     });
   }
 
-  if (!continuationRequest && args.glob === "") {
+  if (!resumeRequest && args.glob === "") {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Base requests must provide a glob pattern.",
@@ -197,12 +220,28 @@ export const FindFilesByGlobArgsSchema = z.object({
     });
   }
 
-  if (continuationRequest && hasQueryDefiningFields) {
+  if (!resumeRequest && args.resumeMode !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must not provide a resume mode without a resume token.",
+      path: [INSPECTION_RESUME_MODE_FIELD],
+    });
+  }
+
+  if (resumeRequest && args.resumeMode === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Resume-only requests must provide a resumeMode.",
+      path: [INSPECTION_RESUME_MODE_FIELD],
+    });
+  }
+
+  if (resumeRequest && hasQueryDefiningFields) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message:
-        "Continuation-only requests must omit new query-defining fields and rely on the persisted request context.",
-      path: [INSPECTION_CONTINUATION_TOKEN_FIELD],
+        "Resume-only requests must omit new query-defining fields and rely on the persisted request context.",
+      path: [INSPECTION_RESUME_TOKEN_FIELD],
     });
   }
 });
@@ -300,6 +339,6 @@ export const FindFilesByGlobResultSchema = z.object({
    * ```
    */
   truncated: z.boolean(),
-  admission: InspectionContinuationAdmissionSchema,
-  continuation: InspectionContinuationMetadataSchema,
+  admission: InspectionResumeAdmissionSchema,
+  resume: InspectionResumeMetadataSchema,
 });

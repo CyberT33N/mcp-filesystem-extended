@@ -80,19 +80,19 @@ import type { RegisterToolCatalogContext } from "./register-tool-catalog";
 import { READ_ONLY_LOCAL_TOOL_ANNOTATIONS } from "./tool-registration-presets";
 
 const STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION =
-  "When additive `admission` and `continuation` metadata are returned, `structuredContent.admission` and `structuredContent.continuation` remain authoritative while `content.text` may collapse to compact guidance only.";
+  "When additive `admission` and `resume` metadata are returned, `structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only.";
 
 const TOKEN_ONLY_RESUME_DESCRIPTION =
-  "Resume only when `structuredContent.continuation.resumable` is true and a non-null `continuationToken` is present, using the same endpoint and only that token.";
+  "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`.";
 
 const FINAL_PREVIEW_FIRST_DESCRIPTION =
-  "A preview-first response may finalize without an active continuation token only when the current bounded final payload is already present in `structuredContent` and no further resume step exists.";
+  "A preview-first response may finalize without an active resume token only when the current bounded final payload is already present in `structuredContent` and no further resume step exists.";
 
 const EXTERNAL_CONSUMER_BOUNDARY_DESCRIPTION =
-  "Consumers that expose only `content.text` while dropping `structuredContent` are outside this server-owned contract and are responsible for any apparent continuation-token or bounded-payload loss.";
+  "Consumers that expose only `content.text` while dropping `structuredContent` are outside this server-owned contract and are responsible for any apparent resumeToken or bounded-payload loss.";
 
 const LIST_DIRECTORY_ENTRIES_TEXT_SURFACING_DESCRIPTION =
-  "For `list_directory_entries`, preview-first responses may also surface the current bounded directory-entry chunk and any active `continuationToken` in `content.text` so text-only consumers keep a usable same-endpoint continuation path while `structuredContent` remains authoritative.";
+  "For `list_directory_entries`, preview-first responses may also surface the current bounded directory-entry chunk and any active `resumeToken` in `content.text` so text-only consumers keep a usable same-endpoint continuation path while `structuredContent` remains authoritative.";
 
 /**
  * Registers only the inspection tool family on the application-layer MCP server shell.
@@ -104,7 +104,12 @@ const LIST_DIRECTORY_ENTRIES_TEXT_SURFACING_DESCRIPTION =
  * shared guardrail modules.
  */
 export function registerInspectionToolCatalog(context: RegisterToolCatalogContext): void {
-  const { server, allowedDirectories, executeTool, inspectionContinuationStore } = context;
+  const {
+    server,
+    allowedDirectories,
+    executeTool,
+    inspectionResumeSessionStore,
+  } = context;
 
   server.registerTool(
     "read_files_with_line_numbers",
@@ -154,16 +159,23 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Lists structured directory entries for one or more directory roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly. " +
-        "Valid broad listing workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `continuation` metadata support same-endpoint resume through `continuationToken`; no separate continuation endpoint exists. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ${LIST_DIRECTORY_ENTRIES_TEXT_SURFACING_DESCRIPTION} ${FINAL_PREVIEW_FIRST_DESCRIPTION} ${TOKEN_ONLY_RESUME_DESCRIPTION} ${EXTERNAL_CONSUMER_BOUNDARY_DESCRIPTION}`,
+        "Valid broad listing workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken`; no separate continuation endpoint exists. " +
+        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "Scope reduction remains a first-class alternative: narrow roots, choose a deeper root, or set `recursive = false` when a shallow listing is sufficient. " +
+        "For `list_directory_entries`, preview-first responses may also surface the current bounded directory-entry chunk and any active `resumeToken` in `content.text` so text-only consumers keep a usable same-endpoint continuation path while `structuredContent` remains authoritative. " +
+        "Preview-capable directory listing supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
+        "A preview-first response may finalize without an active resume token only when the current bounded final payload is already present in `structuredContent` and no further resume step exists. " +
+        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
+        `${EXTERNAL_CONSUMER_BOUNDARY_DESCRIPTION}`,
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ListDirectoryEntriesArgsSchema,
       outputSchema: ListDirectoryEntriesStructuredResultSchema,
     },
-    async ({ continuationToken, roots, recursive, metadata, excludeGlobs, respectGitIgnore, includeExcludedGlobs }) =>
+    async ({ resumeToken, resumeMode, roots, recursive, metadata, excludeGlobs, respectGitIgnore, includeExcludedGlobs }) =>
       executeTool("list_directory_entries", async () => {
         const result = await getListDirectoryEntriesResult(
-          continuationToken,
+          resumeToken,
+          resumeMode,
           roots,
           recursive,
           metadata,
@@ -171,10 +183,11 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           includeExcludedGlobs,
           respectGitIgnore,
           allowedDirectories,
-          inspectionContinuationStore,
+          inspectionResumeSessionStore,
         );
         const text = await handleListDirectoryEntries(
-          continuationToken,
+          resumeToken,
+          resumeMode,
           roots,
           recursive,
           metadata,
@@ -182,7 +195,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           includeExcludedGlobs,
           respectGitIgnore,
           allowedDirectories,
-          inspectionContinuationStore,
+          inspectionResumeSessionStore,
         );
 
         return {
@@ -190,7 +203,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           structuredContent: {
             roots: result.roots,
             admission: result.admission,
-            continuation: result.continuation,
+            resume: result.resume,
           },
         };
       }),
@@ -203,86 +216,40 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Finds file and directory paths by case-insensitive name substring while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for path discovery, not for searching file contents. " +
-        "Valid broad discovery workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `continuation` metadata support same-endpoint resume through `continuationToken` on this endpoint. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ${TOKEN_ONLY_RESUME_DESCRIPTION}`,
+        "Valid broad discovery workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. " +
+        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
+        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
+        "Scope reduction remains a first-class alternative: narrow roots or make `nameContains` more specific to stay inline or reduce payload size.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: FindPathsByNameArgsSchema,
       outputSchema: FindPathsByNameResultSchema,
     },
-    async ({ continuationToken, roots, nameContains, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
+    async ({ resumeToken, resumeMode, roots, nameContains, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
       executeTool("find_paths_by_name", async () => {
         const result = await getFindPathsByNameResult(
-          continuationToken,
+          resumeToken,
+          resumeMode,
           roots,
           nameContains,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
-          inspectionContinuationStore,
+          inspectionResumeSessionStore,
           allowedDirectories,
           maxResults,
         );
         const text = await handleSearchFiles(
-          continuationToken,
+          resumeToken,
+          resumeMode,
           roots,
           nameContains,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
-          inspectionContinuationStore,
+          inspectionResumeSessionStore,
           allowedDirectories,
           maxResults,
-        );
-
-      return {
-        content: [{ type: "text", text }],
-        structuredContent: {
-          roots: result.roots,
-          totalMatches: result.totalMatches,
-          truncated: result.truncated,
-          admission: result.admission,
-          continuation: result.continuation,
-        },
-      };
-    }),
-  );
-
-  server.registerTool(
-    "find_files_by_glob",
-    {
-      title: "Find files by glob",
-      description:
-        "Finds files by glob pattern under one or more roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
-        "Use this tool when the selection is expressed in glob syntax rather than plain name matching or regex content search. " +
-        "Valid broad discovery workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `continuation` metadata support same-endpoint resume through `continuationToken` on this endpoint. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ${TOKEN_ONLY_RESUME_DESCRIPTION}`,
-      annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
-      inputSchema: FindFilesByGlobArgsSchema,
-      outputSchema: FindFilesByGlobResultSchema,
-    },
-    async ({ continuationToken, roots, glob, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
-      executeTool("find_files_by_glob", async () => {
-        const result = await getFindFilesByGlobResult(
-          continuationToken,
-          roots,
-          glob,
-          excludeGlobs,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          maxResults,
-          allowedDirectories,
-          inspectionContinuationStore,
-        );
-        const text = await handleSearchGlob(
-          continuationToken,
-          roots,
-          glob,
-          excludeGlobs,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          maxResults,
-          allowedDirectories,
-          inspectionContinuationStore,
         );
 
         return {
@@ -292,7 +259,63 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             totalMatches: result.totalMatches,
             truncated: result.truncated,
             admission: result.admission,
-            continuation: result.continuation,
+            resume: result.resume,
+          },
+        };
+      }),
+  );
+
+  server.registerTool(
+    "find_files_by_glob",
+    {
+      title: "Find files by glob",
+      description:
+        "Finds files by glob pattern under one or more roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
+        "Use this tool when the selection is expressed in glob syntax rather than plain name matching or regex content search. " +
+        "Valid broad discovery workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. " +
+        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
+        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
+        "Scope reduction remains a first-class alternative: narrow roots, tighten `glob`, or reduce reopened descendants through `includeExcludedGlobs`.",
+      annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
+      inputSchema: FindFilesByGlobArgsSchema,
+      outputSchema: FindFilesByGlobResultSchema,
+    },
+    async ({ resumeToken, resumeMode, roots, glob, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
+      executeTool("find_files_by_glob", async () => {
+        const result = await getFindFilesByGlobResult(
+          resumeToken,
+          resumeMode,
+          roots,
+          glob,
+          excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
+          maxResults,
+          allowedDirectories,
+          inspectionResumeSessionStore,
+        );
+        const text = await handleSearchGlob(
+          resumeToken,
+          resumeMode,
+          roots,
+          glob,
+          excludeGlobs,
+          includeExcludedGlobs,
+          respectGitIgnore,
+          maxResults,
+          allowedDirectories,
+          inspectionResumeSessionStore,
+        );
+
+        return {
+          content: [{ type: "text", text }],
+          structuredContent: {
+            roots: result.roots,
+            totalMatches: result.totalMatches,
+            truncated: result.truncated,
+            admission: result.admission,
+            resume: result.resume,
           },
         };
       }),
@@ -305,15 +328,19 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Searches text file contents with a regular expression while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for content matching, not for file-name or glob matching. " +
-        "Valid large text workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `continuation` metadata support same-endpoint resume through `continuationToken` on this endpoint, while structurally unsafe patterns, unsupported surfaces, and over-hard-gap workloads still refuse. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ${TOKEN_ONLY_RESUME_DESCRIPTION}`,
+        "Valid large text workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while structurally unsafe patterns, unsupported surfaces, and over-hard-gap workloads still refuse. " +
+        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
+        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
+        "Scope reduction remains a first-class alternative: narrow roots, add `includeGlobs`, or tighten the regex to the intended file set.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByRegexArgsSchema,
       outputSchema: SearchFileContentsByRegexResultSchema,
     },
     async (args) =>
       executeTool("search_file_contents_by_regex", async () => {
-        const continuationToken = args.continuationToken;
+        const resumeToken = args.resumeToken;
+        const resumeMode = args.resumeMode;
         const roots = "roots" in args ? args.roots : [];
         const regex = "regex" in args ? args.regex : "";
         const includeGlobs = "includeGlobs" in args ? args.includeGlobs : [];
@@ -324,7 +351,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         const caseSensitive = "caseSensitive" in args ? args.caseSensitive : false;
 
         const result = await getSearchRegexStructuredResult(
-          continuationToken,
+          resumeToken,
+          resumeMode,
           roots,
           regex,
           includeGlobs,
@@ -334,10 +362,11 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           maxResults,
           caseSensitive,
           allowedDirectories,
-          inspectionContinuationStore,
+          inspectionResumeSessionStore,
         );
         const text = await handleSearchRegex(
-          continuationToken,
+          resumeToken,
+          resumeMode,
           roots,
           regex,
           includeGlobs,
@@ -347,7 +376,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           maxResults,
           caseSensitive,
           allowedDirectories,
-          inspectionContinuationStore,
+          inspectionResumeSessionStore,
         );
 
         return {
@@ -358,7 +387,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             totalMatches: result.totalMatches,
             truncated: result.truncated,
             admission: result.admission,
-            continuation: result.continuation,
+            resume: result.resume,
           },
         };
       }),
@@ -371,15 +400,19 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Searches text file contents with an exact fixed string while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for literal content matching, not for regex content matching, file-name matching, or glob matching. " +
-        "Valid large text workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `continuation` metadata support same-endpoint resume through `continuationToken` on this endpoint, while unsupported or over-hard-gap workloads still refuse. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ${TOKEN_ONLY_RESUME_DESCRIPTION}`,
+        "Valid large text workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while unsupported or over-hard-gap workloads still refuse. " +
+        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
+        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
+        "Scope reduction remains a first-class alternative: narrow roots, add `includeGlobs`, or reduce the search to the relevant subtree.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByFixedStringArgsSchema,
       outputSchema: SearchFileContentsByFixedStringResultSchema,
     },
     async (args) =>
       executeTool("search_file_contents_by_fixed_string", async () => {
-        const continuationToken = args.continuationToken;
+        const resumeToken = args.resumeToken;
+        const resumeMode = args.resumeMode;
         const roots = "roots" in args ? args.roots : [];
         const fixedString = "fixedString" in args ? args.fixedString : "";
         const includeGlobs = "includeGlobs" in args ? args.includeGlobs : [];
@@ -390,7 +423,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         const caseSensitive = "caseSensitive" in args ? args.caseSensitive : false;
 
         const result = await getSearchFixedStringStructuredResult(
-          continuationToken,
+          resumeToken,
+          resumeMode,
           roots,
           fixedString,
           includeGlobs,
@@ -400,10 +434,11 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           maxResults,
           caseSensitive,
           allowedDirectories,
-          inspectionContinuationStore,
+          inspectionResumeSessionStore,
         );
         const text = await handleSearchFixedString(
-          continuationToken,
+          resumeToken,
+          resumeMode,
           roots,
           fixedString,
           includeGlobs,
@@ -413,7 +448,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           maxResults,
           caseSensitive,
           allowedDirectories,
-          inspectionContinuationStore,
+          inspectionResumeSessionStore,
         );
 
         return {
@@ -424,7 +459,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             totalMatches: result.totalMatches,
             truncated: result.truncated,
             admission: result.admission,
-            continuation: result.continuation,
+            resume: result.resume,
           },
         };
       }),
@@ -437,16 +472,20 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Counts lines in files or traversed directory trees while broad directory roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for totals and filtered line counting, not for reading full file content. " +
-        "Total-only counts use a large-file-safe streaming path, pattern-aware counts reuse the shared native-search lane, and broad workloads that leave the inline band return task-backed `continuationToken` metadata on this same endpoint instead of partial preview totals. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ${TOKEN_ONLY_RESUME_DESCRIPTION}`,
+        "Total-only counts use a large-file-safe streaming path, pattern-aware counts reuse the shared native-search lane, and broad workloads that leave the inline band return completion-backed `resumeToken` metadata on this same endpoint instead of partial preview totals. " +
+        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "This family supports only `resumeMode = 'complete-result'`; preview-style partial totals and `next-chunk` are never exposed. " +
+        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus `resumeMode = 'complete-result'`. " +
+        "Scope reduction remains a first-class alternative: narrow `paths`, reduce recursive breadth, or constrain files with `includeGlobs`.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: CountLinesArgsSchema,
       outputSchema: CountLinesResultSchema,
     },
-    async ({ continuationToken, paths, recursive, regex, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, ignoreEmptyLines }) =>
+    async ({ resumeToken, resumeMode, paths, recursive, regex, includeGlobs, excludeGlobs, includeExcludedGlobs, respectGitIgnore, ignoreEmptyLines }) =>
       executeTool("count_lines", async () => {
         const result = await getCountLinesResult(
-          continuationToken,
+          resumeToken,
+          resumeMode,
           paths,
           recursive,
           regex,
@@ -455,7 +494,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           includeExcludedGlobs,
           respectGitIgnore,
           ignoreEmptyLines,
-          inspectionContinuationStore,
+          inspectionResumeSessionStore,
           allowedDirectories,
         );
         const text = formatCountLinesResultOutput(result, regex);
@@ -468,7 +507,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             totalLines: result.totalLines,
             totalMatchingLines: result.totalMatchingLines,
             admission: result.admission,
-            continuation: result.continuation,
+            resume: result.resume,
           },
         };
       }),

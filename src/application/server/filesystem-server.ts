@@ -12,7 +12,7 @@ import {
 } from "@domain/shared/guardrails/tool-guardrail-error-contract";
 import { GLOBAL_RESPONSE_HARD_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
-import { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
+import { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
 
 import { registerToolCatalog } from "./register-tool-catalog";
 import { SERVER_DESCRIPTION } from "./server-description";
@@ -45,7 +45,7 @@ const LOG_LEVEL_MAP: Record<LoggingLevel, number> = {
 export class FilesystemServer {
   private readonly server: McpServer;
   private readonly allowedDirectories: string[];
-  private readonly inspectionContinuationStore: InspectionContinuationSqliteStore;
+  private readonly inspectionResumeSessionStore: InspectionResumeSessionSqliteStore;
   private rootLogLevel: LoggingLevel = "info";
 
   /**
@@ -55,8 +55,8 @@ export class FilesystemServer {
    */
   constructor(allowedDirectories: string[]) {
     this.allowedDirectories = allowedDirectories;
-    this.inspectionContinuationStore = new InspectionContinuationSqliteStore();
-    this.inspectionContinuationStore.cleanupExpiredSessions();
+    this.inspectionResumeSessionStore = new InspectionResumeSessionSqliteStore();
+    this.inspectionResumeSessionStore.cleanupExpiredSessions();
 
     this.server = new McpServer(
       {
@@ -76,7 +76,7 @@ export class FilesystemServer {
     registerToolCatalog({
       server: this.server,
       allowedDirectories: this.allowedDirectories,
-      inspectionContinuationStore: this.inspectionContinuationStore,
+      inspectionResumeSessionStore: this.inspectionResumeSessionStore,
       executeTool: (toolName, action) => this.executeTool(toolName, action),
     });
   }

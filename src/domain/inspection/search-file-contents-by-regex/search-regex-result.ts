@@ -1,9 +1,9 @@
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
-  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
-  type InspectionContinuationAdmission,
-  type InspectionContinuationMetadata,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  type InspectionResumeAdmission,
+  type InspectionResumeMetadata,
+} from "@domain/shared/resume/inspection-resume-contract";
 import { REGEX_SEARCH_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 
 /**
@@ -102,8 +102,8 @@ export interface SearchRegexResult {
    */
   truncated: boolean;
 
-  admission: InspectionContinuationAdmission;
-  continuation: InspectionContinuationMetadata;
+  admission: InspectionResumeAdmission;
+  resume: InspectionResumeMetadata;
 }
 
 /**
@@ -204,32 +204,36 @@ export function formatSearchRegexContinuationAwareTextOutput(
   effectiveMaxResults: number,
 ): string {
   const hasResumableContinuation =
-    result.continuation.resumable
-    && result.continuation.continuationToken !== null;
+    result.resume.resumable
+    && result.resume.resumeToken !== null;
 
-  if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
+  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE) {
     return formatSearchRegexResultOutput(result, pattern, effectiveMaxResults);
   }
 
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
   const previewSummary =
-    `Regex-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`;
+    result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+      ? `Regex-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`
+      : `Regex-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`;
   const structuredPayloadGuidance = "The authoritative match payload remains in structuredContent.";
 
   if (!hasResumableContinuation) {
     return [
       previewSummary,
       structuredPayloadGuidance,
-      "This preview-first response is finalized and exposes no active continuation token.",
+      "This response is finalized and exposes no active resume token.",
     ].join("\n");
   }
 
   return [
     previewSummary,
+    `Active resumeToken: ${result.resume.resumeToken}`,
+    `Supported resume modes: ${result.resume.supportedResumeModes.join(", ")}`,
     result.admission.guidanceText
-      ?? "Resume the same regex-search request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.",
+      ?? "Resume the same regex-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
     structuredPayloadGuidance,
-    "Resume the same request by sending only continuationToken on this endpoint.",
+    result.admission.scopeReductionGuidanceText ?? "",
   ].join("\n");
 }
 

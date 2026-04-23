@@ -4,13 +4,13 @@ file_id: "1"
  unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-  unit_status: "in_progress"
+  unit_status: "done"
   total_tasks: 12
-  completed_tasks: 11
+  completed_tasks: 12
  has_sub_units: false
  sub_unit_count: 0
-  resume_frontier_task: "1.12"
-  next_frontier_task: "1.12"
+  resume_frontier_task: "none"
+  next_frontier_task: "none"
 todo_window_mode_override: "inherit"
 ---
 
@@ -117,9 +117,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: `list_directory_entries` runtime surfacing plus caller-visible directory-listing contract wording
   - Blocked By: none
   - Summary: Surface the bounded preview chunk and any active `continuationToken` to the real MCP client path for `list_directory_entries` without changing same-endpoint continuation semantics or guardrail caps.
-- [ ] **1.12 Resume-session dual delivery, cursor-precision hardening, and endpoint guidance architecture** → [`1.12-resume-session-dual-delivery-and-endpoint-guidance-architecture.md`](./1.12-resume-session-dual-delivery-and-endpoint-guidance-architecture.md)
+- [x] **1.12 Resume-session dual delivery, cursor-precision hardening, and endpoint guidance architecture** → [`1.12-resume-session-dual-delivery-and-endpoint-guidance-architecture.md`](./1.12-resume-session-dual-delivery-and-endpoint-guidance-architecture.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: DONE
   - Complexity: HIGH
   - Execution Surface Band: YELLOW
   - Files Modified: shared resume-session contracts, preview-family schemas/handlers/result surfaces, `count_lines`, and caller-visible server/endpoint guidance wording

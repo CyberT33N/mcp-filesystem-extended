@@ -2,16 +2,19 @@ import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/too
 import type { TraversalWorkloadAdmissionOutcome } from "@domain/shared/guardrails/traversal-workload-admission";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import {
-  createContinuationEnvelope,
-  createInlineContinuationEnvelope,
-  createPersistedContinuationEnvelope,
-  getContinuationNotFoundMessage,
-  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
-  INSPECTION_CONTINUATION_STATUSES,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  createInlineResumeEnvelope,
+  createPersistedResumeEnvelope,
+  createResumeEnvelope,
+  getResumeSessionNotFoundMessage,
+  INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
+  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  INSPECTION_RESUME_MODES,
+  INSPECTION_RESUME_STATUSES,
+  type InspectionResumeMode,
+} from "@domain/shared/resume/inspection-resume-contract";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
-import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
+import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
 import {
   assertFormattedFixedStringResponseBudget,
   formatSearchFixedStringContinuationAwareTextOutput,
@@ -28,7 +31,7 @@ import { createFixedStringRootErrorResult } from "./fixed-string-search-support"
 
 const SEARCH_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string";
 const SEARCH_FIXED_STRING_CONTINUATION_GUIDANCE =
-  "Resume the same fixed-string-search request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.";
+  "Resume the same fixed-string-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.";
 
 interface SearchFixedStringRequestPayload {
   searchPaths: string[];
@@ -48,8 +51,9 @@ interface SearchFixedStringContinuationState {
 interface SearchFixedStringExecutionContext {
   requestPayload: SearchFixedStringRequestPayload;
   continuationState: SearchFixedStringContinuationState | null;
-  activeContinuationToken: string | null;
-  activeContinuationExpiresAt: string | null;
+  activeResumeToken: string | null;
+  activeResumeExpiresAt: string | null;
+  requestedResumeMode: InspectionResumeMode | null;
 }
 
 type SearchFixedStringRootExecutionResult = SearchFixedStringPathResult & {
@@ -58,7 +62,8 @@ type SearchFixedStringRootExecutionResult = SearchFixedStringPathResult & {
 };
 
 function resolveSearchFixedStringExecutionContext(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   searchPaths: string[],
   fixedString: string,
   filePatterns: string[],
@@ -67,10 +72,10 @@ function resolveSearchFixedStringExecutionContext(
   respectGitIgnore: boolean,
   maxResults: number,
   caseSensitive: boolean,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   now: Date,
 ): SearchFixedStringExecutionContext {
-  if (continuationToken === undefined) {
+  if (resumeToken === undefined) {
     return {
       requestPayload: {
         searchPaths,
@@ -83,106 +88,132 @@ function resolveSearchFixedStringExecutionContext(
         caseSensitive,
       },
       continuationState: null,
-      activeContinuationToken: null,
-      activeContinuationExpiresAt: null,
+      activeResumeToken: null,
+      activeResumeExpiresAt: null,
+      requestedResumeMode: null,
     };
   }
 
-  if (inspectionContinuationStore === undefined) {
-    throw new Error("Continuation storage is unavailable for fixed-string-search resume requests.");
+  if (inspectionResumeSessionStore === undefined) {
+    throw new Error("Resume-session storage is unavailable for fixed-string-search resume requests.");
   }
 
-  const continuationSession = inspectionContinuationStore.loadActiveSession<
+  const resumeSession = inspectionResumeSessionStore.loadActiveSession<
     SearchFixedStringRequestPayload,
     SearchFixedStringContinuationState
   >(
-    continuationToken,
+    resumeToken,
     SEARCH_FIXED_STRING_TOOL_NAME,
     SEARCH_FIXED_STRING_TOOL_NAME,
     now,
   );
 
-  if (continuationSession === null) {
-    throw new Error(getContinuationNotFoundMessage(SEARCH_FIXED_STRING_TOOL_NAME));
+  if (resumeSession === null) {
+    throw new Error(getResumeSessionNotFoundMessage(SEARCH_FIXED_STRING_TOOL_NAME));
   }
 
   return {
-    requestPayload: continuationSession.requestPayload,
-    continuationState: continuationSession.continuationState,
-    activeContinuationToken: continuationSession.continuationToken,
-    activeContinuationExpiresAt: continuationSession.expiresAt,
+    requestPayload: resumeSession.requestPayload,
+    continuationState: resumeSession.resumeState,
+    activeResumeToken: resumeSession.resumeToken,
+    activeResumeExpiresAt: resumeSession.expiresAt,
+    requestedResumeMode:
+      resumeMode
+      ?? resumeSession.lastRequestedResumeMode
+      ?? INSPECTION_RESUME_MODES.NEXT_CHUNK,
   };
 }
 
 function buildSearchFixedStringContinuationEnvelope(
-  continuationToken: string | null,
-  continuationExpiresAt: string | null,
+  resumeToken: string | null,
+  resumeExpiresAt: string | null,
   nextContinuationState: SearchFixedStringContinuationState | null,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   requestPayload: SearchFixedStringRequestPayload,
   roots: SearchFixedStringRootExecutionResult[],
+  requestedResumeMode: InspectionResumeMode | null,
   now: Date,
-): Pick<SearchFixedStringResult, "admission" | "continuation"> {
+): Pick<SearchFixedStringResult, "admission" | "resume"> {
+  const effectiveResumeMode = requestedResumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK;
+  const admissionOutcome = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
+    ? INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+    : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
+  const guidanceText = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
+    ? "Resume the same fixed-string-search request by sending only resumeToken with resumeMode='complete-result' to the same endpoint so the server can continue the persisted completion attempt toward a final complete result."
+    : SEARCH_FIXED_STRING_CONTINUATION_GUIDANCE;
+  const scopeReductionGuidanceText =
+    "Scope reduction alternative: narrow roots, add includeGlobs, or reduce the search to the relevant subtree.";
   const previewFirstActive = roots.some(
     (rootResult) =>
-      rootResult.admissionOutcome === INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      rootResult.admissionOutcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
   );
 
   if (!previewFirstActive) {
-    return createInlineContinuationEnvelope();
+    return createInlineResumeEnvelope();
   }
 
   if (nextContinuationState === null) {
-    if (continuationToken !== null && inspectionContinuationStore !== undefined) {
-      inspectionContinuationStore.markSessionCompleted(continuationToken, now);
+    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
     }
 
-    return createContinuationEnvelope(
-      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
-      null,
+    return createResumeEnvelope(
+      admissionOutcome,
+      guidanceText,
+      scopeReductionGuidanceText,
       null,
     );
   }
 
-  if (inspectionContinuationStore === undefined) {
-    throw new Error("Continuation storage is unavailable for preview-first fixed-string search.");
+  if (inspectionResumeSessionStore === undefined) {
+    throw new Error("Resume-session storage is unavailable for preview-first fixed-string search.");
   }
 
-  if (continuationToken === null) {
-    const continuationSession = inspectionContinuationStore.createSession(
+  if (resumeToken === null) {
+    const resumeSession = inspectionResumeSessionStore.createSession(
       {
         endpointName: SEARCH_FIXED_STRING_TOOL_NAME,
         familyMember: SEARCH_FIXED_STRING_TOOL_NAME,
         requestPayload,
-        continuationState: nextContinuationState,
-        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+        resumeState: nextContinuationState,
+        admissionOutcome,
+        lastRequestedResumeMode: effectiveResumeMode,
       },
       now,
     );
 
-    return createPersistedContinuationEnvelope(
-      SEARCH_FIXED_STRING_TOOL_NAME,
-      continuationSession.continuationToken,
-      continuationSession.status,
-      continuationSession.expiresAt,
-      SEARCH_FIXED_STRING_CONTINUATION_GUIDANCE,
-      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    return createPersistedResumeEnvelope(
+      resumeSession.resumeToken,
+      resumeSession.status,
+      resumeSession.expiresAt,
+      INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
+      effectiveResumeMode,
+      guidanceText,
+      scopeReductionGuidanceText,
+      admissionOutcome,
     );
   }
 
-  if (continuationExpiresAt === null) {
-    throw new Error("Active fixed-string-search continuation session is missing an expiration timestamp.");
+  if (resumeExpiresAt === null) {
+    throw new Error("Active fixed-string-search resume session is missing an expiration timestamp.");
   }
 
-  inspectionContinuationStore.updateContinuationState(continuationToken, nextContinuationState, now);
+  inspectionResumeSessionStore.updateResumeState(
+    resumeToken,
+    nextContinuationState,
+    now,
+    effectiveResumeMode,
+  );
 
-  return createPersistedContinuationEnvelope(
-    SEARCH_FIXED_STRING_TOOL_NAME,
-    continuationToken,
-    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
-    continuationExpiresAt,
-    SEARCH_FIXED_STRING_CONTINUATION_GUIDANCE,
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  return createPersistedResumeEnvelope(
+    resumeToken,
+    INSPECTION_RESUME_STATUSES.ACTIVE,
+    resumeExpiresAt,
+    INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
+    effectiveResumeMode,
+    guidanceText,
+    scopeReductionGuidanceText,
+    admissionOutcome,
   );
 }
 
@@ -201,7 +232,8 @@ function buildSearchFixedStringContinuationEnvelope(
  * @returns Formatted text output that respects the shared search-family response cap.
  */
 export async function handleSearchFixedString(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   searchPaths: string[],
   fixedString: string,
   filePatterns: string[],
@@ -211,10 +243,11 @@ export async function handleSearchFixedString(
   maxResults: number,
   caseSensitive: boolean,
   allowedDirectories: string[],
-  inspectionContinuationStore?: InspectionContinuationSqliteStore,
+  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
 ): Promise<string> {
   const executionContext = resolveSearchFixedStringExecutionContext(
-    continuationToken,
+    resumeToken,
+    resumeMode,
     searchPaths,
     fixedString,
     filePatterns,
@@ -223,11 +256,12 @@ export async function handleSearchFixedString(
     respectGitIgnore,
     maxResults,
     caseSensitive,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
     new Date(),
   );
   const structuredResult = await getSearchFixedStringResult(
-    continuationToken,
+    resumeToken,
+    resumeMode,
     searchPaths,
     fixedString,
     filePatterns,
@@ -237,9 +271,12 @@ export async function handleSearchFixedString(
     maxResults,
     caseSensitive,
     allowedDirectories,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
   );
-  const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
+  const effectiveMaxResults = Math.min(
+    executionContext.requestPayload.maxResults,
+    REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
+  );
   const effectiveFixedString = executionContext.requestPayload.fixedString;
 
   return assertFormattedFixedStringResponseBudget(
@@ -267,7 +304,8 @@ export async function handleSearchFixedString(
  * @returns Structured per-root results with harmonized partial-failure semantics.
  */
 export async function getSearchFixedStringResult(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   searchPaths: string[],
   fixedString: string,
   filePatterns: string[],
@@ -277,11 +315,12 @@ export async function getSearchFixedStringResult(
   maxResults: number,
   caseSensitive: boolean,
   allowedDirectories: string[],
-  inspectionContinuationStore?: InspectionContinuationSqliteStore,
+  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
 ): Promise<SearchFixedStringResult> {
   const now = new Date();
   const executionContext = resolveSearchFixedStringExecutionContext(
-    continuationToken,
+    resumeToken,
+    resumeMode,
     searchPaths,
     fixedString,
     filePatterns,
@@ -290,7 +329,7 @@ export async function getSearchFixedStringResult(
     respectGitIgnore,
     maxResults,
     caseSensitive,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
     now,
   );
   const effectiveMaxResults = Math.min(
@@ -307,8 +346,8 @@ export async function getSearchFixedStringResult(
       );
 
   if (activeSearchPaths.length === 0) {
-    if (executionContext.activeContinuationToken !== null && inspectionContinuationStore !== undefined) {
-      inspectionContinuationStore.markSessionCompleted(executionContext.activeContinuationToken, now);
+    if (executionContext.activeResumeToken !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeToken, now);
     }
 
     return {
@@ -316,7 +355,7 @@ export async function getSearchFixedStringResult(
       totalLocations: 0,
       totalMatches: 0,
       truncated: false,
-      ...createInlineContinuationEnvelope(),
+      ...createInlineResumeEnvelope(),
     };
   }
 
@@ -338,6 +377,7 @@ export async function getSearchFixedStringResult(
         aggregateBudgetState,
         activeSearchPaths.length,
         executionContext.continuationState?.rootTraversalStates[searchPath] ?? null,
+        executionContext.requestedResumeMode,
       );
 
       roots.push(result);
@@ -346,7 +386,7 @@ export async function getSearchFixedStringResult(
 
       roots.push({
         ...createFixedStringRootErrorResult(searchPath, errorMessage),
-        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.INLINE,
+        admissionOutcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
         nextContinuationState: null,
       });
     }
@@ -368,12 +408,13 @@ export async function getSearchFixedStringResult(
     null,
   );
   const continuationEnvelope = buildSearchFixedStringContinuationEnvelope(
-    executionContext.activeContinuationToken,
-    executionContext.activeContinuationExpiresAt,
+    executionContext.activeResumeToken,
+    executionContext.activeResumeExpiresAt,
     nextContinuationState,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
     executionContext.requestPayload,
     roots,
+    executionContext.requestedResumeMode,
     now,
   );
 

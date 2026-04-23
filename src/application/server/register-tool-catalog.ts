@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types";
-import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
+import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
 
 import { registerComparisonAndMutationToolCatalog } from "./register-comparison-and-mutation-tool-catalog";
 import { registerInspectionToolCatalog } from "./register-inspection-tool-catalog";
@@ -29,9 +29,9 @@ export interface RegisterToolCatalogContext {
   allowedDirectories: string[];
 
   /**
-   * Shared server-owned continuation persistence surface for inspection families.
+   * Shared server-owned resume-session persistence surface for inspection families.
    */
-  inspectionContinuationStore: InspectionContinuationSqliteStore;
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore;
 
   /**
    * Stable application-layer wrapper for logging, result normalization, and error handling.

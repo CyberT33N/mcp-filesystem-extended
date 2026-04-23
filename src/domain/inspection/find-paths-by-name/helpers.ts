@@ -22,18 +22,25 @@ import {
   shouldTraverseTraversalScopeDirectoryPath,
 } from "@domain/shared/guardrails/traversal-scope-policy";
 import {
-  createContinuationEnvelope,
-  createInlineContinuationEnvelope,
-  createPersistedContinuationEnvelope,
-  getContinuationNotFoundMessage,
-  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
-  INSPECTION_CONTINUATION_STATUSES,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  createInlineResumeEnvelope,
+  createPersistedResumeEnvelope,
+  createResumeEnvelope,
+  getResumeSessionNotFoundMessage,
+  INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
+  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  INSPECTION_RESUME_MODES,
+  INSPECTION_RESUME_STATUSES,
+  type InspectionResumeMode,
+} from "@domain/shared/resume/inspection-resume-contract";
+import {
+  cloneInspectionResumeTraversalFrames,
+  commitInspectionResumeTraversalEntry,
+} from "@domain/shared/resume/inspection-resume-frontier";
 import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
-import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
+import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
 
 /**
  * Describes the helper-level result for one name-search traversal.
@@ -74,8 +81,9 @@ interface FindPathsByNameRequestPayload {
 interface FindPathsByNameExecutionContext {
   requestPayload: FindPathsByNameRequestPayload;
   continuationState: FindPathsByNameContinuationState | null;
-  activeContinuationToken: string | null;
-  activeContinuationExpiresAt: string | null;
+  activeResumeToken: string | null;
+  activeResumeExpiresAt: string | null;
+  requestedResumeMode: InspectionResumeMode | null;
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -85,7 +93,7 @@ function normalizeRelativePath(relativePath: string): string {
 function cloneFindPathsByNameTraversalFrames(
   traversalFrames: FindPathsByNameTraversalFrame[],
 ): FindPathsByNameTraversalFrame[] {
-  return traversalFrames.map((traversalFrame) => ({ ...traversalFrame }));
+  return cloneInspectionResumeTraversalFrames(traversalFrames);
 }
 
 function createInitialFindPathsByNameTraversalFrames(): FindPathsByNameTraversalFrame[] {
@@ -99,17 +107,18 @@ async function readSortedDirectoryEntries(currentPath: string): Promise<import("
 }
 
 function resolveFindPathsByNameExecutionContext(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   rootPath: string,
   pattern: string,
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   maxResults: number,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   now: Date,
 ): FindPathsByNameExecutionContext {
-  if (continuationToken === undefined) {
+  if (resumeToken === undefined) {
     return {
       requestPayload: {
         rootPath,
@@ -120,104 +129,127 @@ function resolveFindPathsByNameExecutionContext(
         maxResults,
       },
       continuationState: null,
-      activeContinuationToken: null,
-      activeContinuationExpiresAt: null,
+      activeResumeToken: null,
+      activeResumeExpiresAt: null,
+      requestedResumeMode: null,
     };
   }
 
-  if (inspectionContinuationStore === undefined) {
-    throw new Error("Continuation storage is unavailable for find_paths_by_name resume requests.");
+  if (inspectionResumeSessionStore === undefined) {
+    throw new Error("Resume-session storage is unavailable for find_paths_by_name resume requests.");
   }
 
-  const continuationSession = inspectionContinuationStore.loadActiveSession<
+  const continuationSession = inspectionResumeSessionStore.loadActiveSession<
     FindPathsByNameRequestPayload,
     FindPathsByNameContinuationState
   >(
-    continuationToken,
+    resumeToken,
     "find_paths_by_name",
     "find_paths_by_name",
     now,
   );
 
   if (continuationSession === null) {
-    throw new Error(getContinuationNotFoundMessage("find_paths_by_name"));
+    throw new Error(getResumeSessionNotFoundMessage("find_paths_by_name"));
   }
 
   return {
     requestPayload: continuationSession.requestPayload,
-    continuationState: continuationSession.continuationState,
-    activeContinuationToken: continuationSession.continuationToken,
-    activeContinuationExpiresAt: continuationSession.expiresAt,
+    continuationState: continuationSession.resumeState,
+    activeResumeToken: continuationSession.resumeToken,
+    activeResumeExpiresAt: continuationSession.expiresAt,
+    requestedResumeMode: resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK,
   };
 }
 
-function buildFindPathsByNameContinuationEnvelope(
-  continuationToken: string | null,
-  continuationExpiresAt: string | null,
+function buildFindPathsByNameResumeEnvelope(
+  resumeToken: string | null,
+  resumeExpiresAt: string | null,
+  resumeMode: InspectionResumeMode | null,
   nextContinuationState: FindPathsByNameContinuationState | null,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   requestPayload: FindPathsByNameRequestPayload,
   previewFirstActive: boolean,
   now: Date,
 ): Pick<SearchFilesResult, never> & {
-  admission: ReturnType<typeof createInlineContinuationEnvelope>["admission"];
-  continuation: ReturnType<typeof createInlineContinuationEnvelope>["continuation"];
+  admission: ReturnType<typeof createInlineResumeEnvelope>["admission"];
+  resume: ReturnType<typeof createInlineResumeEnvelope>["resume"];
 } {
   if (!previewFirstActive) {
-    return createInlineContinuationEnvelope();
+    return createInlineResumeEnvelope();
   }
 
+  const effectiveResumeMode = resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK;
+  const scopeReductionGuidanceText = buildTraversalNarrowingGuidance(requestPayload.rootPath);
+  const guidanceText = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
+    ? "Resume the same name-discovery request by sending only resumeToken with resumeMode='complete-result' to let the server continue the session toward a complete result without bypassing caps."
+    : "Resume the same name-discovery request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.";
+  const admissionOutcome = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
+    ? INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+    : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
+
   if (nextContinuationState === null) {
-    if (continuationToken !== null && inspectionContinuationStore !== undefined) {
-      inspectionContinuationStore.markSessionCompleted(continuationToken, now);
+    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
     }
 
-    return createContinuationEnvelope(
-      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    return createResumeEnvelope(
+      admissionOutcome,
       null,
+      scopeReductionGuidanceText,
       null,
     );
   }
 
-  if (inspectionContinuationStore === undefined) {
-    throw new Error("Continuation storage is unavailable for preview-first name discovery.");
+  if (inspectionResumeSessionStore === undefined) {
+    throw new Error("Resume-session storage is unavailable for preview-first name discovery.");
   }
 
-  if (continuationToken === null) {
-    const continuationSession = inspectionContinuationStore.createSession(
+  if (resumeToken === null) {
+    const continuationSession = inspectionResumeSessionStore.createSession(
       {
         endpointName: "find_paths_by_name",
         familyMember: "find_paths_by_name",
         requestPayload,
-        continuationState: nextContinuationState,
-        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+        resumeState: nextContinuationState,
+        admissionOutcome,
+        lastRequestedResumeMode: resumeMode,
       },
       now,
     );
 
-    return createPersistedContinuationEnvelope(
-      "find_paths_by_name",
-      continuationSession.continuationToken,
+    return createPersistedResumeEnvelope(
+      continuationSession.resumeToken,
       continuationSession.status,
       continuationSession.expiresAt,
-      "Resume the same name-discovery request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.",
-      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+      INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
+      effectiveResumeMode,
+      guidanceText,
+      scopeReductionGuidanceText,
+      admissionOutcome,
     );
   }
 
-  if (continuationExpiresAt === null) {
-    throw new Error("Active name-discovery continuation session is missing an expiration timestamp.");
+  if (resumeExpiresAt === null) {
+    throw new Error("Active name-discovery resume session is missing an expiration timestamp.");
   }
 
-  inspectionContinuationStore.updateContinuationState(continuationToken, nextContinuationState, now);
+  inspectionResumeSessionStore.updateResumeState(
+    resumeToken,
+    nextContinuationState,
+    now,
+    effectiveResumeMode,
+  );
 
-  return createPersistedContinuationEnvelope(
-    "find_paths_by_name",
-    continuationToken,
-    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
-    continuationExpiresAt,
-    "Resume the same name-discovery request by sending only continuationToken to the same endpoint to receive the next bounded chunk of matches.",
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  return createPersistedResumeEnvelope(
+    resumeToken,
+    INSPECTION_RESUME_STATUSES.ACTIVE,
+    resumeExpiresAt,
+    INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
+    effectiveResumeMode,
+    guidanceText,
+    scopeReductionGuidanceText,
+    admissionOutcome,
   );
 }
 
@@ -249,6 +281,7 @@ export async function searchFiles(
   maxResults: number,
   batchRootCount: number = 1,
   continuationState: FindPathsByNameContinuationState | null = null,
+  requestedResumeMode: InspectionResumeMode | null = null,
 ): Promise<SearchFilesResult> {
   const results: string[] = [];
   let truncated = false;
@@ -312,7 +345,7 @@ export async function searchFiles(
     traversalAdmissionDecision.outcome
     === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED
     || traversalAdmissionDecision.outcome
-    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
   ) {
     throw new Error(
       traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(rootPath),
@@ -322,8 +355,12 @@ export async function searchFiles(
   const traversalScopePolicyResolution = traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(rootPath);
+  const completeResultRequested =
+    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
+    && requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
   const previewExecutionRuntimeBudgetLimits =
     traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
+    && !completeResultRequested
       ? {
           maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
           maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
@@ -401,8 +438,6 @@ export async function searchFiles(
         break;
       }
 
-      currentTraversalFrame.nextEntryIndex += 1;
-
       const fullPath = path.join(currentPath, entry.name);
       const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
         ? entry.name
@@ -419,22 +454,26 @@ export async function searchFiles(
         shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
         && !shouldTraverseExcludedDirectory
       ) {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
 
       try {
         await validatePath(fullPath, allowedDirectories);
       } catch {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
 
       if (entry.name.toLowerCase().includes(pattern.toLowerCase())) {
         results.push(fullPath);
+      }
 
-        if (results.length >= maxResults) {
-          truncated = true;
-          break;
-        }
+      commitInspectionResumeTraversalEntry(currentTraversalFrame);
+
+      if (results.length >= maxResults) {
+        truncated = true;
+        break;
       }
 
       if (entry.isDirectory()) {
@@ -454,6 +493,7 @@ export async function searchFiles(
 
   const nextContinuationState =
     traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
+    && !completeResultRequested
     && traversalFrames.length > 0
       ? {
           traversalFrames: cloneFindPathsByNameTraversalFrames(traversalFrames),

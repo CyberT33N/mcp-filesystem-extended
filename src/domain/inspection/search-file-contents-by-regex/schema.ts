@@ -10,29 +10,43 @@ import {
   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
-  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
-  INSPECTION_CONTINUATION_STATUSES,
-  INSPECTION_CONTINUATION_TOKEN_FIELD,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  INSPECTION_RESUME_MODES,
+  INSPECTION_RESUME_MODE_FIELD,
+  INSPECTION_RESUME_STATUSES,
+  INSPECTION_RESUME_TOKEN_FIELD,
+} from "@domain/shared/resume/inspection-resume-contract";
 
-const InspectionContinuationAdmissionSchema = z.object({
+const InspectionResumeAdmissionSchema = z.object({
   outcome: z.enum([
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.INLINE,
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.NARROWING_REQUIRED,
   ]),
   guidanceText: z.string().nullable(),
-  resumable: z.boolean(),
+  scopeReductionGuidanceText: z.string().nullable(),
 });
 
-const InspectionContinuationMetadataSchema = z.object({
-  continuationToken: z.string().nullable(),
-  familyMember: z.string().nullable(),
+const InspectionResumeMetadataSchema = z.object({
+  resumeToken: z.string().nullable(),
+  supportedResumeModes: z.array(
+    z.enum([
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+    ]),
+  ),
+  recommendedResumeMode: z
+    .enum([
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+    ])
+    .nullable(),
   status: z.enum([
-    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
-    INSPECTION_CONTINUATION_STATUSES.CANCELLED,
-    INSPECTION_CONTINUATION_STATUSES.COMPLETED,
-    INSPECTION_CONTINUATION_STATUSES.EXPIRED,
+    INSPECTION_RESUME_STATUSES.ACTIVE,
+    INSPECTION_RESUME_STATUSES.CANCELLED,
+    INSPECTION_RESUME_STATUSES.COMPLETED,
+    INSPECTION_RESUME_STATUSES.EXPIRED,
   ]).nullable(),
   resumable: z.boolean(),
   expiresAt: z.string().nullable(),
@@ -48,12 +62,21 @@ const InspectionContinuationMetadataSchema = z.object({
  * normalize mixed file-versus-directory search scopes instead of rejecting explicit file inputs.
  */
 const SearchFileContentsByRegexBaseArgsSchema = z.object({
-  [INSPECTION_CONTINUATION_TOKEN_FIELD]: z
+  [INSPECTION_RESUME_TOKEN_FIELD]: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "Opaque continuation token returned by a prior same-endpoint regex-search response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
+      "Opaque resume token returned by a prior same-endpoint regex-search response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
+    ),
+  [INSPECTION_RESUME_MODE_FIELD]: z
+    .enum([
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+    ])
+    .optional()
+    .describe(
+      "Resume intent for a persisted same-endpoint regex-search session. Resume-only requests must provide either `next-chunk` or `complete-result`."
     ),
   /**
    * Search scopes.
@@ -72,10 +95,11 @@ const SearchFileContentsByRegexBaseArgsSchema = z.object({
    */
   roots: z
     .array(z.string().max(PATH_MAX_CHARS))
-    .min(1)
     .max(MAX_REGEX_ROOTS_PER_REQUEST)
+    .optional()
+    .default([])
     .describe(
-      "File or directory scopes to search in. Explicit file scopes are searched directly, while directory scopes exclude default vendor/cache trees by default unless explicitly reopened through the shared traversal policy. Pass one scope for a single regex search target or multiple scopes for batch regex searches."
+      "File or directory scopes to search in. Explicit file scopes are searched directly, while directory scopes exclude default vendor/cache trees by default unless explicitly reopened through the shared traversal policy. Base requests provide one or more scopes, while resume-only requests omit this field and reload the persisted request context."
     ),
   /**
    * Regex pattern.
@@ -93,10 +117,11 @@ const SearchFileContentsByRegexBaseArgsSchema = z.object({
    */
   regex: z
     .string()
-    .min(1)
     .max(REGEX_PATTERN_MAX_CHARS)
+    .optional()
+    .default("")
     .describe(
-      "Regular expression applied to file contents. This field uses regex syntax, not glob syntax and not plain substring matching."
+      "Regular expression applied to file contents. Base requests provide this field for the initial regex search; resume-only requests omit it and reload the persisted request context."
     ),
   /**
    * Include globs.
@@ -205,7 +230,7 @@ const SearchFileContentsByRegexBaseArgsSchema = z.object({
     .max(REGEX_SEARCH_MAX_RESULTS_HARD_CAP)
     .optional()
     .default(100)
-    .describe("Maximum number of results to return"),
+    .describe("Maximum number of results to return before truncation."),
   /**
    * Case-sensitivity flag.
    *
@@ -221,15 +246,71 @@ const SearchFileContentsByRegexBaseArgsSchema = z.object({
    * ```
    */
   caseSensitive: z.boolean().optional().default(false).describe("Whether the search should be case-sensitive"),
+}).superRefine((args, ctx) => {
+  const resumeRequest = args.resumeToken !== undefined;
+  const hasQueryDefiningFields =
+    args.roots.length > 0
+    || args.regex !== ""
+    || args.includeGlobs.length > 0
+    || args.excludeGlobs.length > 0
+    || args.respectGitIgnore
+    || args.includeExcludedGlobs.length > 0
+    || args.maxResults !== 100
+    || args.caseSensitive;
+
+  if (!resumeRequest && args.roots.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must provide at least one regex search root.",
+      path: ["roots"],
+    });
+  }
+
+  if (!resumeRequest && args.regex === "") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must provide a regex pattern.",
+      path: ["regex"],
+    });
+  }
+
+  if (!resumeRequest && args.resumeMode !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must not provide a resume mode without a resume token.",
+      path: [INSPECTION_RESUME_MODE_FIELD],
+    });
+  }
+
+  if (resumeRequest && args.resumeMode === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Resume-only requests must provide a resumeMode.",
+      path: [INSPECTION_RESUME_MODE_FIELD],
+    });
+  }
+
+  if (resumeRequest && hasQueryDefiningFields) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Resume-only requests must omit new query-defining fields and rely on the persisted request context.",
+      path: [INSPECTION_RESUME_TOKEN_FIELD],
+    });
+  }
 });
 
 const SearchFileContentsByRegexContinuationArgsSchema = z.object({
-  [INSPECTION_CONTINUATION_TOKEN_FIELD]: z
+  [INSPECTION_RESUME_TOKEN_FIELD]: z
     .string()
     .min(1)
     .describe(
-      "Opaque continuation token returned by a prior same-endpoint regex-search response. Continuation-only requests reload the persisted request context and must omit new query-defining fields."
+      "Opaque resume token returned by a prior same-endpoint regex-search response. Resume-only requests reload the persisted request context and must omit new query-defining fields."
     ),
+  [INSPECTION_RESUME_MODE_FIELD]: z.enum([
+    INSPECTION_RESUME_MODES.NEXT_CHUNK,
+    INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+  ]),
 }).strict();
 
 export const SearchFileContentsByRegexArgsSchema = z.union([
@@ -454,6 +535,6 @@ export const SearchFileContentsByRegexResultSchema = z.object({
    * ```
    */
   truncated: z.boolean(),
-  admission: InspectionContinuationAdmissionSchema,
-  continuation: InspectionContinuationMetadataSchema,
+  admission: InspectionResumeAdmissionSchema,
+  resume: InspectionResumeMetadataSchema,
 });

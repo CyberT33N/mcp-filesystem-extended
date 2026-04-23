@@ -14,6 +14,10 @@ import {
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
 import {
+  cloneInspectionResumeTraversalFrames,
+  commitInspectionResumeTraversalEntry,
+} from "@domain/shared/resume/inspection-resume-frontier";
+import {
   assertRegexRuntimeBudget,
   compileGuardrailedSearchRegex,
   normalizeRegexMatchExcerpt,
@@ -96,7 +100,7 @@ export function createRegexSearchAggregateBudgetState(): RegexSearchAggregateBud
 function cloneSearchRegexTraversalFrames(
   traversalFrames: SearchRegexTraversalFrame[],
 ): SearchRegexTraversalFrame[] {
-  return traversalFrames.map((traversalFrame) => ({ ...traversalFrame }));
+  return cloneInspectionResumeTraversalFrames(traversalFrames);
 }
 
 function createInitialSearchRegexTraversalFrames(): SearchRegexTraversalFrame[] {
@@ -485,6 +489,7 @@ export async function getSearchRegexPathResult(
   aggregateBudgetState: RegexSearchAggregateBudgetState = createRegexSearchAggregateBudgetState(),
   batchRootCount: number = 1,
   continuationState: SearchRegexRootContinuationState | null = null,
+  requestedResumeMode: import("@domain/shared/resume/inspection-resume-contract").InspectionResumeMode | null = null,
 ): Promise<SearchRegexPathResult & {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
   nextContinuationState: SearchRegexRootContinuationState | null;
@@ -556,6 +561,9 @@ export async function getSearchRegexPathResult(
       ),
     )
     : effectiveMaxResults;
+  const completeResultRequested =
+    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
+    && requestedResumeMode === "complete-result";
   const previewLanePlan = resolveTraversalPreviewLanePlan(
     searchPath,
     toolName,
@@ -568,7 +576,7 @@ export async function getSearchRegexPathResult(
     traversalAdmissionDecision.outcome
     === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED
     || traversalAdmissionDecision.outcome
-    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
   ) {
     return {
       root: searchPath,
@@ -800,8 +808,6 @@ export async function getSearchRegexPathResult(
         break;
       }
 
-      currentTraversalFrame.nextEntryIndex += 1;
-
       const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
         ? entry.name
         : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
@@ -816,6 +822,7 @@ export async function getSearchRegexPathResult(
         shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
         && !shouldTraverseExcludedDirectory
       ) {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
 
@@ -825,10 +832,12 @@ export async function getSearchRegexPathResult(
       try {
         candidateEntry = await getValidatedPreflightEntry(toolName, fullPath, allowedDirectories);
       } catch {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
 
       if (candidateEntry.type === "directory") {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         traversalFrames.push({
           directoryRelativePath: rawRelativePath,
           nextEntryIndex: 0,
@@ -838,6 +847,7 @@ export async function getSearchRegexPathResult(
       }
 
       if (candidateEntry.type !== "file") {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
 
@@ -893,8 +903,11 @@ export async function getSearchRegexPathResult(
         searchAborted = true;
         activeFileRelativePath = relativePath;
         activeFileMatchOffset = fileSearchResult.matches.length;
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         break;
       }
+
+      commitInspectionResumeTraversalEntry(currentTraversalFrame);
     }
 
     if (!descendedIntoChildDirectory && currentTraversalFrame.nextEntryIndex >= entries.length) {
@@ -903,6 +916,7 @@ export async function getSearchRegexPathResult(
   }
 
   const nextContinuationState = previewFirstAdmissionActive
+    && !completeResultRequested
     && (traversalFrames.length > 0 || activeFileRelativePath !== null)
     ? {
         traversalFrames: cloneSearchRegexTraversalFrames(traversalFrames),

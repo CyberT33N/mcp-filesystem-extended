@@ -31,21 +31,28 @@ import {
   type FileSystemEntryMetadataSelection,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 import {
-  createContinuationEnvelope,
-  createInlineContinuationEnvelope,
-  createPersistedContinuationEnvelope,
-  getContinuationNotFoundMessage,
-  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
-  INSPECTION_CONTINUATION_STATUSES,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  createInlineResumeEnvelope,
+  createPersistedResumeEnvelope,
+  createResumeEnvelope,
+  getResumeSessionNotFoundMessage,
+  INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
+  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  INSPECTION_RESUME_MODES,
+  INSPECTION_RESUME_STATUSES,
+  type InspectionResumeMode,
+} from "@domain/shared/resume/inspection-resume-contract";
 import type {
-  InspectionContinuationAdmission,
-  InspectionContinuationMetadata,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  InspectionResumeAdmission,
+  InspectionResumeMetadata,
+} from "@domain/shared/resume/inspection-resume-contract";
+import {
+  cloneInspectionResumeTraversalFrames,
+  commitInspectionResumeTraversalEntry,
+} from "@domain/shared/resume/inspection-resume-frontier";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
-import type { InspectionContinuationSqliteStore } from "@infrastructure/persistence/inspection-continuation-sqlite-store";
+import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
 
 /**
  * Structured directory entry returned by the `list_directory_entries` tool.
@@ -91,9 +98,9 @@ export interface ListDirectoryEntriesResult {
    */
   roots: ListedDirectoryRoot[];
 
-  admission: InspectionContinuationAdmission;
+  admission: InspectionResumeAdmission;
 
-  continuation: InspectionContinuationMetadata;
+  resume: InspectionResumeMetadata;
 }
 
 interface ListDirectoryEntriesTraversalFrame {
@@ -121,8 +128,9 @@ interface ListDirectoryEntriesRequestPayload {
 interface ListDirectoryEntriesExecutionContext {
   requestPayload: ListDirectoryEntriesRequestPayload;
   continuationState: ListDirectoryEntriesContinuationState | null;
-  activeContinuationToken: string | null;
-  activeContinuationExpiresAt: string | null;
+  activeResumeToken: string | null;
+  activeResumeExpiresAt: string | null;
+  requestedResumeMode: InspectionResumeMode | null;
 }
 
 interface ListDirectoryEntriesRootExecutionResult extends ListedDirectoryRoot {
@@ -131,13 +139,27 @@ interface ListDirectoryEntriesRootExecutionResult extends ListedDirectoryRoot {
 }
 
 const LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER = "list_directory_entries";
-const LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE =
-  "Resume the same directory-listing request by sending only continuationToken to the same endpoint to receive the next bounded chunk of entries.";
+const LIST_DIRECTORY_ENTRIES_NEXT_CHUNK_GUIDANCE =
+  "Resume the same directory-listing request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of entries.";
+const LIST_DIRECTORY_ENTRIES_COMPLETE_RESULT_GUIDANCE =
+  "Resume the same directory-listing request by sending only resumeToken with resumeMode='complete-result' to let the server continue the session toward a complete result without bypassing caps.";
 const LIST_DIRECTORY_ENTRIES_INLINE_RESPONSE_OVERHEAD_CHARS = 256;
 const LIST_DIRECTORY_ENTRIES_INLINE_ENTRY_BASE_CHARS = 96;
 const LIST_DIRECTORY_ENTRIES_INLINE_TIMESTAMP_METADATA_CHARS = 96;
 const LIST_DIRECTORY_ENTRIES_INLINE_PERMISSION_METADATA_CHARS = 32;
 const LIST_DIRECTORY_ENTRIES_PREVIEW_TEXT_RESPONSE_OVERHEAD_CHARS = 512;
+
+function buildListDirectoryEntriesScopeReductionGuidance(
+  requestedPaths: string[],
+): string | null {
+  if (requestedPaths.length === 1) {
+    const requestedPath = requestedPaths[0];
+
+    return requestedPath === undefined ? null : buildTraversalNarrowingGuidance(requestedPath);
+  }
+
+  return "Reduce the listing scope by narrowing roots, choosing a deeper root, or setting recursive = false when a shallow listing is sufficient.";
+}
 
 function formatListDirectoryEntriesChunkPayload(
   result: ListDirectoryEntriesResult,
@@ -150,11 +172,11 @@ function formatListDirectoryEntriesChunkPayload(
 function formatListDirectoryEntriesTextOutput(
   result: ListDirectoryEntriesResult,
 ): string {
-  const hasResumableContinuation =
-    result.continuation.resumable
-    && result.continuation.continuationToken !== null;
+  const hasResumableResume =
+    result.resume.resumable
+    && result.resume.resumeToken !== null;
 
-  if (result.admission.outcome !== INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
+  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE) {
     return encode(result);
   }
 
@@ -164,10 +186,12 @@ function formatListDirectoryEntriesTextOutput(
   );
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
   const previewSummary =
-    `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.`;
+    result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+      ? `Directory listing completion progress is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.`
+      : `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.`;
   const previewChunkPayload = formatListDirectoryEntriesChunkPayload(result);
 
-  if (!hasResumableContinuation) {
+  if (!hasResumableResume) {
     return [
       previewSummary,
       "Final bounded directory-entry payload:",
@@ -175,9 +199,9 @@ function formatListDirectoryEntriesTextOutput(
     ].join("\n");
   }
 
-  const activeContinuationToken = result.continuation.continuationToken;
+  const activeResumeToken = result.resume.resumeToken;
 
-  if (activeContinuationToken === null) {
+  if (activeResumeToken === null) {
     return [
       previewSummary,
       "Bounded directory-entry payload:",
@@ -189,8 +213,10 @@ function formatListDirectoryEntriesTextOutput(
     previewSummary,
     "Bounded directory-entry payload:",
     previewChunkPayload,
-    `Active continuationToken: ${activeContinuationToken}`,
-    result.admission.guidanceText ?? LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE,
+    `Active resumeToken: ${activeResumeToken}`,
+    `Supported resume modes: ${result.resume.supportedResumeModes.join(", ")}`,
+    result.admission.guidanceText ?? LIST_DIRECTORY_ENTRIES_NEXT_CHUNK_GUIDANCE,
+    result.admission.scopeReductionGuidanceText ?? "",
   ].join("\n");
 }
 
@@ -253,7 +279,7 @@ function normalizeRelativePath(relativePath: string): string {
 function cloneListDirectoryEntriesTraversalFrames(
   traversalFrames: ListDirectoryEntriesTraversalFrame[],
 ): ListDirectoryEntriesTraversalFrame[] {
-  return traversalFrames.map((traversalFrame) => ({ ...traversalFrame }));
+  return cloneInspectionResumeTraversalFrames(traversalFrames);
 }
 
 function createInitialListDirectoryEntriesTraversalFrames(): ListDirectoryEntriesTraversalFrame[] {
@@ -282,17 +308,18 @@ async function createListedDirectoryEntry(
 }
 
 function resolveListDirectoryEntriesExecutionContext(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   requestedPaths: string[],
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection,
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   now: Date,
 ): ListDirectoryEntriesExecutionContext {
-  if (continuationToken === undefined) {
+  if (resumeToken === undefined) {
     return {
       requestPayload: {
         requestedPaths,
@@ -303,106 +330,131 @@ function resolveListDirectoryEntriesExecutionContext(
         respectGitIgnore,
       },
       continuationState: null,
-      activeContinuationToken: null,
-      activeContinuationExpiresAt: null,
+      activeResumeToken: null,
+      activeResumeExpiresAt: null,
+      requestedResumeMode: null,
     };
   }
 
-  if (inspectionContinuationStore === undefined) {
-    throw new Error("Continuation storage is unavailable for list_directory_entries resume requests.");
+  if (inspectionResumeSessionStore === undefined) {
+    throw new Error("Resume-session storage is unavailable for list_directory_entries resume requests.");
   }
 
-  const continuationSession = inspectionContinuationStore.loadActiveSession<
+  const resumeSession = inspectionResumeSessionStore.loadActiveSession<
     ListDirectoryEntriesRequestPayload,
     ListDirectoryEntriesContinuationState
   >(
-    continuationToken,
+    resumeToken,
     LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
     LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
     now,
   );
 
-  if (continuationSession === null) {
-    throw new Error(getContinuationNotFoundMessage(LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER));
+  if (resumeSession === null) {
+    throw new Error(getResumeSessionNotFoundMessage(LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER));
   }
 
   return {
-    requestPayload: continuationSession.requestPayload,
-    continuationState: continuationSession.continuationState,
-    activeContinuationToken: continuationSession.continuationToken,
-    activeContinuationExpiresAt: continuationSession.expiresAt,
+    requestPayload: resumeSession.requestPayload,
+    continuationState: resumeSession.resumeState,
+    activeResumeToken: resumeSession.resumeToken,
+    activeResumeExpiresAt: resumeSession.expiresAt,
+    requestedResumeMode: resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK,
   };
 }
 
-function buildListDirectoryEntriesContinuationEnvelope(
-  continuationToken: string | null,
-  continuationExpiresAt: string | null,
+function buildListDirectoryEntriesResumeEnvelope(
+  resumeToken: string | null,
+  resumeExpiresAt: string | null,
+  resumeMode: InspectionResumeMode | null,
   nextContinuationState: ListDirectoryEntriesContinuationState | null,
-  inspectionContinuationStore: InspectionContinuationSqliteStore | undefined,
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   requestPayload: ListDirectoryEntriesRequestPayload,
   rootResults: ListDirectoryEntriesRootExecutionResult[],
   now: Date,
-): Pick<ListDirectoryEntriesResult, "admission" | "continuation"> {
+): Pick<ListDirectoryEntriesResult, "admission" | "resume"> {
   const previewFirstActive = rootResults.some(
     (rootResult) =>
       rootResult.admissionOutcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST,
   );
 
   if (!previewFirstActive) {
-    return createInlineContinuationEnvelope();
+    return createInlineResumeEnvelope();
   }
 
+  const effectiveResumeMode = resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK;
+  const guidanceText = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
+    ? LIST_DIRECTORY_ENTRIES_COMPLETE_RESULT_GUIDANCE
+    : LIST_DIRECTORY_ENTRIES_NEXT_CHUNK_GUIDANCE;
+  const scopeReductionGuidanceText = buildListDirectoryEntriesScopeReductionGuidance(
+    requestPayload.requestedPaths,
+  );
+  const admissionOutcome = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
+    ? INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+    : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
+
   if (nextContinuationState === null) {
-    if (continuationToken !== null && inspectionContinuationStore !== undefined) {
-      inspectionContinuationStore.markSessionCompleted(continuationToken, now);
+    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
     }
 
-    return createContinuationEnvelope(
-      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    return createResumeEnvelope(
+      admissionOutcome,
       null,
+      scopeReductionGuidanceText,
       null,
     );
   }
 
-  if (inspectionContinuationStore === undefined) {
-    throw new Error("Continuation storage is unavailable for preview-first directory listing.");
+  if (inspectionResumeSessionStore === undefined) {
+    throw new Error("Resume-session storage is unavailable for directory-listing resume.");
   }
 
-  if (continuationToken === null) {
-    const continuationSession = inspectionContinuationStore.createSession(
+  if (resumeToken === null) {
+    const resumeSession = inspectionResumeSessionStore.createSession(
       {
         endpointName: LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
         familyMember: LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
         requestPayload,
-        continuationState: nextContinuationState,
-        admissionOutcome: INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+        resumeState: nextContinuationState,
+        admissionOutcome,
+        lastRequestedResumeMode: resumeMode,
       },
       now,
     );
 
-    return createPersistedContinuationEnvelope(
-      LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
-      continuationSession.continuationToken,
-      continuationSession.status,
-      continuationSession.expiresAt,
-      LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE,
-      INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    return createPersistedResumeEnvelope(
+      resumeSession.resumeToken,
+      resumeSession.status,
+      resumeSession.expiresAt,
+      INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      guidanceText,
+      scopeReductionGuidanceText,
+      admissionOutcome,
     );
   }
 
-  if (continuationExpiresAt === null) {
-    throw new Error("Active directory-listing continuation session is missing an expiration timestamp.");
+  if (resumeExpiresAt === null) {
+    throw new Error("Active directory-listing resume session is missing an expiration timestamp.");
   }
 
-  inspectionContinuationStore.updateContinuationState(continuationToken, nextContinuationState, now);
+  inspectionResumeSessionStore.updateResumeState(
+    resumeToken,
+    nextContinuationState,
+    now,
+    effectiveResumeMode,
+  );
 
-  return createPersistedContinuationEnvelope(
-    LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
-    continuationToken,
-    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
-    continuationExpiresAt,
-    LIST_DIRECTORY_ENTRIES_CONTINUATION_GUIDANCE,
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+  return createPersistedResumeEnvelope(
+    resumeToken,
+    INSPECTION_RESUME_STATUSES.ACTIVE,
+    resumeExpiresAt,
+    INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
+    effectiveResumeMode,
+    guidanceText,
+    scopeReductionGuidanceText,
+    admissionOutcome,
   );
 }
 
@@ -500,22 +552,29 @@ async function collectDirectoryEntriesPreviewChunk(
         break;
       }
 
-      currentTraversalFrame.nextEntryIndex += 1;
-
       const entryAbsolutePath = path.join(currentPath, entry.name);
       const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
         ? entry.name
         : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
       const relativePath = normalizeRelativePath(rawRelativePath);
+      const shouldTraverseExcludedDirectory =
+        recursive
+        && entry.isDirectory()
+        && shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
+
+      if (
+        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
+        && !shouldTraverseExcludedDirectory
+      ) {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
+        continue;
+      }
+
       const estimatedEntryResponseChars = estimateListDirectoryEntryInlineResponseChars(
         relativePath,
         entry.name,
         metadataSelection,
       );
-      const shouldTraverseExcludedDirectory =
-        recursive
-        && entry.isDirectory()
-        && shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
 
       if (
         listedEntries.length > 0
@@ -540,6 +599,7 @@ async function collectDirectoryEntriesPreviewChunk(
       );
       listedEntries.push(listedEntry);
       estimatedResponseChars += estimatedEntryResponseChars;
+      commitInspectionResumeTraversalEntry(currentTraversalFrame);
 
       if (recursive && entry.isDirectory()) {
         traversalFrames.push({
@@ -653,6 +713,7 @@ async function buildListedDirectoryRoot(
   allowedDirectories: string[],
   batchRootCount: number,
   continuationState: ListDirectoryEntriesRootContinuationState | null = null,
+  requestedResumeMode: InspectionResumeMode | null = null,
 ): Promise<ListDirectoryEntriesRootExecutionResult> {
   const traversalPreflightContext = await resolveTraversalPreflightContext(
     LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
@@ -719,7 +780,7 @@ async function buildListedDirectoryRoot(
     traversalAdmissionDecision.outcome
     === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED
     || traversalAdmissionDecision.outcome
-    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
   ) {
     throw new Error(
       traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(requestedPath),
@@ -735,6 +796,25 @@ async function buildListedDirectoryRoot(
   };
 
   if (traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
+    if (requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT) {
+      const fullEntries = await collectDirectoryEntries(
+        traversalPreflightContext.rootEntry.validPath,
+        "",
+        recursive,
+        metadataSelection,
+        traversalPreflightContext.traversalScopePolicyResolution,
+        traversalRuntimeBudgetState,
+        traversalNarrowingGuidance,
+      );
+
+      return {
+        requestedPath,
+        entries: fullEntries,
+        admissionOutcome: traversalAdmissionDecision.outcome,
+        nextContinuationState: null,
+      };
+    }
+
     const previewChunk = await collectDirectoryEntriesPreviewChunk(
       traversalPreflightContext.rootEntry.validPath,
       recursive,
@@ -772,7 +852,8 @@ async function buildListedDirectoryRoot(
 }
 
 export async function getListDirectoryEntriesResult(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   requestedPaths: string[],
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
@@ -780,18 +861,19 @@ export async function getListDirectoryEntriesResult(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   allowedDirectories: string[],
-  inspectionContinuationStore?: InspectionContinuationSqliteStore,
+  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
 ): Promise<ListDirectoryEntriesResult> {
   const now = new Date();
   const executionContext = resolveListDirectoryEntriesExecutionContext(
-    continuationToken,
+    resumeToken,
+    resumeMode,
     requestedPaths,
     recursive,
     metadataSelection,
     excludePatterns,
     includeExcludedGlobs,
     respectGitIgnore,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
     now,
   );
   const activeRequestedPaths = executionContext.continuationState === null
@@ -802,13 +884,13 @@ export async function getListDirectoryEntriesResult(
       );
 
   if (activeRequestedPaths.length === 0) {
-    if (executionContext.activeContinuationToken !== null && inspectionContinuationStore !== undefined) {
-      inspectionContinuationStore.markSessionCompleted(executionContext.activeContinuationToken, now);
+    if (executionContext.activeResumeToken !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeToken, now);
     }
 
     return {
       roots: [],
-      ...createInlineContinuationEnvelope(),
+      ...createInlineResumeEnvelope(),
     };
   }
 
@@ -824,6 +906,7 @@ export async function getListDirectoryEntriesResult(
         allowedDirectories,
         activeRequestedPaths.length,
         executionContext.continuationState?.rootTraversalStates[requestedPath] ?? null,
+        executionContext.requestedResumeMode,
       ),
     ),
   );
@@ -842,11 +925,12 @@ export async function getListDirectoryEntriesResult(
     },
     null,
   );
-  const continuationEnvelope = buildListDirectoryEntriesContinuationEnvelope(
-    executionContext.activeContinuationToken,
-    executionContext.activeContinuationExpiresAt,
+  const continuationEnvelope = buildListDirectoryEntriesResumeEnvelope(
+    executionContext.activeResumeToken,
+    executionContext.activeResumeExpiresAt,
+    executionContext.requestedResumeMode,
     nextContinuationState,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
     executionContext.requestPayload,
     roots,
     now,
@@ -862,7 +946,8 @@ export async function getListDirectoryEntriesResult(
 }
 
 export async function handleListDirectoryEntries(
-  continuationToken: string | undefined,
+  resumeToken: string | undefined,
+  resumeMode: InspectionResumeMode | undefined,
   requestedPaths: string[],
   recursive: boolean,
   metadataSelection: FileSystemEntryMetadataSelection = DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
@@ -870,10 +955,11 @@ export async function handleListDirectoryEntries(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   allowedDirectories: string[],
-  inspectionContinuationStore?: InspectionContinuationSqliteStore,
+  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
 ): Promise<string> {
   const result = await getListDirectoryEntriesResult(
-    continuationToken,
+    resumeToken,
+    resumeMode,
     requestedPaths,
     recursive,
     metadataSelection,
@@ -881,7 +967,7 @@ export async function handleListDirectoryEntries(
     includeExcludedGlobs,
     respectGitIgnore,
     allowedDirectories,
-    inspectionContinuationStore,
+    inspectionResumeSessionStore,
   );
 
   const output = formatListDirectoryEntriesTextOutput(result);

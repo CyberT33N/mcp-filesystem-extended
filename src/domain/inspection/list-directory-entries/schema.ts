@@ -11,29 +11,43 @@ import {
   PATH_MAX_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
-  INSPECTION_CONTINUATION_ADMISSION_OUTCOMES,
-  INSPECTION_CONTINUATION_STATUSES,
-  INSPECTION_CONTINUATION_TOKEN_FIELD,
-} from "@domain/shared/continuation/inspection-continuation-contract";
+  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  INSPECTION_RESUME_MODES,
+  INSPECTION_RESUME_MODE_FIELD,
+  INSPECTION_RESUME_STATUSES,
+  INSPECTION_RESUME_TOKEN_FIELD,
+} from "@domain/shared/resume/inspection-resume-contract";
 
-const InspectionContinuationAdmissionSchema = z.object({
+const InspectionResumeAdmissionSchema = z.object({
   outcome: z.enum([
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.INLINE,
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
-    INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.NARROWING_REQUIRED,
   ]),
   guidanceText: z.string().nullable(),
-  resumable: z.boolean(),
+  scopeReductionGuidanceText: z.string().nullable(),
 });
 
-const InspectionContinuationMetadataSchema = z.object({
-  continuationToken: z.string().nullable(),
-  familyMember: z.string().nullable(),
+const InspectionResumeMetadataSchema = z.object({
+  resumeToken: z.string().nullable(),
+  supportedResumeModes: z.array(
+    z.enum([
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+    ]),
+  ),
+  recommendedResumeMode: z
+    .enum([
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+    ])
+    .nullable(),
   status: z.enum([
-    INSPECTION_CONTINUATION_STATUSES.ACTIVE,
-    INSPECTION_CONTINUATION_STATUSES.CANCELLED,
-    INSPECTION_CONTINUATION_STATUSES.COMPLETED,
-    INSPECTION_CONTINUATION_STATUSES.EXPIRED,
+    INSPECTION_RESUME_STATUSES.ACTIVE,
+    INSPECTION_RESUME_STATUSES.CANCELLED,
+    INSPECTION_RESUME_STATUSES.COMPLETED,
+    INSPECTION_RESUME_STATUSES.EXPIRED,
   ]).nullable(),
   resumable: z.boolean(),
   expiresAt: z.string().nullable(),
@@ -43,12 +57,21 @@ const InspectionContinuationMetadataSchema = z.object({
  * Input schema for the `list_directory_entries` tool.
  */
 export const ListDirectoryEntriesArgsSchema = z.object({
-  [INSPECTION_CONTINUATION_TOKEN_FIELD]: z
+  [INSPECTION_RESUME_TOKEN_FIELD]: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "Opaque continuation token returned by a prior same-endpoint directory-listing response. Continuation-only requests reload the persisted request context and must omit new query-defining fields."
+      "Opaque resume token returned by a prior same-endpoint directory-listing response. Resume-only requests reload the persisted request context and must omit new query-defining fields."
+    ),
+  [INSPECTION_RESUME_MODE_FIELD]: z
+    .enum([
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+    ])
+    .optional()
+    .describe(
+      "Resume intent for a persisted same-endpoint directory-listing session. Resume-only requests must provide either `next-chunk` or `complete-result`."
     ),
   /**
    * Listing roots.
@@ -70,7 +93,7 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Paths to directories to list. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single listing root or multiple paths for batch listing roots; continuation-only requests omit this field and reload the persisted request context."
+      "Paths to directories to list. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single listing root or multiple paths for batch listing roots; resume-only requests omit this field and reload the persisted request context."
     ),
   /**
    * Recursive traversal mode.
@@ -177,7 +200,7 @@ export const ListDirectoryEntriesArgsSchema = z.object({
       "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this listing request without broadening the full root scope."
     ),
 }).superRefine((args, ctx) => {
-  const continuationRequest = args.continuationToken !== undefined;
+  const resumeRequest = args.resumeToken !== undefined;
   const hasQueryDefiningFields =
     args.roots.length > 0
     || args.recursive
@@ -185,7 +208,7 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     || args.respectGitIgnore
     || args.includeExcludedGlobs.length > 0;
 
-  if (!continuationRequest && args.roots.length === 0) {
+  if (!resumeRequest && args.roots.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Base requests must provide at least one directory root.",
@@ -193,12 +216,28 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     });
   }
 
-  if (continuationRequest && hasQueryDefiningFields) {
+  if (!resumeRequest && args.resumeMode !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must not provide a resume mode without a resume token.",
+      path: [INSPECTION_RESUME_MODE_FIELD],
+    });
+  }
+
+  if (resumeRequest && args.resumeMode === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Resume-only requests must provide a resumeMode.",
+      path: [INSPECTION_RESUME_MODE_FIELD],
+    });
+  }
+
+  if (resumeRequest && hasQueryDefiningFields) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message:
-        "Continuation-only requests must omit new query-defining fields and rely on the persisted request context.",
-      path: [INSPECTION_CONTINUATION_TOKEN_FIELD],
+        "Resume-only requests must omit new query-defining fields and rely on the persisted request context.",
+      path: [INSPECTION_RESUME_TOKEN_FIELD],
     });
   }
 });
@@ -351,6 +390,6 @@ export const ListDirectoryEntriesStructuredResultSchema: z.ZodType<ListDirectory
         entries: z.array(ListedDirectoryEntryOutputSchema),
       }),
     ),
-    admission: InspectionContinuationAdmissionSchema,
-    continuation: InspectionContinuationMetadataSchema,
+    admission: InspectionResumeAdmissionSchema,
+    resume: InspectionResumeMetadataSchema,
   });

@@ -23,6 +23,10 @@ import {
   shouldTraverseTraversalScopeDirectoryPath,
 } from "@domain/shared/guardrails/traversal-scope-policy";
 import {
+  cloneInspectionResumeTraversalFrames,
+  commitInspectionResumeTraversalEntry,
+} from "@domain/shared/resume/inspection-resume-frontier";
+import {
   resolveTraversalPreviewLanePlan,
   shouldStopTraversalPreviewLane,
 } from "@domain/shared/guardrails/traversal-preview-lane";
@@ -67,7 +71,7 @@ export interface SearchFixedStringRootContinuationState {
 function cloneSearchFixedStringTraversalFrames(
   traversalFrames: SearchFixedStringTraversalFrame[],
 ): SearchFixedStringTraversalFrame[] {
-  return traversalFrames.map((traversalFrame) => ({ ...traversalFrame }));
+  return cloneInspectionResumeTraversalFrames(traversalFrames);
 }
 
 function createInitialSearchFixedStringTraversalFrames(): SearchFixedStringTraversalFrame[] {
@@ -132,6 +136,7 @@ export async function getSearchFixedStringPathResult(
   aggregateBudgetState: FixedStringSearchAggregateBudgetState = createFixedStringSearchAggregateBudgetState(),
   batchRootCount: number = 1,
   continuationState: SearchFixedStringRootContinuationState | null = null,
+  requestedResumeMode: import("@domain/shared/resume/inspection-resume-contract").InspectionResumeMode | null = null,
 ): Promise<SearchFixedStringPathResult & {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
   nextContinuationState: SearchFixedStringRootContinuationState | null;
@@ -202,6 +207,9 @@ export async function getSearchFixedStringPathResult(
       ),
     )
     : effectiveMaxResults;
+  const completeResultRequested =
+    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
+    && requestedResumeMode === "complete-result";
   const previewLanePlan = resolveTraversalPreviewLanePlan(
     searchPath,
     SEARCH_FIXED_STRING_TOOL_NAME,
@@ -214,7 +222,7 @@ export async function getSearchFixedStringPathResult(
     traversalAdmissionDecision.outcome
     === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED
     || traversalAdmissionDecision.outcome
-    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED
+    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
   ) {
     return {
       root: searchPath,
@@ -428,8 +436,6 @@ export async function getSearchFixedStringPathResult(
         break;
       }
 
-      currentTraversalFrame.nextEntryIndex += 1;
-
       const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
         ? entry.name
         : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
@@ -444,6 +450,7 @@ export async function getSearchFixedStringPathResult(
         shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
         && !shouldTraverseExcludedDirectory
       ) {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
 
@@ -453,10 +460,12 @@ export async function getSearchFixedStringPathResult(
       try {
         candidateEntry = await getValidatedPreflightEntry(fullPath, allowedDirectories);
       } catch {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
 
       if (candidateEntry.type === "directory") {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         traversalFrames.push({
           directoryRelativePath: rawRelativePath,
           nextEntryIndex: 0,
@@ -466,6 +475,7 @@ export async function getSearchFixedStringPathResult(
       }
 
       if (candidateEntry.type !== "file") {
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
 
@@ -511,8 +521,11 @@ export async function getSearchFixedStringPathResult(
         searchAborted = true;
         activeFileRelativePath = relativePath;
         activeFileMatchOffset = fileSearchResult.matches.length;
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
         break;
       }
+
+      commitInspectionResumeTraversalEntry(currentTraversalFrame);
     }
 
     if (!descendedIntoChildDirectory && currentTraversalFrame.nextEntryIndex >= entries.length) {
@@ -521,6 +534,7 @@ export async function getSearchFixedStringPathResult(
   }
 
   const nextContinuationState = previewFirstAdmissionActive
+    && !completeResultRequested
     && (traversalFrames.length > 0 || activeFileRelativePath !== null)
       ? {
           traversalFrames: cloneSearchFixedStringTraversalFrames(traversalFrames),

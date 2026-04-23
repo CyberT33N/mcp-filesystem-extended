@@ -13,7 +13,7 @@ import { type SearchExecutionPolicy } from "@domain/shared/search/search-executi
 export const TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES = {
   INLINE: "inline",
   PREVIEW_FIRST: "preview-first",
-  TASK_BACKED_REQUIRED: "task-backed-required",
+  COMPLETION_BACKED_REQUIRED: "completion-backed-required",
   NARROWING_REQUIRED: "narrowing-required",
 } as const;
 
@@ -265,7 +265,7 @@ function buildTaskBackedRequiredGuidance(
   requestedRoot: string,
   toolName: string,
 ): string {
-  return `Broad recursive traversal for root '${requestedRoot}' exceeds the inline and preview-first admission bands for ${toolName}. A real task-backed execution lane is required before traversal begins.`;
+  return `Broad recursive traversal for root '${requestedRoot}' exceeds the inline and preview-first admission bands for ${toolName}. A real completion-backed execution lane is required before traversal begins.`;
 }
 
 function buildNarrowingRequiredGuidance(
@@ -317,7 +317,7 @@ export function resolveTraversalWorkloadAdmissionDecision(
 
     if (inlineResponseTextBudgetExceeded && input.consumerCapabilities.taskBackedExecutionSupported) {
       return {
-        outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+        outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
         guidanceText: buildTaskBackedRequiredGuidance(
           input.requestedRoot,
           input.consumerCapabilities.toolName,
@@ -374,7 +374,7 @@ export function resolveTraversalWorkloadAdmissionDecision(
 
   if (input.consumerCapabilities.taskBackedExecutionSupported) {
     return {
-      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.TASK_BACKED_REQUIRED,
+      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
       guidanceText: buildTaskBackedRequiredGuidance(
         input.requestedRoot,
         input.consumerCapabilities.toolName,
