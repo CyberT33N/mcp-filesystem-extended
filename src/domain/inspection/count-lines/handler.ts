@@ -264,10 +264,6 @@ function buildCountLinesContinuationEnvelope(
   }
 
   if (nextContinuationState === null) {
-    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
-    }
-
     return createResumeEnvelope(
       INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
       COUNT_LINES_CONTINUATION_GUIDANCE,
@@ -666,7 +662,13 @@ export async function handleCountLines(
     allowedDirectories,
   );
 
-  return formatCountLinesResultOutput(structuredResult, pattern);
+  const output = formatCountLinesResultOutput(structuredResult, pattern);
+
+  if (resumeToken !== undefined && !structuredResult.resume.resumable && structuredResult.resume.resumeToken === null) {
+    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+  }
+
+  return output;
 }
 
 /**

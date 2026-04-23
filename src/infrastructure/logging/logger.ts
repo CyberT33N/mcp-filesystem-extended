@@ -16,6 +16,23 @@ try {
 
 const logFilePath = path.join(logsDir, "log.txt");
 
+/**
+ * Truncates the active log file at startup so each server process begins with a clean log surface.
+ *
+ * @remarks
+ * Called once at server startup before the Pino destination is opened. Errors are silently swallowed
+ * so a non-writable log path never blocks the server from starting.
+ */
+function truncateLogFileOnStartup(): void {
+  try {
+    fs.writeFileSync(logFilePath, "", { flag: "w" });
+  } catch {
+    // Silently ignore — log rotation failure must never block server startup.
+  }
+}
+
+truncateLogFileOnStartup();
+
 const destination = (() => {
   try {
     return pino.destination({ dest: logFilePath, sync: false });

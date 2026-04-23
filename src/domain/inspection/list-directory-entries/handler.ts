@@ -53,6 +53,7 @@ import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execu
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
+import { createModuleLogger } from "@infrastructure/logging/logger";
 
 /**
  * Structured directory entry returned by the `list_directory_entries` tool.
@@ -139,6 +140,7 @@ interface ListDirectoryEntriesRootExecutionResult extends ListedDirectoryRoot {
 }
 
 const LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER = "list_directory_entries";
+const logger = createModuleLogger(LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER);
 const LIST_DIRECTORY_ENTRIES_NEXT_CHUNK_GUIDANCE =
   "Resume the same directory-listing request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of entries.";
 const LIST_DIRECTORY_ENTRIES_COMPLETE_RESULT_GUIDANCE =
@@ -320,6 +322,10 @@ function resolveListDirectoryEntriesExecutionContext(
   now: Date,
 ): ListDirectoryEntriesExecutionContext {
   if (resumeToken === undefined) {
+    logger.info(
+      { requestedPaths, recursive, resumeMode },
+      "list_directory_entries base request — no resume token present",
+    );
     return {
       requestPayload: {
         requestedPaths,
@@ -336,7 +342,16 @@ function resolveListDirectoryEntriesExecutionContext(
     };
   }
 
+  logger.info(
+    { resumeToken, resumeMode },
+    "list_directory_entries resume request — attempting session lookup",
+  );
+
   if (inspectionResumeSessionStore === undefined) {
+    logger.error(
+      { resumeToken, resumeMode },
+      "Resume-session storage is unavailable for list_directory_entries resume requests",
+    );
     throw new Error("Resume-session storage is unavailable for list_directory_entries resume requests.");
   }
 
@@ -351,8 +366,24 @@ function resolveListDirectoryEntriesExecutionContext(
   );
 
   if (resumeSession === null) {
+    logger.error(
+      { resumeToken, resumeMode, familyMember: LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER },
+      "list_directory_entries resume session not found — token does not resolve to an active server-owned session",
+    );
     throw new Error(getResumeSessionNotFoundMessage(LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER));
   }
+
+  logger.info(
+    {
+      resumeToken,
+      resumeMode,
+      resolvedResumeMode: resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      sessionStatus: resumeSession.status,
+      sessionExpiresAt: resumeSession.expiresAt,
+      sessionAdmissionOutcome: resumeSession.admissionOutcome,
+    },
+    "list_directory_entries resume session resolved — continuing with persisted request payload",
+  );
 
   return {
     requestPayload: resumeSession.requestPayload,
@@ -394,10 +425,6 @@ function buildListDirectoryEntriesResumeEnvelope(
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
 
   if (nextContinuationState === null) {
-    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
-    }
-
     return createResumeEnvelope(
       admissionOutcome,
       null,
@@ -978,6 +1005,10 @@ export async function handleListDirectoryEntries(
     DISCOVERY_RESPONSE_CAP_CHARS,
     "directory-listing text output",
   );
+
+  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
+    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+  }
 
   return output;
 }

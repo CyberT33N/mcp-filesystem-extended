@@ -153,10 +153,6 @@ function buildSearchFixedStringContinuationEnvelope(
   }
 
   if (nextContinuationState === null) {
-    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
-    }
-
     return createResumeEnvelope(
       admissionOutcome,
       guidanceText,
@@ -279,7 +275,7 @@ export async function handleSearchFixedString(
   );
   const effectiveFixedString = executionContext.requestPayload.fixedString;
 
-  return assertFormattedFixedStringResponseBudget(
+  const output = assertFormattedFixedStringResponseBudget(
     SEARCH_FIXED_STRING_TOOL_NAME,
     formatSearchFixedStringContinuationAwareTextOutput(
       structuredResult,
@@ -287,6 +283,12 @@ export async function handleSearchFixedString(
       effectiveMaxResults,
     ),
   );
+
+  if (resumeToken !== undefined && !structuredResult.resume.resumable && structuredResult.resume.resumeToken === null) {
+    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+  }
+
+  return output;
 }
 
 /**

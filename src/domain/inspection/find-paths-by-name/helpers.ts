@@ -189,10 +189,6 @@ function buildFindPathsByNameResumeEnvelope(
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
 
   if (nextContinuationState === null) {
-    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
-    }
-
     return createResumeEnvelope(
       admissionOutcome,
       null,

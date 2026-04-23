@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { createModuleLogger } from "@infrastructure/logging/logger";
 import {
   INSPECTION_RESUME_STATUSES,
   type InspectionResumeMode,
@@ -16,6 +17,8 @@ const ACTIVE_TTL_DAYS = 30;
 const TERMINAL_RETENTION_DAYS = 7;
 const DATABASE_FILE_NAME = "inspection-resume-sessions.sqlite";
 const TABLE_NAME = "inspection_resume_sessions";
+
+const logger = createModuleLogger("inspection-resume-session-sqlite-store");
 
 interface InspectionResumeRow {
   resume_token: string;
@@ -153,6 +156,18 @@ export class InspectionResumeSessionSqliteStore {
       expiresAt,
     );
 
+    logger.info(
+      {
+        resumeToken,
+        endpointName: seed.endpointName,
+        familyMember: seed.familyMember,
+        admissionOutcome: seed.admissionOutcome,
+        expiresAt,
+        databasePath: this.databasePath,
+      },
+      "Resume session created",
+    );
+
     return {
       resumeToken,
       endpointName: seed.endpointName,
@@ -176,6 +191,8 @@ export class InspectionResumeSessionSqliteStore {
   ): InspectionResumeSessionRecord<TRequest, TState> | null {
     this.cleanupExpiredSessions(now);
 
+    logger.info({ resumeToken, endpointName, familyMember, databasePath: this.databasePath }, "Resume session lookup requested");
+
     const statement = this.database.prepare(
       `SELECT * FROM ${TABLE_NAME}
        WHERE resume_token = ? AND endpoint_name = ? AND family_member = ?`,
@@ -187,19 +204,35 @@ export class InspectionResumeSessionSqliteStore {
     ) as InspectionResumeRow | undefined;
 
     if (row === undefined) {
+      logger.warn(
+        { resumeToken, endpointName, familyMember, databasePath: this.databasePath },
+        "Resume session not found in database — token may originate from a different server process or database file",
+      );
       return null;
     }
 
     if (row.status !== INSPECTION_RESUME_STATUSES.ACTIVE) {
+      logger.warn(
+        { resumeToken, endpointName, familyMember, status: row.status, databasePath: this.databasePath },
+        "Resume session found but status is not active — session may have been completed, cancelled, or expired in a prior call",
+      );
       return null;
     }
 
     if (Date.parse(row.expires_at) <= now.getTime()) {
+      logger.warn(
+        { resumeToken, endpointName, familyMember, expiresAt: row.expires_at, databasePath: this.databasePath },
+        "Resume session found but has expired — marking as expired and returning null",
+      );
       this.updateStatus(resumeToken, INSPECTION_RESUME_STATUSES.EXPIRED, now);
 
       return null;
     }
 
+    logger.info(
+      { resumeToken, endpointName, familyMember, status: row.status, expiresAt: row.expires_at, databasePath: this.databasePath },
+      "Resume session found and active — refreshing access timestamp",
+    );
     this.touchActiveSession(resumeToken, now);
 
     const refreshedRow = statement.get(
@@ -246,6 +279,8 @@ export class InspectionResumeSessionSqliteStore {
        WHERE resume_token = ? AND status = ?`,
     );
 
+    logger.info({ resumeToken, lastRequestedResumeMode }, "Resume session state updated with new traversal progress");
+
     statement.run(
       JSON.stringify(resumeState),
       lastRequestedResumeMode,
@@ -257,10 +292,12 @@ export class InspectionResumeSessionSqliteStore {
   }
 
   markSessionCompleted(resumeToken: string, now = new Date()): void {
+    logger.info({ resumeToken }, "Resume session marked as completed");
     this.updateStatus(resumeToken, INSPECTION_RESUME_STATUSES.COMPLETED, now);
   }
 
   markSessionCancelled(resumeToken: string, now = new Date()): void {
+    logger.info({ resumeToken }, "Resume session marked as cancelled");
     this.updateStatus(resumeToken, INSPECTION_RESUME_STATUSES.CANCELLED, now);
   }
 

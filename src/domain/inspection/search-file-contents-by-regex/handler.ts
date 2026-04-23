@@ -184,10 +184,6 @@ function buildSearchRegexContinuationEnvelope(
   }
 
   if (nextContinuationState === null) {
-    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
-    }
-
     return createResumeEnvelope(
       admissionOutcome,
       guidanceText,
@@ -316,7 +312,7 @@ export async function handleSearchRegex(
   );
   const effectivePattern = executionContext.requestPayload.pattern;
 
-  return assertFormattedRegexResponseBudget(
+  const output = assertFormattedRegexResponseBudget(
     SEARCH_REGEX_TOOL_NAME,
     formatSearchRegexContinuationAwareTextOutput(
       structuredResult,
@@ -324,6 +320,12 @@ export async function handleSearchRegex(
       effectiveMaxResults,
     ),
   );
+
+  if (resumeToken !== undefined && !structuredResult.resume.resumable && structuredResult.resume.resumeToken === null) {
+    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+  }
+
+  return output;
 }
 
 /**

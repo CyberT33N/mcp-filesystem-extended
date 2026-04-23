@@ -239,10 +239,6 @@ function buildFindPathsByNameResumeEnvelope(
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
 
   if (nextContinuationState === null) {
-    if (resumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(resumeToken, now);
-    }
-
     return createResumeEnvelope(
       admissionOutcome,
       null,
@@ -532,6 +528,10 @@ export async function handleSearchFiles(
     DISCOVERY_RESPONSE_CAP_CHARS,
     "name-discovery text output",
   );
+
+  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
+    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+  }
 
   return output;
 }
