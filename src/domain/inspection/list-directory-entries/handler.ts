@@ -23,7 +23,13 @@ import {
   shouldTraverseTraversalScopeDirectoryPath,
   type TraversalScopePolicyResolution,
 } from "@domain/shared/guardrails/traversal-scope-policy";
-import { DISCOVERY_RESPONSE_CAP_CHARS, GLOBAL_RESPONSE_HARD_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  DISCOVERY_RESPONSE_CAP_CHARS,
+  GLOBAL_RESPONSE_HARD_CAP_CHARS,
+  TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
+  TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
+  TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
   DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
@@ -831,21 +837,33 @@ async function buildListedDirectoryRoot(
 
   if (traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST) {
     if (requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT) {
-      const fullEntries = await collectDirectoryEntries(
+      // Continue from the persisted frontier position, not from the root.
+      // Using collectDirectoryEntriesPreviewChunk with the continuationState ensures the
+      // response is additive — it delivers only the entries not yet seen in the preview chunk.
+      // The deep emergency runtime budget applies here instead of the bounded preview budget.
+      const completeResultRuntimeBudgetLimits = {
+        maxVisitedEntries: TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
+        maxVisitedDirectories: TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
+        softTimeBudgetMs: TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
+      };
+
+      const continuationChunk = await collectDirectoryEntriesPreviewChunk(
         traversalPreflightContext.rootEntry.validPath,
-        "",
         recursive,
         metadataSelection,
         traversalPreflightContext.traversalScopePolicyResolution,
         traversalRuntimeBudgetState,
         traversalNarrowingGuidance,
+        completeResultRuntimeBudgetLimits,
+        GLOBAL_RESPONSE_HARD_CAP_CHARS,
+        continuationState,
       );
 
       return {
         requestedPath,
-        entries: fullEntries,
+        entries: continuationChunk.entries,
         admissionOutcome: traversalAdmissionDecision.outcome,
-        nextContinuationState: null,
+        nextContinuationState: continuationChunk.nextContinuationState,
       };
     }
 
