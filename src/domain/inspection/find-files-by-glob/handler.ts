@@ -40,7 +40,7 @@ import {
   shouldExcludeTraversalScopePath,
   shouldTraverseTraversalScopeDirectoryPath,
 } from "@domain/shared/guardrails/traversal-scope-policy";
-import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { DISCOVERY_RESPONSE_CAP_CHARS, GLOBAL_RESPONSE_HARD_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
@@ -733,8 +733,14 @@ export async function getFindFilesByGlobResult(
  *
  * @remarks
  * This discovery entrypoint keeps file enumeration broad enough for caller use
- * but still enforces a bounded match ceiling and rejects oversize formatted
- * output through the shared discovery response budget.
+ * but still enforces a bounded match ceiling and applies a mode-aware response cap:
+ *
+ * - In `inline` and `next-chunk` modes the family-specific `DISCOVERY_RESPONSE_CAP_CHARS`
+ *   (150,000 chars) limits text output to protect the caller's context window.
+ * - In `complete-result` mode only the global response fuse (`GLOBAL_RESPONSE_HARD_CAP_CHARS`,
+ *   600,000 chars) applies, because the caller has explicitly contracted for a complete result.
+ *
+ * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the mode-aware cap rule.
  *
  * @param searchPaths - Requested root directories in caller-supplied order.
  * @param pattern - Glob expression applied to relative paths beneath each root.
@@ -743,7 +749,7 @@ export async function getFindFilesByGlobResult(
  * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates.
  * @param maxResults - Maximum number of matches retained per root before truncation.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
- * @returns Human-readable glob-search output bounded by the discovery-family text budget.
+ * @returns Human-readable glob-search output respecting the mode-appropriate response ceiling.
  */
 export async function handleSearchGlob(
   resumeToken: string | undefined,
@@ -789,10 +795,15 @@ export async function handleSearchGlob(
     effectiveMaxResults,
   );
 
+  const isCompleteResultMode = resumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
+  const effectiveResponseCap = isCompleteResultMode
+    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
+    : DISCOVERY_RESPONSE_CAP_CHARS;
+
   assertActualTextBudget(
     "find_files_by_glob",
     output.length,
-    DISCOVERY_RESPONSE_CAP_CHARS,
+    effectiveResponseCap,
     "glob-discovery text output",
   );
 

@@ -23,7 +23,7 @@ import {
   shouldTraverseTraversalScopeDirectoryPath,
   type TraversalScopePolicyResolution,
 } from "@domain/shared/guardrails/traversal-scope-policy";
-import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { DISCOVERY_RESPONSE_CAP_CHARS, GLOBAL_RESPONSE_HARD_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
   DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
@@ -878,6 +878,39 @@ async function buildListedDirectoryRoot(
   };
 }
 
+/**
+ * Returns the structured directory-listing result for one or more requested root paths.
+ *
+ * @remarks
+ * This surface resolves the execution context (base request or resume session), drives
+ * per-root traversal through the admission-aware execution path, and assembles the final
+ * resume envelope. Callers that need machine-readable entry data while keeping the same
+ * validated traversal, frontier-precision, and resume-session rules should use this
+ * function instead of the formatted handler entrypoint.
+ *
+ * Resume-capable delivery operates through a server-owned SQLite session. The `resumeToken`
+ * and `resumeMode` fields select between bounded chunk inspection (`next-chunk`) and
+ * server-owned full completion (`complete-result`). Scope reduction is always a first-class
+ * alternative to resuming.
+ *
+ * @see {@link conventions/resume-architecture/overview.md} for the resume-session model and delivery modes.
+ * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the mode-aware response cap rule.
+ *
+ * @param resumeToken - Opaque server-owned session handle from a prior preview-first or
+ * completion-backed response. Absent on base requests.
+ * @param resumeMode - Delivery intent for resume requests. `'next-chunk'` returns the next
+ * bounded preview chunk; `'complete-result'` asks the server to continue toward a full result.
+ * @param requestedPaths - Root directory paths to list in caller-supplied order.
+ * @param recursive - Whether the listing descends into nested subdirectories.
+ * @param metadataSelection - Which metadata fields to include for each returned entry.
+ * @param excludePatterns - Glob patterns that remove candidate paths from traversal.
+ * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @param inspectionResumeSessionStore - Server-owned SQLite session store for persisting and
+ * loading resume state. Required for any request that may produce or consume a resume token.
+ * @returns Structured listing roots with admission and resume metadata.
+ */
 export async function getListDirectoryEntriesResult(
   resumeToken: string | undefined,
   resumeMode: InspectionResumeMode | undefined,
@@ -972,6 +1005,40 @@ export async function getListDirectoryEntriesResult(
   };
 }
 
+/**
+ * Formats directory-listing results for the caller-visible text response surface.
+ *
+ * @remarks
+ * This entrypoint coordinates execution context resolution, per-root traversal, resume-envelope
+ * assembly, and text formatting. The response cap applied after formatting is mode-aware:
+ *
+ * - In `inline` and `next-chunk` modes the family-specific `DISCOVERY_RESPONSE_CAP_CHARS`
+ *   (150,000 chars) limits text output to protect the caller's context window.
+ * - In `complete-result` mode only the global response fuse (`GLOBAL_RESPONSE_HARD_CAP_CHARS`,
+ *   600,000 chars) applies, because the caller has explicitly contracted for a complete result
+ *   through the resume-session protocol.
+ *
+ * Applying the family cap unconditionally in `complete-result` mode is an architectural
+ * legacy conflict. The mode-aware cap selection here is the correct target state.
+ *
+ * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the full mode-aware cap rule.
+ * @see {@link conventions/guardrails/overview.md} for all guardrail layers and their effective scopes.
+ *
+ * @param resumeToken - Opaque server-owned session handle from a prior preview-first or
+ * completion-backed response. Absent on base requests.
+ * @param resumeMode - Delivery intent for resume requests. `'next-chunk'` returns the next
+ * bounded preview chunk; `'complete-result'` asks the server to continue toward a full result.
+ * @param requestedPaths - Root directory paths to list in caller-supplied order.
+ * @param recursive - Whether the listing descends into nested subdirectories.
+ * @param metadataSelection - Which metadata fields to include for each returned entry.
+ * @param excludePatterns - Glob patterns that remove candidate paths from traversal.
+ * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
+ * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @param inspectionResumeSessionStore - Server-owned SQLite session store for persisting and
+ * loading resume state. Required for any request that may produce or consume a resume token.
+ * @returns Formatted text output respecting the mode-appropriate response ceiling.
+ */
 export async function handleListDirectoryEntries(
   resumeToken: string | undefined,
   resumeMode: InspectionResumeMode | undefined,
@@ -999,10 +1066,15 @@ export async function handleListDirectoryEntries(
 
   const output = formatListDirectoryEntriesTextOutput(result);
 
+  const isCompleteResultMode = resumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
+  const effectiveResponseCap = isCompleteResultMode
+    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
+    : DISCOVERY_RESPONSE_CAP_CHARS;
+
   assertActualTextBudget(
     LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
     output.length,
-    DISCOVERY_RESPONSE_CAP_CHARS,
+    effectiveResponseCap,
     "directory-listing text output",
   );
 

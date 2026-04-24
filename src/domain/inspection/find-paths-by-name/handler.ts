@@ -1,6 +1,7 @@
 import {
   DISCOVERY_MAX_RESULTS_HARD_CAP,
   DISCOVERY_RESPONSE_CAP_CHARS,
+  GLOBAL_RESPONSE_HARD_CAP_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { buildTraversalNarrowingGuidance } from "@domain/shared/guardrails/filesystem-preflight";
 import type { TraversalWorkloadAdmissionOutcome } from "@domain/shared/guardrails/traversal-workload-admission";
@@ -483,9 +484,17 @@ export async function getFindPathsByNameResult(
  *
  * @remarks
  * This discovery entrypoint keeps name-based search broad enough for caller use
- * but still rejects oversized formatted output through the shared discovery
- * response budget instead of returning unbounded path lists.
+ * while applying a mode-aware response cap instead of returning unbounded path lists:
  *
+ * - In `inline` and `next-chunk` modes the family-specific `DISCOVERY_RESPONSE_CAP_CHARS`
+ *   (150,000 chars) limits text output to protect the caller's context window.
+ * - In `complete-result` mode only the global response fuse (`GLOBAL_RESPONSE_HARD_CAP_CHARS`,
+ *   600,000 chars) applies, because the caller has explicitly contracted for a complete result.
+ *
+ * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the mode-aware cap rule.
+ *
+ * @param resumeToken - Opaque server-owned session handle from a prior preview-first response. Absent on base requests.
+ * @param resumeMode - Delivery intent for resume requests. `'next-chunk'` or `'complete-result'`.
  * @param directoryPaths - Requested root directories in caller-supplied order.
  * @param pattern - Case-insensitive name substring applied to files and directories.
  * @param excludePatterns - Glob patterns removed from traversal before result collection.
@@ -493,7 +502,7 @@ export async function getFindPathsByNameResult(
  * @param respectGitIgnore - Indicates whether optional root-local `.gitignore` enrichment should participate in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param maxResults - Maximum number of matches retained per root before truncation.
- * @returns Human-readable name-search output bounded by the discovery-family text budget.
+ * @returns Human-readable name-search output respecting the mode-appropriate response ceiling.
  */
 export async function handleSearchFiles(
   resumeToken: string | undefined,
@@ -522,10 +531,15 @@ export async function handleSearchFiles(
 
   const output = formatFindPathsByNameTextOutput(result, maxResults);
 
+  const isCompleteResultMode = resumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
+  const effectiveResponseCap = isCompleteResultMode
+    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
+    : DISCOVERY_RESPONSE_CAP_CHARS;
+
   assertActualTextBudget(
     FIND_PATHS_BY_NAME_FAMILY_MEMBER,
     output.length,
-    DISCOVERY_RESPONSE_CAP_CHARS,
+    effectiveResponseCap,
     "name-discovery text output",
   );
 

@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import {
   DISCOVERY_RESPONSE_CAP_CHARS,
+  GLOBAL_RESPONSE_HARD_CAP_CHARS,
   INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
@@ -390,9 +391,17 @@ function formatCountLinesPathOutput(
 /**
  * Formats the structured count-lines result into the public text response surface.
  *
+ * @remarks
+ * The response cap is mode-aware. When the admission outcome is `completion-backed-required`
+ * and final path results are present, the caller has explicitly contracted for a complete result
+ * through the resume-session protocol, so only the global response fuse applies. For inline
+ * responses the family-specific `DISCOVERY_RESPONSE_CAP_CHARS` cap applies instead.
+ *
+ * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the mode-aware cap rule.
+ *
  * @param result - Structured per-path and aggregate line-count totals.
  * @param pattern - Optional regex used to count matching lines in addition to total lines.
- * @returns Human-readable count-lines output that respects the discovery-family text budget.
+ * @returns Human-readable count-lines output that respects the mode-appropriate response ceiling.
  */
 export function formatCountLinesResultOutput(
   result: CountLinesResult,
@@ -406,6 +415,12 @@ export function formatCountLinesResultOutput(
     return result.admission.guidanceText ?? COUNT_LINES_CONTINUATION_GUIDANCE;
   }
 
+  const isCompletionBackedFinalOutput =
+    result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED;
+  const effectiveResponseCap = isCompletionBackedFinalOutput
+    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
+    : DISCOVERY_RESPONSE_CAP_CHARS;
+
   if (result.paths.length === 1) {
     const firstPathResult = result.paths[0];
 
@@ -418,7 +433,7 @@ export function formatCountLinesResultOutput(
     assertActualTextBudget(
       "count_lines",
       output.length,
-      DISCOVERY_RESPONSE_CAP_CHARS,
+      effectiveResponseCap,
       "formatted count-lines output",
     );
 
@@ -436,7 +451,7 @@ export function formatCountLinesResultOutput(
   assertActualTextBudget(
     "count_lines",
     output.length,
-    DISCOVERY_RESPONSE_CAP_CHARS,
+    effectiveResponseCap,
     "formatted batched count-lines output",
   );
 
