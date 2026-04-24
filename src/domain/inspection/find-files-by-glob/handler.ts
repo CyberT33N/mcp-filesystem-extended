@@ -110,6 +110,8 @@ const FIND_FILES_BY_GLOB_NEXT_CHUNK_GUIDANCE =
   "Resume the same glob-discovery request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.";
 const FIND_FILES_BY_GLOB_COMPLETE_RESULT_GUIDANCE =
   "Resume the same glob-discovery request by sending only resumeToken with resumeMode='complete-result' to let the server continue the session toward a complete result without bypassing caps.";
+const FIND_FILES_BY_GLOB_CONTINUATION_ADDITIVE_GUIDANCE =
+  "Continuation response. This payload contains glob matches from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset.";
 const FIND_FILES_BY_GLOB_INLINE_RESPONSE_OVERHEAD_CHARS = 96;
 
 function buildFindFilesByGlobScopeReductionGuidance(searchPaths: string[]): string | null {
@@ -284,9 +286,14 @@ function buildFindFilesByGlobResumeEnvelope(
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
 
   if (nextContinuationState === null) {
+    const completedGuidanceText =
+      effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
+        ? FIND_FILES_BY_GLOB_CONTINUATION_ADDITIVE_GUIDANCE
+        : null;
+
     return createResumeEnvelope(
       admissionOutcome,
-      null,
+      completedGuidanceText,
       scopeReductionGuidanceText,
       null,
     );

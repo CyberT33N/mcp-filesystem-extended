@@ -145,6 +145,8 @@ const LIST_DIRECTORY_ENTRIES_NEXT_CHUNK_GUIDANCE =
   "Resume the same directory-listing request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of entries.";
 const LIST_DIRECTORY_ENTRIES_COMPLETE_RESULT_GUIDANCE =
   "Resume the same directory-listing request by sending only resumeToken with resumeMode='complete-result' to let the server continue the session toward a complete result without bypassing caps.";
+const LIST_DIRECTORY_ENTRIES_CONTINUATION_ADDITIVE_GUIDANCE =
+  "Continuation response. This payload contains directory entries from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset.";
 const LIST_DIRECTORY_ENTRIES_INLINE_RESPONSE_OVERHEAD_CHARS = 256;
 const LIST_DIRECTORY_ENTRIES_INLINE_ENTRY_BASE_CHARS = 96;
 const LIST_DIRECTORY_ENTRIES_INLINE_TIMESTAMP_METADATA_CHARS = 96;
@@ -425,9 +427,14 @@ function buildListDirectoryEntriesResumeEnvelope(
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
 
   if (nextContinuationState === null) {
+    const completedGuidanceText =
+      effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
+        ? LIST_DIRECTORY_ENTRIES_CONTINUATION_ADDITIVE_GUIDANCE
+        : null;
+
     return createResumeEnvelope(
       admissionOutcome,
-      null,
+      completedGuidanceText,
       scopeReductionGuidanceText,
       null,
     );

@@ -80,6 +80,20 @@ export interface InspectionResumeAdmission {
 
   /**
    * Server-owned guidance that explains the current bounded delivery or completion state.
+   *
+   * @remarks
+   * In `complete-result` mode this field carries the canonical machine-readable additive
+   * continuation statement. When the server delivers the frontier-continuation payload for a
+   * prior preview-first session, this field is set to a statement equivalent to:
+   * `"Continuation response. This payload contains entries from the persisted frontier position
+   * onward. Combine with the prior preview-chunk payload for the complete dataset."`
+   *
+   * Callers must read this field to correctly reconstruct the full dataset. Restarting traversal
+   * from the root in `complete-result` mode is incorrect — the continuation payload is additive,
+   * not a full re-delivery.
+   *
+   * @see {@link conventions/resume-architecture/overview.md} for the full additive continuation rationale.
+   * @see {@link conventions/resume-architecture/workflow.md} for the step-by-step `complete-result` flow.
    */
   guidanceText: string | null;
 
@@ -301,6 +315,9 @@ export function createInlineResumeEnvelope(): InspectionResumeEnvelope {
  *
  * @param outcome - Canonical lane outcome for the current response.
  * @param guidanceText - Server-owned guidance for the current bounded delivery or completion state.
+ * In `complete-result` mode this must carry the canonical additive continuation statement so that
+ * callers know the payload is frontier-based and must be combined with the prior preview chunk.
+ * @see {@link InspectionResumeAdmission.guidanceText} for the full additive continuation semantics.
  * @param scopeReductionGuidanceText - First-class narrowing guidance surfaced alongside resume.
  * @param resume - Active persisted resume metadata when the response remains resumable.
  * @returns Shared admission-plus-resume envelope for the current response.

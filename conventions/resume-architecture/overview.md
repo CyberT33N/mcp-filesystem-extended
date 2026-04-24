@@ -116,6 +116,44 @@ This is **not** two separate tokens for chunk vs. full result. A second primary 
 
 ---
 
+## Preview-Lane Design Rationale and Context Budget
+
+The preview-first admission lane is a first-class LLM-agent optimization path, not a fallback or compromise. Its primary purpose is to enable autonomous agents to make early-exit decisions from bounded preview chunks before committing to full traversal.
+
+### Why the Preview Cap Is Sized at 150,000 Characters
+
+`DISCOVERY_RESPONSE_CAP_CHARS = 150,000` is calibrated at 25% of `GLOBAL_RESPONSE_HARD_CAP_CHARS = 600,000`. This leaves headroom for the response envelope, metadata, and parallel tool calls while remaining large enough for a meaningful early-exit decision on most real-world filesystem structures.
+
+**Key architectural property:** Shrinking the preview cap reduces the agent's early-exit rate, forcing a higher proportion of calls to require a follow-up (`next-chunk` or `complete-result`). A preview cap that is too narrow trades initial response efficiency for higher total token consumption across the session. The current 150,000-character calibration is intentional and must not be reduced without evidence that the early-exit rate remains acceptable.
+
+### When LLM Agents Can Terminate at Preview
+
+Many autonomous agent workflows can terminate at the preview chunk alone:
+
+- Presence checks — confirming that a file or subdirectory exists within the listed entries.
+- Shallow enumeration — listing top-level entries for a narrow non-recursive root.
+- Signal-sufficient scans — finding a target entry before the traversal frontier is reached.
+
+When the preview chunk satisfies the agent's current information need, no resume request is needed. This is the primary efficiency mechanism of the preview-first lane.
+
+---
+
+## `complete-result` Is Additive, Not Redundant
+
+When a caller resumes a preview-first session with `resumeMode = 'complete-result'`, the server continues traversal from the **persisted frontier position** and returns only the entries that were not already delivered in the prior preview chunk.
+
+This is the architecturally correct and token-efficient behavior:
+
+- The preview chunk contains entries from the beginning of the traversal up to the frontier.
+- The `complete-result` response contains entries from the frontier to the end of the traversal.
+- The caller must combine both payloads to form the complete dataset.
+
+Restarting traversal from the root in `complete-result` mode is architecturally incorrect: it would re-deliver the preview entries, doubling the token cost for the already-seen portion of the result.
+
+The `admission.guidanceText` field in the `complete-result` response **must** communicate this additive contract in a machine-readable statement so that autonomous LLM agents can correctly reconstruct the full dataset without re-requesting the preview chunk.
+
+---
+
 ## `complete-result` Is Not a Cap Bypass
 
 `resumeMode = 'complete-result'` means the caller explicitly prefers a server-owned completion attempt over incremental chunks. It does **not**:

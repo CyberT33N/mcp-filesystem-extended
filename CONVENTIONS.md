@@ -30,3 +30,5 @@ The following rules are non-negotiable across the entire codebase:
 5. **Resume is same-endpoint and token-only.** No second public endpoint, no query resend on resume-only requests.
 
 6. **Scope reduction is always a first-class alternative.** Every affected endpoint family must surface scope reduction guidance alongside resume guidance.
+
+7. **`complete-result` responses are additive, not redundant.** When a caller resumes a preview-first session with `resumeMode = 'complete-result'`, the server continues traversal from the persisted frontier position and returns only entries not already delivered in the prior preview chunk. The `admission.guidanceText` field in every `complete-result` response must be a machine-readable statement that the caller must combine both payloads for the complete dataset.

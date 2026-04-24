@@ -98,23 +98,29 @@ Applies when the caller sends `resumeToken + resumeMode='complete-result'` for a
    (result is still PREVIEW_FIRST — same workload)
 5. Because resumeMode = 'complete-result':
    handler bypasses the preview-lane chunk branch
-   and enters the FULL TRAVERSAL path instead
-6. Full traversal executed (no preview boundary cuts)
+   and enters the FULL TRAVERSAL path starting from the persisted frontier position
+6. Traversal continues from the frontier (no restart from root, no duplicate entries)
    Runtime emergency safeguard active (500K entries, 50K dirs, 5s)
-7. Output formatted
-8. ⚠️ Family-level cap MUST NOT fire here — only the global fuse applies
-9. Global fuse checked (600,000 chars)
-10. Session marked completed in SQLite
-11. Response returned with:
+7. Output formatted — contains only entries not yet delivered in the prior preview chunk
+8. admission.guidanceText set to machine-readable additive continuation statement:
+   "Continuation response. Contains entries from frontier position [N] onward.
+    Combine with prior preview chunk for the complete dataset."
+9. ⚠️ Family-level cap MUST NOT fire here — only the global fuse applies
+10. Global fuse checked (600,000 chars)
+11. Session marked completed in SQLite
+12. Response returned with:
     - admission.outcome = 'completion-backed-required'
+    - admission.guidanceText = additive continuation statement (machine-readable)
     - resume.resumable = false (if complete)
-    - Complete result payload in structuredContent
-    - Complete result in content.text (if within global fuse)
+    - Additive continuation payload in structuredContent
+    - Additive continuation payload in content.text (if within global fuse)
 ```
 
 **Guardrails active:** Schema (1), Admission (2) re-evaluated, Deep Emergency Runtime Budget (within traversal), **Global Fuse (6) only — NOT family cap (5)**
 
 > **Critical rule:** The family-level `assertActualTextBudget` call with `DISCOVERY_RESPONSE_CAP_CHARS` or `REGEX_SEARCH_RESPONSE_CAP_CHARS` must be conditional on the delivery mode. In `complete-result` mode, the effective cap must be `GLOBAL_RESPONSE_HARD_CAP_CHARS`. See [`guardrail-interaction.md`](./guardrail-interaction.md).
+
+> **Additive contract rule:** The `complete-result` response must deliver only the entries from the persisted frontier position onward. Restarting traversal from the root in `complete-result` mode is architecturally incorrect and doubles the token cost. The `admission.guidanceText` field is the canonical machine-readable surface that communicates the additive nature of the response to the caller. See [`overview.md`](./overview.md) for the full rationale.
 
 ---
 
@@ -172,10 +178,16 @@ Received response:
     │   resume.resumable = true
     │   ├── Already have what I need from the preview chunk?
     │   │   → Done. No resume needed.
+    │   │   (This is the primary efficiency mechanism — many agent workflows
+    │   │    can terminate here without a follow-up call.)
     │   │
     │   ├── Need the complete dataset?
     │   │   → Send: { resumeToken, resumeMode: 'complete-result' }
-    │   │   (server will attempt full completion)
+    │   │   (server continues from frontier — additive payload only)
+    │   │   IMPORTANT: The complete-result response contains only entries
+    │   │   from the frontier onward. Combine with the preview chunk for
+    │   │   the full dataset. Read admission.guidanceText for the machine-
+    │   │   readable additive continuation statement.
     │   │
     │   ├── Want to inspect incrementally?
     │   │   → Send: { resumeToken, resumeMode: 'next-chunk' }
