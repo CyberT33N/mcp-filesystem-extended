@@ -223,12 +223,15 @@ export async function readValidatedFullTextFile(
 /**
  * Renders canonical line-numbered text output for bounded inline read surfaces.
  *
- * @param content - UTF-8 text content that should be rendered with 1-based line numbers.
- * @returns The content surface with one prefixed line number per line.
+ * @param content - UTF-8 text content that should be rendered with line numbers.
+ * @param startLine - One-based absolute line number for the first line of the content surface.
+ * Defaults to `1` for full-file reads. Pass the `startLine` value from a bounded read result
+ * to produce absolute file-position prefixes instead of window-relative offsets.
+ * @returns The content surface with one prefixed absolute line number per line.
  */
-export function formatLineNumberedTextContent(content: string): string {
+export function formatLineNumberedTextContent(content: string, startLine: number = 1): string {
   return content
     .split("\n")
-    .map((line, index) => `${index + 1}: ${line}`)
+    .map((line, index) => `${startLine + index}: ${line}`)
     .join("\n");
 }

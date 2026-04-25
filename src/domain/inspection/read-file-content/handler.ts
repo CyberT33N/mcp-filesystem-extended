@@ -8,7 +8,10 @@ import {
   assertProjectedTextBudget,
 } from "@domain/shared/guardrails/text-response-budget";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
-import { readValidatedFullTextFile } from "@infrastructure/filesystem/text-read-core";
+import {
+  formatLineNumberedTextContent,
+  readValidatedFullTextFile,
+} from "@infrastructure/filesystem/text-read-core";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import {
   readFileContentByteRange,
@@ -34,7 +37,7 @@ function formatReadFileContentResult(result: ReadFileContentResult): string {
         `returnedByteCount: ${result.returnedByteCount}`,
         `hasMore: ${result.hasMore}`,
         "content:",
-        result.content,
+        formatLineNumberedTextContent(result.content),
       ].join("\n");
     case "line_range":
       return [
@@ -48,7 +51,7 @@ function formatReadFileContentResult(result: ReadFileContentResult): string {
         `returnedByteCount: ${result.returnedByteCount}`,
         `hasMore: ${result.hasMore}`,
         "content:",
-        result.content,
+        formatLineNumberedTextContent(result.content, result.startLine),
       ].join("\n");
     case "byte_range":
       return [
