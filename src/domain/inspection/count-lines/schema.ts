@@ -11,8 +11,9 @@ import {
   applyCommonResumeSchemaRefinement,
   InspectionCompletionOnlyAdmissionSchema,
   InspectionCompletionOnlyResumeMetadataSchema,
+  InspectionCompletionOnlyResumeModeFieldSchema,
+  InspectionResumeTokenFieldSchema,
   INSPECTION_RESUME_MODE_FIELD,
-  INSPECTION_RESUME_MODES,
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
 
@@ -29,19 +30,8 @@ import {
  * global response fuse.
  */
 export const CountLinesArgsSchema = z.object({
-  [INSPECTION_RESUME_TOKEN_FIELD]: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      "Opaque resume token returned by a prior same-endpoint count-lines response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
-    ),
-  [INSPECTION_RESUME_MODE_FIELD]: z
-    .enum([INSPECTION_RESUME_MODES.COMPLETE_RESULT])
-    .optional()
-    .describe(
-      "Resume intent for a persisted same-endpoint count-lines session. Resume-only requests must provide `complete-result`."
-    ),
+  [INSPECTION_RESUME_TOKEN_FIELD]: InspectionResumeTokenFieldSchema("count-lines"),
+  [INSPECTION_RESUME_MODE_FIELD]: InspectionCompletionOnlyResumeModeFieldSchema,
   /**
    * Count scope paths.
    *

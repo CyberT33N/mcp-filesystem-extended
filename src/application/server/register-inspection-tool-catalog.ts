@@ -229,11 +229,12 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     },
     async ({ resumeToken, resumeMode, roots, nameContains, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
       executeTool("find_paths_by_name", async () => {
+        const resolvedNameContains = nameContains ?? "";
         const result = await getFindPathsByNameResult(
           resumeToken,
           resumeMode,
           roots,
-          nameContains,
+          resolvedNameContains,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
@@ -245,7 +246,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           resumeToken,
           resumeMode,
           roots,
-          nameContains,
+          resolvedNameContains,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
@@ -285,11 +286,12 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     },
     async ({ resumeToken, resumeMode, roots, glob, excludeGlobs, includeExcludedGlobs, respectGitIgnore, maxResults }) =>
       executeTool("find_files_by_glob", async () => {
+        const resolvedGlob = glob ?? "";
         const result = await getFindFilesByGlobResult(
           resumeToken,
           resumeMode,
           roots,
-          glob,
+          resolvedGlob,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
@@ -301,7 +303,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           resumeToken,
           resumeMode,
           roots,
-          glob,
+          resolvedGlob,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
@@ -344,7 +346,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         const resumeToken = args.resumeToken;
         const resumeMode = args.resumeMode;
         const roots = "roots" in args ? args.roots : [];
-        const regex = "regex" in args ? args.regex : "";
+        const regex = "regex" in args ? (args.regex ?? "") : "";
         const includeGlobs = "includeGlobs" in args ? args.includeGlobs : [];
         const excludeGlobs = "excludeGlobs" in args ? args.excludeGlobs : [];
         const includeExcludedGlobs = "includeExcludedGlobs" in args ? args.includeExcludedGlobs : [];
@@ -416,7 +418,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         const resumeToken = args.resumeToken;
         const resumeMode = args.resumeMode;
         const roots = "roots" in args ? args.roots : [];
-        const fixedString = "fixedString" in args ? args.fixedString : "";
+        const fixedString = "fixedString" in args ? (args.fixedString ?? "") : "";
         const includeGlobs = "includeGlobs" in args ? args.includeGlobs : [];
         const excludeGlobs = "excludeGlobs" in args ? args.excludeGlobs : [];
         const includeExcludedGlobs = "includeExcludedGlobs" in args ? args.includeExcludedGlobs : [];

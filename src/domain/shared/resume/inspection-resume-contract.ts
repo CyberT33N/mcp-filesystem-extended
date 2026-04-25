@@ -29,6 +29,84 @@ export const INSPECTION_RESUME_MODES = {
 } as const;
 
 /**
+ * Builds the canonical `resumeToken` Zod field schema for a named endpoint family.
+ *
+ * @remarks
+ * This builder centralises the `resumeToken` field declaration so that all resume-capable
+ * endpoint schemas share one consistent description pattern without duplication. The field
+ * is always optional — its presence is the runtime signal that the request is a resume-only
+ * request rather than a base request.
+ *
+ * The `familyLabel` is a short human-readable label for the endpoint family, used to
+ * complete the field description string. Examples: `"name-discovery"`, `"glob-discovery"`,
+ * `"regex-search"`, `"fixed-string-search"`, `"directory-listing"`, `"count-lines"`.
+ *
+ * @param familyLabel - Short human-readable label for the endpoint family.
+ * @returns Zod schema for the `resumeToken` field.
+ *
+ * @example
+ * ```ts
+ * [INSPECTION_RESUME_TOKEN_FIELD]: InspectionResumeTokenFieldSchema("glob-discovery"),
+ * ```
+ */
+export function InspectionResumeTokenFieldSchema(familyLabel: string): z.ZodOptional<z.ZodString> {
+  return z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      `Opaque resume token returned by a prior same-endpoint ${familyLabel} response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context.`
+    );
+}
+
+/**
+ * Canonical `resumeMode` Zod field schema for preview-capable endpoint families.
+ *
+ * @remarks
+ * Preview-capable families support both `next-chunk` and `complete-result` resume intents.
+ * This schema is shared across all five preview-capable inspection endpoints so that description
+ * text and enum values stay synchronized without duplication.
+ *
+ * The field is always optional — `resumeMode` is only required at runtime when `resumeToken`
+ * is present, which is enforced by `applyCommonResumeSchemaRefinement` rather than by the
+ * JSON Schema type.
+ *
+ * @example
+ * ```ts
+ * [INSPECTION_RESUME_MODE_FIELD]: InspectionResumeModeFieldSchema,
+ * ```
+ */
+export const InspectionResumeModeFieldSchema = z
+  .enum([
+    INSPECTION_RESUME_MODES.NEXT_CHUNK,
+    INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+  ])
+  .optional()
+  .describe(
+    "Resume intent for a persisted same-endpoint session. Resume-only requests must provide either `next-chunk` or `complete-result`."
+  );
+
+/**
+ * Canonical `resumeMode` Zod field schema for completion-backed-only endpoint families.
+ *
+ * @remarks
+ * The completion-backed-only family (`count_lines`) supports only `complete-result`. This
+ * restricted variant prevents callers from accidentally supplying `next-chunk` on an endpoint
+ * that never emits preview-style partial results.
+ *
+ * @example
+ * ```ts
+ * [INSPECTION_RESUME_MODE_FIELD]: InspectionCompletionOnlyResumeModeFieldSchema,
+ * ```
+ */
+export const InspectionCompletionOnlyResumeModeFieldSchema = z
+  .enum([INSPECTION_RESUME_MODES.COMPLETE_RESULT])
+  .optional()
+  .describe(
+    "Resume intent for a persisted same-endpoint count-lines session. Resume-only requests must provide `complete-result`."
+  );
+
+/**
  * Preview-family supported resume-mode set.
  */
 export const INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES = [

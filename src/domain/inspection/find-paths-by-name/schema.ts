@@ -11,28 +11,15 @@ import {
   applyCommonResumeSchemaRefinement,
   InspectionResumeAdmissionSchema,
   InspectionResumeMetadataSchema,
-  INSPECTION_RESUME_MODES,
+  InspectionResumeModeFieldSchema,
+  InspectionResumeTokenFieldSchema,
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
 
 export const FindPathsByNameArgsSchema = z.object({
-  [INSPECTION_RESUME_TOKEN_FIELD]: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      "Opaque resume token returned by a prior same-endpoint name-discovery response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
-    ),
-  [INSPECTION_RESUME_MODE_FIELD]: z
-    .enum([
-      INSPECTION_RESUME_MODES.NEXT_CHUNK,
-      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
-    ])
-    .optional()
-    .describe(
-      "Resume intent for a persisted same-endpoint name-discovery session. Resume-only requests must provide either `next-chunk` or `complete-result`."
-    ),
+  [INSPECTION_RESUME_TOKEN_FIELD]: InspectionResumeTokenFieldSchema("name-discovery"),
+  [INSPECTION_RESUME_MODE_FIELD]: InspectionResumeModeFieldSchema,
   /**
    * Search roots.
    *
@@ -73,9 +60,8 @@ export const FindPathsByNameArgsSchema = z.object({
     .string()
     .max(LABEL_MAX_CHARS)
     .optional()
-    .default("")
     .describe(
-      "Case-insensitive substring matched against file and directory names. Base requests provide this field for the initial name search; resume-only requests omit it and reload the persisted request context."
+      "**Required for base requests.** Case-insensitive substring matched against file and directory names. Base requests provide this field for the initial name search; resume-only requests omit it and reload the persisted request context."
     ),
   /**
    * Exclusion globs.
@@ -165,7 +151,7 @@ export const FindPathsByNameArgsSchema = z.object({
   const resumeRequest = args.resumeToken !== undefined;
   const hasQueryDefiningFields =
     args.roots.length > 0
-    || args.nameContains !== ""
+    || args.nameContains !== undefined
     || args.excludeGlobs.length > 0
     || args.respectGitIgnore
     || args.includeExcludedGlobs.length > 0
@@ -179,7 +165,7 @@ export const FindPathsByNameArgsSchema = z.object({
     });
   }
 
-  if (!resumeRequest && args.nameContains === "") {
+  if (!resumeRequest && args.nameContains === undefined) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Base requests must provide a nameContains filter.",

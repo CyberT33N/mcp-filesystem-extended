@@ -14,7 +14,8 @@ import {
   applyCommonResumeSchemaRefinement,
   InspectionResumeAdmissionSchema,
   InspectionResumeMetadataSchema,
-  INSPECTION_RESUME_MODES,
+  InspectionResumeModeFieldSchema,
+  InspectionResumeTokenFieldSchema,
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
@@ -23,22 +24,8 @@ import {
  * Input schema for the `list_directory_entries` tool.
  */
 export const ListDirectoryEntriesArgsSchema = z.object({
-  [INSPECTION_RESUME_TOKEN_FIELD]: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      "Opaque resume token returned by a prior same-endpoint directory-listing response. Resume-only requests reload the persisted request context and must omit new query-defining fields."
-    ),
-  [INSPECTION_RESUME_MODE_FIELD]: z
-    .enum([
-      INSPECTION_RESUME_MODES.NEXT_CHUNK,
-      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
-    ])
-    .optional()
-    .describe(
-      "Resume intent for a persisted same-endpoint directory-listing session. Resume-only requests must provide either `next-chunk` or `complete-result`."
-    ),
+  [INSPECTION_RESUME_TOKEN_FIELD]: InspectionResumeTokenFieldSchema("directory-listing"),
+  [INSPECTION_RESUME_MODE_FIELD]: InspectionResumeModeFieldSchema,
   /**
    * Listing roots.
    *

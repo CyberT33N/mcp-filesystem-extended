@@ -15,6 +15,8 @@ import {
   applyCommonResumeSchemaRefinement,
   InspectionResumeAdmissionSchema,
   InspectionResumeMetadataSchema,
+  InspectionResumeModeFieldSchema,
+  InspectionResumeTokenFieldSchema,
   INSPECTION_RESUME_MODES,
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
@@ -30,22 +32,8 @@ import {
  * normalize mixed file-versus-directory search scopes instead of rejecting explicit file inputs.
  */
 export const SearchFileContentsByRegexBaseArgsSchema = z.object({
-  [INSPECTION_RESUME_TOKEN_FIELD]: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      "Opaque resume token returned by a prior same-endpoint regex-search response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
-    ),
-  [INSPECTION_RESUME_MODE_FIELD]: z
-    .enum([
-      INSPECTION_RESUME_MODES.NEXT_CHUNK,
-      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
-    ])
-    .optional()
-    .describe(
-      "Resume intent for a persisted same-endpoint regex-search session. Resume-only requests must provide either `next-chunk` or `complete-result`."
-    ),
+  [INSPECTION_RESUME_TOKEN_FIELD]: InspectionResumeTokenFieldSchema("regex-search"),
+  [INSPECTION_RESUME_MODE_FIELD]: InspectionResumeModeFieldSchema,
   /**
    * Search scopes.
    *
@@ -87,9 +75,8 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
     .string()
     .max(REGEX_PATTERN_MAX_CHARS)
     .optional()
-    .default("")
     .describe(
-      "Regular expression applied to file contents. Base requests provide this field for the initial regex search; resume-only requests omit it and reload the persisted request context."
+      "**Required for base requests.** Regular expression applied to file contents. Base requests provide this field for the initial regex search; resume-only requests omit it and reload the persisted request context."
     ),
   /**
    * Include globs.
@@ -218,7 +205,7 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
   const resumeRequest = args.resumeToken !== undefined;
   const hasQueryDefiningFields =
     args.roots.length > 0
-    || args.regex !== ""
+    || args.regex !== undefined
     || args.includeGlobs.length > 0
     || args.excludeGlobs.length > 0
     || args.respectGitIgnore
@@ -234,7 +221,7 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
     });
   }
 
-  if (!resumeRequest && args.regex === "") {
+  if (!resumeRequest && args.regex === undefined) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Base requests must provide a regex pattern.",

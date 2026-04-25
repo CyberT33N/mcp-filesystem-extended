@@ -1,8 +1,9 @@
 # Schema Optionality Contract for Pattern and Query Fields
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.  
-> **Overview:** [`conventions/content-classification/overview.md`](./overview.md) for the full classifier architecture.  
+> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.
+> **Overview:** [`conventions/content-classification/overview.md`](./overview.md) for the full classifier architecture.
 > **Related:** [`conventions/guardrails/overview.md`](../guardrails/overview.md) for guardrail layers.
+> **Resume endpoint schemas:** [`conventions/resume-architecture/endpoint-schema-contract.md`](../resume-architecture/endpoint-schema-contract.md) for the full resume-endpoint flat-schema pattern, factory functions, and complete affected-endpoint list.
 
 ---
 

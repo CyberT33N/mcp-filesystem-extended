@@ -15,6 +15,8 @@ import {
   applyCommonResumeSchemaRefinement,
   InspectionResumeAdmissionSchema,
   InspectionResumeMetadataSchema,
+  InspectionResumeModeFieldSchema,
+  InspectionResumeTokenFieldSchema,
   INSPECTION_RESUME_MODES,
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
@@ -28,22 +30,8 @@ import {
  * semantically valid, but replaces free-regex input with one explicit literal-search field.
  */
 export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
-  [INSPECTION_RESUME_TOKEN_FIELD]: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      "Opaque resume token returned by a prior same-endpoint fixed-string-search response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
-    ),
-  [INSPECTION_RESUME_MODE_FIELD]: z
-    .enum([
-      INSPECTION_RESUME_MODES.NEXT_CHUNK,
-      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
-    ])
-    .optional()
-    .describe(
-      "Resume intent for a persisted same-endpoint fixed-string-search session. Resume-only requests must provide either `next-chunk` or `complete-result`."
-    ),
+  [INSPECTION_RESUME_TOKEN_FIELD]: InspectionResumeTokenFieldSchema("fixed-string-search"),
+  [INSPECTION_RESUME_MODE_FIELD]: InspectionResumeModeFieldSchema,
   roots: z
     .array(z.string().max(PATH_MAX_CHARS))
     .max(MAX_REGEX_ROOTS_PER_REQUEST)
@@ -56,9 +44,8 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
     .string()
     .max(SHORT_TEXT_MAX_CHARS)
     .optional()
-    .default("")
     .describe(
-      "Exact fixed-string pattern applied to file contents. Base requests provide this field for the initial literal search; resume-only requests omit it and reload the persisted request context."
+      "**Required for base requests.** Exact fixed-string pattern applied to file contents. Base requests provide this field for the initial literal search; resume-only requests omit it and reload the persisted request context."
     ),
   includeGlobs: z
     .array(z.string().max(GLOB_PATTERN_MAX_CHARS))
@@ -108,7 +95,7 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
   const resumeRequest = args.resumeToken !== undefined;
   const hasQueryDefiningFields =
     args.roots.length > 0
-    || args.fixedString !== ""
+    || args.fixedString !== undefined
     || args.includeGlobs.length > 0
     || args.excludeGlobs.length > 0
     || args.respectGitIgnore
@@ -124,7 +111,7 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
     });
   }
 
-  if (!resumeRequest && args.fixedString === "") {
+  if (!resumeRequest && args.fixedString === undefined) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Base requests must provide a fixedString pattern.",

@@ -10,28 +10,15 @@ import {
   applyCommonResumeSchemaRefinement,
   InspectionResumeAdmissionSchema,
   InspectionResumeMetadataSchema,
-  INSPECTION_RESUME_MODES,
+  InspectionResumeModeFieldSchema,
+  InspectionResumeTokenFieldSchema,
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
 
 export const FindFilesByGlobArgsSchema = z.object({
-  [INSPECTION_RESUME_TOKEN_FIELD]: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      "Opaque resume token returned by a prior same-endpoint glob-discovery response. When provided, the request must omit new query-defining fields and the server reloads the persisted request context."
-    ),
-  [INSPECTION_RESUME_MODE_FIELD]: z
-    .enum([
-      INSPECTION_RESUME_MODES.NEXT_CHUNK,
-      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
-    ])
-    .optional()
-    .describe(
-      "Resume intent for a persisted same-endpoint glob-discovery session. Resume-only requests must provide either `next-chunk` or `complete-result`."
-    ),
+  [INSPECTION_RESUME_TOKEN_FIELD]: InspectionResumeTokenFieldSchema("glob-discovery"),
+  [INSPECTION_RESUME_MODE_FIELD]: InspectionResumeModeFieldSchema,
   /**
    * Search roots.
    *
@@ -72,9 +59,8 @@ export const FindFilesByGlobArgsSchema = z.object({
     .string()
     .max(GLOB_PATTERN_MAX_CHARS)
     .optional()
-    .default("")
     .describe(
-      "Glob pattern used for path matching, for example '**/*.ts'. Base requests provide this field for path matching; resume-only requests omit it and reload the persisted request context."
+      "**Required for base requests.** Glob pattern used for path matching, for example '**\/*.ts'. Base requests provide this field for path matching; resume-only requests omit it and reload the persisted request context."
     ),
   /**
    * Exclusion globs.
@@ -164,7 +150,7 @@ export const FindFilesByGlobArgsSchema = z.object({
   const resumeRequest = args.resumeToken !== undefined;
   const hasQueryDefiningFields =
     args.roots.length > 0
-    || args.glob !== ""
+    || args.glob !== undefined
     || args.excludeGlobs.length > 0
     || args.respectGitIgnore
     || args.includeExcludedGlobs.length > 0
@@ -178,7 +164,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     });
   }
 
-  if (!resumeRequest && args.glob === "") {
+  if (!resumeRequest && args.glob === undefined) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Base requests must provide a glob pattern.",

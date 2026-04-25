@@ -23,6 +23,8 @@ const SERVER_INSTRUCTION_LINES = [
   "- Preview-first and resume-bearing responses may summarize the bounded chunk in `content.text`, but callers must not infer resume truth from text alone.",
   "- When a tool exposes structuredContent, treat the structured object as the authoritative result shape.",
   "- Downstream consumers or adapters that expose only `content.text` while dropping `structuredContent` are outside this server-owned result contract and are responsible for any apparent resume-token or bounded-payload loss.",
+  "- Six inspection endpoints participate in the resume architecture: list_directory_entries, find_paths_by_name, find_files_by_glob, search_file_contents_by_regex, search_file_contents_by_fixed_string, and count_lines. On these endpoints, query-defining fields such as roots, glob, nameContains, regex, fixedString, and paths appear as optional in the JSON Schema because the same endpoint serves both base requests and resume-only requests; the fields are semantically required for base requests and must be omitted on resume-only requests that supply a resumeToken.",
+  "- When sending a base request to a resume-capable endpoint, always provide the required query-defining fields: roots for discovery tools, glob for find_files_by_glob, nameContains for find_paths_by_name, regex for search_file_contents_by_regex, fixedString for search_file_contents_by_fixed_string, and paths for count_lines. Omitting them on a base request produces a validation error.",
 ] as const;
 
 /**
