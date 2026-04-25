@@ -9,6 +9,7 @@ This document is the entry point for the architecture conventions of this projec
 | Document | Covers |
 |---|---|
 | [Guardrails Overview](conventions/guardrails/overview.md) | All guardrail layers, their placement, limits, and scope |
+| [MCP Client Governance](conventions/guardrails/mcp-client-governance.md) | L1/L2 defense-in-depth model, response-family ceiling rationale with full limit inventory, and chunk-read governance contract |
 | [Resume Architecture Overview](conventions/resume-architecture/overview.md) | Resume-session model, delivery modes, endpoint families, and scope reduction |
 | [Resume Architecture Workflow](conventions/resume-architecture/workflow.md) | Step-by-step execution flow for each delivery mode |
 | [Guardrail–Resume Interaction](conventions/resume-architecture/guardrail-interaction.md) | Which guardrails apply in which mode, the mode-aware cap rule, and the global fuse as the non-bypassable floor |
