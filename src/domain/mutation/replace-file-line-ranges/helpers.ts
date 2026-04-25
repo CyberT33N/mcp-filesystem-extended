@@ -4,6 +4,7 @@ import fs from "fs/promises";
 import {
   createUnifiedDiff,
   normalizeLineEndings,
+  wrapDiffInSafeFencedBlock,
 } from "@infrastructure/formatting/unified-diff";
 
 /**
@@ -99,14 +100,8 @@ export async function applyFileLineRangeReplacements(
   // Create unified diff
   const diff = createUnifiedDiff(content, modifiedContent, filePath, filePath);
   
-  // Format diff with appropriate number of backticks
-  let numBackticks = 3;
-  while (diff.includes('`'.repeat(numBackticks))) {
-    numBackticks++;
-  }
-  
   // Build result with detailed information
-  let resultText = `${'`'.repeat(numBackticks)}diff\n${diff}${'`'.repeat(numBackticks)}\n\n`;
+  let resultText = `${wrapDiffInSafeFencedBlock(diff)}\n\n`;
   
   // Add replacement details
   resultText += "Replacement details:\n";

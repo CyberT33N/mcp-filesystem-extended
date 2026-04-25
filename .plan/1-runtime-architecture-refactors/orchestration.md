@@ -6,7 +6,7 @@ parent_orchestration: "PLAN.md"
 hierarchy_level: 1
 unit_status: "in_progress"
 total_tasks: 17
-completed_tasks: 14
+completed_tasks: 15
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "1.14"
@@ -133,6 +133,14 @@ todo_window_mode_override: "inherit"
   - Files Modified: src/domain/shared/resume/inspection-resume-contract.ts, src/domain/inspection/shared/filesystem-entry-metadata-contract.ts, 5 preview-family schema files, count-lines/schema.ts, get-file-checksums/schema.ts, get-path-metadata/schema.ts, verify-file-checksums/schema.ts
   - Blocked By: none
   - Summary: Centralize duplicated Zod resume schemas from 5 preview-family endpoint schemas into the shared resume contract, add restricted variants for count-lines, and add a base error schema to the shared metadata contract for 3 metadata-family consumers.
+- [x] **1.15 Infrastructure constants and diff-fence helper — wrapDiffInSafeFencedBlock, SSOT tool-name constants** → [`1.15-infrastructure-constants-and-diff-fence-helper.md`](./1.15-infrastructure-constants-and-diff-fence-helper.md)
+  - Classification: ISOLATED
+  - Status: DONE
+  - Complexity: LOW
+  - Execution Surface Band: GREEN
+  - Files Modified: src/infrastructure/formatting/unified-diff.ts, src/domain/comparison/diff-files/handler.ts, src/domain/comparison/diff-text-content/handler.ts, src/domain/mutation/replace-file-line-ranges/helpers.ts, src/domain/inspection/search-file-contents-by-fixed-string/schema.ts, src/domain/inspection/search-file-contents-by-fixed-string/fixed-string-search-support.ts, src/domain/inspection/search-file-contents-by-fixed-string/fixed-string-search-file-entry.ts, src/domain/inspection/search-file-contents-by-regex/schema.ts
+  - Blocked By: none
+  - Summary: Extract identical backtick-fence helper into unified-diff.ts; export SSOT tool-name constants for fixed-string and regex search schemas; remove duplicate local const declarations.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |

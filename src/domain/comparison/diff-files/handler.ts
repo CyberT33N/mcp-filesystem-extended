@@ -3,7 +3,7 @@ import { FILE_DIFF_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-gua
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
-import { createUnifiedDiff } from "@infrastructure/formatting/unified-diff";
+import { createUnifiedDiff, wrapDiffInSafeFencedBlock } from "@infrastructure/formatting/unified-diff";
 
 interface DiffFilesPair {
   file1: string;
@@ -26,12 +26,7 @@ async function getFormattedFileDiff(
     return "Files are identical.";
   }
 
-  let numBackticks = 3;
-  while (diff.includes("`".repeat(numBackticks))) {
-    numBackticks++;
-  }
-
-  return `${"`".repeat(numBackticks)}diff\n${diff}${"`".repeat(numBackticks)}`;
+  return wrapDiffInSafeFencedBlock(diff);
 }
 
 /**

@@ -17,9 +17,9 @@ import {
 } from "@domain/shared/search/text-binary-classifier";
 import { minimatch } from "minimatch";
 
+import { SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME } from "./schema";
 import { type SearchFixedStringPathResult } from "./search-fixed-string-result";
 
-const SEARCH_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string";
 const TEXT_BINARY_PROBE_SAMPLE_BYTES = 4_096;
 
 /**
@@ -254,7 +254,7 @@ export async function getValidatedPreflightEntry(
   allowedDirectories: string[],
 ): Promise<FilesystemPreflightEntry> {
   const entries = await collectValidatedFilesystemPreflightEntries(
-    SEARCH_FIXED_STRING_TOOL_NAME,
+    SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME,
     [requestedPath],
     allowedDirectories,
   );
@@ -281,7 +281,7 @@ export async function getValidatedSearchScopeEntry(
   const rootEntry = await getValidatedPreflightEntry(searchPath, allowedDirectories);
 
   assertExpectedFileTypes(
-    SEARCH_FIXED_STRING_TOOL_NAME,
+    SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME,
     [rootEntry],
     ["file", "directory"],
   );

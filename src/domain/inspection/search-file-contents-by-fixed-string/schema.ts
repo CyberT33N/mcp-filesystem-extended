@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string" as const;
+
 import {
   GLOB_PATTERN_MAX_CHARS,
   MAX_EXCLUDE_GLOBS_PER_REQUEST,

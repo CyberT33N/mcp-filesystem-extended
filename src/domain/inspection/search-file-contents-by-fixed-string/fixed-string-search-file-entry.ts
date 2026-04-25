@@ -14,9 +14,8 @@ import {
   resolveTextEligibility,
   sanitizeFixedStringMatchContent,
 } from "./fixed-string-search-support";
+import { SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME } from "./schema";
 import { type FixedStringSearchMatch } from "./search-fixed-string-result";
-
-const SEARCH_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string";
 
 /**
  * Collects fixed-string matches from one validated file entry while preserving aggregate budgets,
@@ -67,7 +66,7 @@ export async function collectFixedStringMatchesFromFileEntry(
   const nextAggregateBytesScanned = aggregateBudgetState.totalCandidateBytesScanned + candidateEntry.size;
 
   assertCandidateByteBudget(
-    SEARCH_FIXED_STRING_TOOL_NAME,
+    SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME,
     nextAggregateBytesScanned,
     executionPolicy.fixedStringServiceHardGapBytes,
     `fixed-string aggregate candidate bytes before reading ${candidateEntry.requestedPath}`,

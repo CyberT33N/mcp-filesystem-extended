@@ -8,7 +8,7 @@ import {
 } from "@domain/shared/guardrails/tool-guardrail-error-contract";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
-import { createUnifiedDiff } from "@infrastructure/formatting/unified-diff";
+import { createUnifiedDiff, wrapDiffInSafeFencedBlock } from "@infrastructure/formatting/unified-diff";
 
 /**
  * Caller-supplied in-memory text pair for the raw diff endpoint.
@@ -69,12 +69,7 @@ async function getFormattedContentDiff(operation: DiffTextContentPair): Promise<
     operation.label2
   );
 
-  let numBackticks = 3;
-  while (diff.includes("`".repeat(numBackticks))) {
-    numBackticks++;
-  }
-
-  return `${"`".repeat(numBackticks)}diff\n${diff}${"`".repeat(numBackticks)}`;
+  return wrapDiffInSafeFencedBlock(diff);
 }
 
 /**
