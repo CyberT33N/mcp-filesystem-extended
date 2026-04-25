@@ -15,7 +15,10 @@ import {
 
 const READ_FILES_TOOL_NAME = "read_files_with_line_numbers";
 const PROJECTED_READ_RECOMMENDED_ACTION =
-  "Reduce the number of files, target smaller files, or split the read into narrower batches.";
+  "Reduce the number of files, target smaller files, or use read_file_content with"
+  + " mode='chunk-cursor' to read this file in sequential, bounded chunks until EOF is confirmed."
+  + " Chunk-based reading via read_file_content is the designated fallback path for files that"
+  + " exceed the direct-read family cap.";
 
 /**
  * Reads one or more validated text files and returns one line-numbered text block.
