@@ -1,4 +1,7 @@
 import fs from "fs/promises";
+
+import { normalizeError } from "@shared/errors";
+
 import { FILE_DIFF_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
@@ -68,7 +71,7 @@ export async function handleFileDiff(
           output,
         };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = normalizeError(error).message;
         return {
           label: `${operation.file1} ↔ ${operation.file2}`,
           error: `Error comparing files: ${errorMessage}`,

@@ -1,5 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
+
+import { normalizeError } from "@shared/errors";
+
 import {
   createRuntimeBudgetExceededFailure,
   formatToolGuardrailFailureAsText,
@@ -109,7 +112,7 @@ export async function handleMovePaths(
         results.push(`Successfully moved ${item.source} to ${item.destination}`);
         childLog.info({ moved: true }, "move completed");
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = normalizeError(error).message;
         childLog.error({ err: error }, "move failed");
         errors.push(`Failed to move ${item.source} to ${item.destination}: ${errorMessage}`);
       }

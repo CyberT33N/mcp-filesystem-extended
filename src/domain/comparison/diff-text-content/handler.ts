@@ -1,3 +1,5 @@
+import { normalizeError } from "@shared/errors";
+
 import {
   MAX_TOTAL_RAW_TEXT_REQUEST_CHARS,
   TEXT_DIFF_RESPONSE_CAP_CHARS,
@@ -112,7 +114,7 @@ export async function handleContentDiff(
           output,
         };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = normalizeError(error).message;
         return {
           label: `${operation.label1} ↔ ${operation.label2} (#${index + 1})`,
           error: errorMessage,

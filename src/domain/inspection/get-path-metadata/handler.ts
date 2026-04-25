@@ -1,3 +1,5 @@
+import { normalizeError } from "@shared/errors";
+
 import { METADATA_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
@@ -113,7 +115,7 @@ export async function getPathMetadataResult(
           ),
         };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = normalizeError(error).message;
 
         return {
           error: {

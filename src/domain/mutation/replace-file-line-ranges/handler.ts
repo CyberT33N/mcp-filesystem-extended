@@ -1,3 +1,5 @@
+import { normalizeError } from "@shared/errors";
+
 import { LINE_REPLACEMENT_TOTAL_INPUT_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
   createRuntimeBudgetExceededFailure,
@@ -74,7 +76,7 @@ export async function handleReplaceFileLineRanges(
         
         results.push(`File: ${file.path}\n${result}`);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = normalizeError(error).message;
         errors.push(`Failed to replace line ranges in ${file.path}: ${errorMessage}`);
       }
     })

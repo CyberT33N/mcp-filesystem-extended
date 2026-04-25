@@ -1,3 +1,5 @@
+import { normalizeError } from "@shared/errors";
+
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
 import { compileGuardrailedSearchRegex } from "@domain/shared/guardrails/regex-search-safety";
@@ -18,6 +20,7 @@ import {
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
 
+import { SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME } from "./schema";
 import {
   createRegexSearchAggregateBudgetState,
   getSearchRegexPathResult,
@@ -30,8 +33,6 @@ import {
   type SearchRegexPathResult,
   type SearchRegexResult,
 } from "./search-regex-result";
-
-const SEARCH_REGEX_TOOL_NAME = "search_file_contents_by_regex";
 const SEARCH_REGEX_CONTINUATION_GUIDANCE =
   "Resume the same regex-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.";
 
@@ -84,7 +85,7 @@ function createSharedRegexExecutionContext(
   aggregateBudgetState: ReturnType<typeof createRegexSearchAggregateBudgetState>;
   executionPolicy: ReturnType<typeof resolveSearchExecutionPolicy>;
 } {
-  compileGuardrailedSearchRegex(SEARCH_REGEX_TOOL_NAME, pattern, caseSensitive);
+  compileGuardrailedSearchRegex(SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME, pattern, caseSensitive);
 
   return {
     aggregateBudgetState: createRegexSearchAggregateBudgetState(),
@@ -134,13 +135,13 @@ function resolveSearchRegexExecutionContext(
     SearchRegexContinuationState
   >(
     resumeToken,
-    SEARCH_REGEX_TOOL_NAME,
-    SEARCH_REGEX_TOOL_NAME,
+    SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+    SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
     now,
   );
 
   if (resumeSession === null) {
-    throw new Error(getResumeSessionNotFoundMessage(SEARCH_REGEX_TOOL_NAME));
+    throw new Error(getResumeSessionNotFoundMessage(SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME));
   }
 
   return {
@@ -199,8 +200,8 @@ function buildSearchRegexContinuationEnvelope(
   if (resumeToken === null) {
     const resumeSession = inspectionResumeSessionStore.createSession(
       {
-        endpointName: SEARCH_REGEX_TOOL_NAME,
-        familyMember: SEARCH_REGEX_TOOL_NAME,
+        endpointName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        familyMember: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
         requestPayload,
         resumeState: nextContinuationState,
         admissionOutcome,
@@ -313,7 +314,7 @@ export async function handleSearchRegex(
   const effectivePattern = executionContext.requestPayload.pattern;
 
   const output = assertFormattedRegexResponseBudget(
-    SEARCH_REGEX_TOOL_NAME,
+    SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
     formatSearchRegexContinuationAwareTextOutput(
       structuredResult,
       effectivePattern,
@@ -411,7 +412,7 @@ export async function getSearchRegexResult(
   for (const searchPath of activeSearchPaths) {
     try {
       const result = await getSearchRegexPathResult(
-        SEARCH_REGEX_TOOL_NAME,
+        SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
         searchPath,
         executionContext.requestPayload.pattern,
         executionContext.requestPayload.filePatterns,
@@ -430,7 +431,7 @@ export async function getSearchRegexResult(
 
       roots.push(result);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = normalizeError(error).message;
 
       roots.push({
         ...createRegexRootErrorResult(searchPath, errorMessage),

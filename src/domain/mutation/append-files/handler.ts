@@ -1,6 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
 
+import { normalizeError } from "@shared/errors";
+
 import {
   CONTENT_MUTATION_TOTAL_INPUT_CHARS,
   PATH_MUTATION_SUMMARY_CAP_CHARS,
@@ -64,7 +66,7 @@ export async function handleAppendFiles(
         
         results.push(`Successfully appended to ${file.path}`);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = normalizeError(error).message;
         errors.push(`Failed to append to file ${file.path}: ${errorMessage}`);
       }
     })

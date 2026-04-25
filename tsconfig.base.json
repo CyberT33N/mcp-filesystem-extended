@@ -295,7 +295,6 @@
       "@cache": ["src/cache/index.ts"],
       "@cache/*": ["src/cache/*"],
       "@configs/*": ["src/configs/*"],
-      "@domain/*": ["src/domain/*"],
       "@infrastructure/*": ["src/infrastructure/*"],
       "@loaders/*": ["src/loaders/*"],
       "@mocks/*": ["__mocks__/*"],

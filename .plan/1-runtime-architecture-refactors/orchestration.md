@@ -6,11 +6,11 @@ parent_orchestration: "PLAN.md"
 hierarchy_level: 1
 unit_status: "in_progress"
 total_tasks: 17
-completed_tasks: 15
+completed_tasks: 16
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "1.14"
-next_frontier_task: "1.15"
+resume_frontier_task: "1.17"
+next_frontier_task: "1.17"
 todo_window_mode_override: "inherit"
 ---
 
@@ -21,7 +21,7 @@ todo_window_mode_override: "inherit"
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
 - **Unit Status:** in_progress
-- **Progress:** 11/12 tasks
+- **Progress:** 15/17 tasks
 
 ## Execution Frontier
 - **Resume Frontier Task:** `1.14`
@@ -141,6 +141,14 @@ todo_window_mode_override: "inherit"
   - Files Modified: src/infrastructure/formatting/unified-diff.ts, src/domain/comparison/diff-files/handler.ts, src/domain/comparison/diff-text-content/handler.ts, src/domain/mutation/replace-file-line-ranges/helpers.ts, src/domain/inspection/search-file-contents-by-fixed-string/schema.ts, src/domain/inspection/search-file-contents-by-fixed-string/fixed-string-search-support.ts, src/domain/inspection/search-file-contents-by-fixed-string/fixed-string-search-file-entry.ts, src/domain/inspection/search-file-contents-by-regex/schema.ts
   - Blocked By: none
   - Summary: Extract identical backtick-fence helper into unified-diff.ts; export SSOT tool-name constants for fixed-string and regex search schemas; remove duplicate local const declarations.
+- [x] **1.16 Extract shared extractErrorMessage utility — eliminate inline error-message pattern across domain and shared layers** → [`1.16-extract-error-message-utility.md`](./1.16-extract-error-message-utility.md)
+  - Classification: SEQUENTIAL
+  - Status: DONE
+  - Complexity: LOW
+  - Execution Surface Band: YELLOW
+  - Files Modified: src/domain/shared/utils/error-message.ts, src/domain/inspection/get-file-checksums/handler.ts, src/domain/inspection/verify-file-checksums/handler.ts, src/domain/inspection/get-path-metadata/handler.ts, src/domain/comparison/diff-files/handler.ts, src/domain/comparison/diff-text-content/handler.ts, src/domain/mutation/append-files/handler.ts, src/domain/mutation/create-files/handler.ts, src/domain/mutation/copy-paths/handler.ts, src/domain/mutation/move-paths/handler.ts, src/domain/mutation/replace-file-line-ranges/handler.ts, src/domain/shared/guardrails/filesystem-preflight.ts, src/domain/inspection/search-file-contents-by-regex/handler.ts
+  - Blocked By: none (1.15 DONE)
+  - Summary: Create extractErrorMessage utility in @domain/shared/utils/error-message; replace all inline error instanceof Error ? error.message : String(error) patterns across 12 consumer files; regex handler also picks up SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME from 1.15.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |

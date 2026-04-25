@@ -1,6 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
 
+import { normalizeError } from "@shared/errors";
+
 /**
  * Shared handler-preflight helpers that resolve real filesystem metadata before content-oriented
  * endpoints start expensive reads, traversal fan-out, or diff preparation.
@@ -347,7 +349,7 @@ export async function collectValidatedFilesystemPreflightEntries(
         size: metadata.size,
       });
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = normalizeError(error).message;
 
       throwMetadataPreflightRejectedFailure(
         toolName,

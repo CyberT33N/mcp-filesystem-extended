@@ -1,5 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
+
+import { normalizeError } from "@shared/errors";
+
 import {
   createRuntimeBudgetExceededFailure,
   formatToolGuardrailFailureAsText,
@@ -63,7 +66,7 @@ async function copySingleOperation(
     await fs.copyFile(operation.validSourcePath, operation.validDestinationPath);
     return `Successfully copied file ${operation.source} to ${operation.destination}`;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = normalizeError(error).message;
     throw new Error(`Error copying ${operation.source} to ${operation.destination}: ${errorMessage}`);
   }
 }
@@ -111,7 +114,7 @@ export async function handleCopyPaths(
           output,
         };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = normalizeError(error).message;
         return {
           label: `${operation.source} -> ${operation.destination}`,
           error: errorMessage,
