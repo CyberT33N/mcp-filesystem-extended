@@ -294,6 +294,7 @@
       "@application/*": ["src/application/*"],
       "@cache": ["src/cache/index.ts"],
       "@cache/*": ["src/cache/*"],
+      "@domain/*": ["src/domain/*"],
       "@configs/*": ["src/configs/*"],
       "@infrastructure/*": ["src/infrastructure/*"],
       "@loaders/*": ["src/loaders/*"],
