@@ -195,10 +195,13 @@ function formatListDirectoryEntriesTextOutput(
     0,
   );
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+  const zeroEntriesClarification = totalListedEntries === 0
+    ? " No entries collected in this chunk — more directories may still be pending in the remaining traversal frontier."
+    : "";
   const previewSummary =
     result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
-      ? `Directory listing completion progress is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.`
-      : `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.`;
+      ? `Directory listing completion progress is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.${zeroEntriesClarification}`
+      : `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.${zeroEntriesClarification}`;
   const previewChunkPayload = formatListDirectoryEntriesChunkPayload(result);
   const activeResumeToken = result.resume.resumeToken;
 

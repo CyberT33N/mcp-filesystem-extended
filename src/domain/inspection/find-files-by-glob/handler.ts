@@ -13,6 +13,7 @@ import {
   createInlineResumeEnvelope,
   createPersistedResumeEnvelope,
   createResumeEnvelope,
+  formatInspectionPreviewChunkTextBlock,
   getResumeSessionNotFoundMessage,
   INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
   INSPECTION_RESUME_ADMISSION_OUTCOMES,
@@ -147,20 +148,20 @@ function formatFindFilesByGlobTextOutput(
 
   const totalMatches = result.totalMatches;
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+  const zeroMatchesClarification = totalMatches === 0
+    ? " No matches found in this chunk — more paths may still be pending in the remaining traversal frontier."
+    : "";
   const previewSummary =
     result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
-      ? `Glob-discovery completion progress is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`
-      : `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`;
-  const structuredPayloadGuidance = "The authoritative match payload remains in structuredContent.";
+      ? `Glob-discovery completion progress is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
+      : `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
 
-  return [
+  return formatInspectionPreviewChunkTextBlock(
+    result.admission,
+    result.resume,
     previewSummary,
-    `Active resumeToken: ${result.resume.resumeToken}`,
-    `Supported resume modes: ${result.resume.supportedResumeModes.join(", ")}`,
-    result.admission.guidanceText ?? FIND_FILES_BY_GLOB_NEXT_CHUNK_GUIDANCE,
-    structuredPayloadGuidance,
-    result.admission.scopeReductionGuidanceText ?? "",
-  ].join("\n");
+    FIND_FILES_BY_GLOB_NEXT_CHUNK_GUIDANCE,
+  );
 }
 
 function normalizeRelativePath(relativePath: string): string {

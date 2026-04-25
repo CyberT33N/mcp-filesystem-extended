@@ -1,5 +1,6 @@
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
+  formatInspectionPreviewChunkTextBlock,
   INSPECTION_RESUME_ADMISSION_OUTCOMES,
   type InspectionResumeAdmission,
   type InspectionResumeMetadata,
@@ -212,21 +213,20 @@ export function formatSearchRegexContinuationAwareTextOutput(
   }
 
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
+  const zeroMatchesClarification = result.totalMatches === 0
+    ? " No matches found in this chunk — more files may still be pending in the remaining traversal frontier."
+    : "";
   const previewSummary =
     result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
-      ? `Regex-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`
-      : `Regex-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`;
-  const structuredPayloadGuidance = "The authoritative match payload remains in structuredContent.";
+      ? `Regex-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
+      : `Regex-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
 
-  return [
+  return formatInspectionPreviewChunkTextBlock(
+    result.admission,
+    result.resume,
     previewSummary,
-    `Active resumeToken: ${result.resume.resumeToken}`,
-    `Supported resume modes: ${result.resume.supportedResumeModes.join(", ")}`,
-    result.admission.guidanceText
-      ?? "Resume the same regex-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
-    structuredPayloadGuidance,
-    result.admission.scopeReductionGuidanceText ?? "",
-  ].join("\n");
+    "Resume the same regex-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
+  );
 }
 
 /**

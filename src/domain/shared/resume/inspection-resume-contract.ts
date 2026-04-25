@@ -613,6 +613,58 @@ export function getResumeSessionNotFoundMessage(familyMember: string): string {
 }
 
 /**
+ * Shared authoritative-payload guidance statement for preview-lane text responses.
+ *
+ * @remarks
+ * This is the single source of truth for the machine-readable signal that directs autonomous
+ * LLM agents to consume `structuredContent` rather than the compact text summary for authoritative
+ * match and discovery data. All preview-capable inspection endpoint formatters must use this
+ * constant instead of defining an equivalent local string.
+ */
+export const INSPECTION_RESUME_STRUCTURED_PAYLOAD_GUIDANCE =
+  "The authoritative match payload remains in structuredContent.";
+
+/**
+ * Formats the shared preview-lane text block for resume-capable inspection endpoints.
+ *
+ * @remarks
+ * This is the single source of truth for the resumable-preview text surface shared across all
+ * preview-capable search and discovery endpoint formatters. It assembles the preview summary,
+ * active resume token, supported resume modes, guidance text, shared structured-payload guidance,
+ * and scope-reduction guidance into one deterministic machine-readable text block.
+ *
+ * Callers supply the endpoint-family-specific `previewSummary` line and the endpoint-local
+ * fallback guidance text. All other token and guidance fields are resolved directly from the
+ * shared `admission` and `resume` envelope surfaces. The `structuredPayloadGuidance` line is
+ * emitted from the shared {@link INSPECTION_RESUME_STRUCTURED_PAYLOAD_GUIDANCE} constant so
+ * the machine-readable signal stays consistent across all endpoint families.
+ *
+ * Use this function instead of duplicating the token-block assembly pattern locally in each
+ * endpoint formatter.
+ *
+ * @param admission - Admission metadata for the current bounded response.
+ * @param resume - Resume metadata carrying the active token, supported modes, and resumable flag.
+ * @param previewSummary - Endpoint-family-specific summary line for the current bounded chunk.
+ * @param fallbackGuidanceText - Guidance text used when `admission.guidanceText` is null.
+ * @returns Formatted text block for the caller-visible preview-lane response surface.
+ */
+export function formatInspectionPreviewChunkTextBlock(
+  admission: InspectionResumeAdmission,
+  resume: InspectionResumeMetadata,
+  previewSummary: string,
+  fallbackGuidanceText: string,
+): string {
+  return [
+    previewSummary,
+    `Active resumeToken: ${resume.resumeToken}`,
+    `Supported resume modes: ${resume.supportedResumeModes.join(", ")}`,
+    admission.guidanceText ?? fallbackGuidanceText,
+    INSPECTION_RESUME_STRUCTURED_PAYLOAD_GUIDANCE,
+    admission.scopeReductionGuidanceText ?? "",
+  ].join("\n");
+}
+
+/**
  * Validates that a resume-only request omits fresh query-defining fields.
  *
  * @param input - Resume-only request surface to validate.
