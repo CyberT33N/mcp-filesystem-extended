@@ -320,6 +320,7 @@ export async function handleSearchRegex(
       effectivePattern,
       effectiveMaxResults,
     ),
+    executionContext.requestedResumeMode,
   );
 
   if (resumeToken !== undefined && !structuredResult.resume.resumable && structuredResult.resume.resumeToken === null) {

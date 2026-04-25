@@ -5,7 +5,7 @@ This document is the entry point for the architecture conventions of this projec
 ---
 
 ## Table of Contents
-
+ 
 | Document | Covers |
 |---|---|
 | [Guardrails Overview](conventions/guardrails/overview.md) | All guardrail layers, their placement, limits, and scope |

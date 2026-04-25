@@ -2,10 +2,15 @@ import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-
 import {
   formatInspectionPreviewChunkTextBlock,
   INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  INSPECTION_RESUME_MODES,
   type InspectionResumeAdmission,
   type InspectionResumeMetadata,
+  type InspectionResumeMode,
 } from "@domain/shared/resume/inspection-resume-contract";
-import { REGEX_SEARCH_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
+  GLOBAL_RESPONSE_HARD_CAP_CHARS,
+  REGEX_SEARCH_RESPONSE_CAP_CHARS,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
 
 /**
  * Describes one collected fixed-string match location.
@@ -196,10 +201,17 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
     result.resume.resumable
     && result.resume.resumeToken !== null;
 
+  // Always emit the full match data first — content.text must be the complete primary information
+  // carrier regardless of delivery mode. Text-only consumers must never depend on structuredContent
+  // to obtain result data. See conventions/mcp-response-contract/structured-content-contract.md.
+  const fullOutput = formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
+
   if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableContinuation) {
-    return formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
+    return fullOutput;
   }
 
+  // Append the continuation guidance block after the full match data so text-only consumers
+  // receive both the complete result and the resume instructions in one content.text surface.
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
   const zeroMatchesClarification = result.totalMatches === 0
     ? " No matches found in this chunk — more files may still be pending in the remaining traversal frontier."
@@ -209,12 +221,14 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
       ? `Fixed-string-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
       : `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
 
-  return formatInspectionPreviewChunkTextBlock(
+  const continuationBlock = formatInspectionPreviewChunkTextBlock(
     result.admission,
     result.resume,
     previewSummary,
     "Resume the same fixed-string-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
   );
+
+  return `${fullOutput}\n\n${continuationBlock}`;
 }
 
 /**
@@ -227,12 +241,22 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
 export function assertFormattedFixedStringResponseBudget(
   toolName: string,
   formattedOutput: string,
+  requestedResumeMode: InspectionResumeMode | null,
 ): string {
+  // In complete-result mode the caller has explicitly contracted for a full server-owned completion
+  // attempt via the resume-session protocol. Applying the family cap in this mode would block a
+  // valid completion response. The global fuse at GLOBAL_RESPONSE_HARD_CAP_CHARS is the only
+  // correct ceiling for complete-result responses. See conventions/guardrails/overview.md Layer 5.
+  const isCompleteResultMode = requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
+  const effectiveCap = isCompleteResultMode
+    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
+    : REGEX_SEARCH_RESPONSE_CAP_CHARS;
+
   assertActualTextBudget(
     toolName,
     formattedOutput.length,
-    REGEX_SEARCH_RESPONSE_CAP_CHARS,
-    "Fixed-string search response exceeds the shared search-family cap.",
+    effectiveCap,
+    "Fixed-string search response exceeds the effective search-family cap.",
   );
 
   return formattedOutput;
