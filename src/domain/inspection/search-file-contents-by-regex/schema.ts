@@ -29,7 +29,7 @@ import {
  * response-budget enforcement, while the endpoint contract owns the architectural decision to
  * normalize mixed file-versus-directory search scopes instead of rejecting explicit file inputs.
  */
-const SearchFileContentsByRegexBaseArgsSchema = z.object({
+export const SearchFileContentsByRegexBaseArgsSchema = z.object({
   [INSPECTION_RESUME_TOKEN_FIELD]: z
     .string()
     .min(1)

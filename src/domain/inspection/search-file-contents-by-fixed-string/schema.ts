@@ -27,7 +27,7 @@ import {
  * This endpoint mirrors the guarded search-family request surface where that alignment remains
  * semantically valid, but replaces free-regex input with one explicit literal-search field.
  */
-const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
+export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
   [INSPECTION_RESUME_TOKEN_FIELD]: z
     .string()
     .min(1)

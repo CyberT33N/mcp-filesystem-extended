@@ -258,32 +258,67 @@ export const ReadFileContentArgsSchema = z.discriminatedUnion("mode", [
 ]);
 
 /**
+ * Flat MCP registration contract for single-file content reads.
+ *
+ * @remarks
+ * The MCP SDK serializes `z.discriminatedUnion` and `z.union` into a JSON-Schema
+ * `anyOf` surface that lacks a top-level `properties` block. Because MCP clients
+ * discover parameters from `inputSchema.properties`, no options would be visible
+ * when the discriminated-union schema is passed directly as `inputSchema`.
+ *
+ * This flat schema exposes every parameter that can appear across all read modes
+ * as optional fields on one `z.object()` so the SDK produces a single
+ * `properties` map. The mode-specific option blocks (`line_range`, `byte_range`,
+ * `chunk_cursor`) remain optional and are only validated when the corresponding
+ * `mode` value is provided. Internal normalization via `normalizeReadFileContentArgs`
+ * routes each flat request into the correct canonical bounded-read contract.
+ */
+export const ReadFileContentFlatArgsSchema = z.object({
+  path: readFileContentPathSchema,
+  mode: z
+    .enum(["full", "line-range", "byte-range", "chunk-cursor"])
+    .describe(
+      "Read mode that determines which bounded-read contract is applied. Use `full` for small files, `line-range` for line-windowed access, `byte-range` for byte-offset access, and `chunk-cursor` for cursor-based streaming."
+    ),
+  line_range: ReadFileContentPublicLineRangeWindowSchema.optional().describe(
+    "Mode-specific option block accepted only when `mode = 'line-range'`. Defines the inclusive start and optional end line for the bounded line-window read."
+  ),
+  byte_range: ReadFileContentPublicByteRangeWindowSchema.optional().describe(
+    "Mode-specific option block accepted only when `mode = 'byte-range'`. Defines the start byte offset and either an exclusive end offset or a byte-count window."
+  ),
+  chunk_cursor: ReadFileContentPublicChunkCursorWindowSchema.optional().describe(
+    "Mode-specific option block accepted only when `mode = 'chunk-cursor'`. Carries the opaque continuation cursor and the requested byte-count window."
+  ),
+});
+
+/**
  * Type-level normalized request contract used internally after MCP-boundary
  * normalization.
  */
 export type ReadFileContentArgs = z.infer<typeof ReadFileContentCanonicalArgsSchema>;
 
 /**
- * Normalizes the public MCP request surface into the canonical internal
+ * Normalizes the flat MCP request surface into the canonical internal
  * bounded-read contract.
  *
- * @param args - Public `read_file_content` request accepted at the MCP
- * boundary.
+ * @param args - Flat `read_file_content` request accepted at the MCP
+ * boundary via `ReadFileContentFlatArgsSchema`.
  * @returns Canonical internal request contract with stable underscore mode
  * names and flat bounded-range fields.
  */
 export function normalizeReadFileContentArgs(
-  args: z.infer<typeof ReadFileContentArgsSchema>,
+  args: z.infer<typeof ReadFileContentFlatArgsSchema>,
 ): ReadFileContentArgs {
   switch (args.mode) {
     case "full":
-      return ReadFileContentCanonicalArgsSchema.parse(args);
+      return ReadFileContentCanonicalArgsSchema.parse({ mode: "full", path: args.path });
     case "line-range": {
-      const startLine = args.line_range.start;
+      const lineRange = args.line_range ?? { start: 1 };
+      const startLine = lineRange.start;
       const lineCount =
-        args.line_range.end === undefined
+        lineRange.end === undefined
           ? READ_FILE_CONTENT_LINE_RANGE_DEFAULT_LINES
-          : args.line_range.end - startLine + 1;
+          : lineRange.end - startLine + 1;
 
       return ReadFileContentCanonicalArgsSchema.parse({
         lineCount,
@@ -293,11 +328,12 @@ export function normalizeReadFileContentArgs(
       });
     }
     case "byte-range": {
-      const startByte = args.byte_range.start;
+      const byteRange = args.byte_range ?? { start: 0 };
+      const startByte = byteRange.start;
       const byteCount =
-        args.byte_range.endExclusive === undefined
-          ? args.byte_range.byteCount ?? READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES
-          : args.byte_range.endExclusive - startByte;
+        byteRange.endExclusive === undefined
+          ? byteRange.byteCount ?? READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES
+          : byteRange.endExclusive - startByte;
 
       return ReadFileContentCanonicalArgsSchema.parse({
         byteCount,
@@ -306,13 +342,19 @@ export function normalizeReadFileContentArgs(
         startByte,
       });
     }
-    case "chunk-cursor":
+    case "chunk-cursor": {
+      const chunkCursor = args.chunk_cursor ?? {
+        byteCount: READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES,
+        cursor: null,
+      };
+
       return ReadFileContentCanonicalArgsSchema.parse({
-        byteCount: args.chunk_cursor.byteCount,
-        cursor: args.chunk_cursor.cursor,
+        byteCount: chunkCursor.byteCount,
+        cursor: chunkCursor.cursor,
         mode: "chunk_cursor",
         path: args.path,
       });
+    }
   }
 }
 

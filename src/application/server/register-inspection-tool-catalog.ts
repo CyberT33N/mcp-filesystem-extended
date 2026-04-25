@@ -21,7 +21,7 @@ import {
   handleReadFileContent,
 } from "@domain/inspection/read-file-content/handler";
 import {
-  ReadFileContentArgsSchema,
+  ReadFileContentFlatArgsSchema,
   ReadFileContentResultSchema,
   normalizeReadFileContentArgs,
 } from "@domain/inspection/read-file-content/schema";
@@ -44,11 +44,13 @@ import {
 import { handleSearchRegex, getSearchRegexResult as getSearchRegexStructuredResult } from "@domain/inspection/search-file-contents-by-regex/handler";
 import {
   SearchFileContentsByRegexArgsSchema,
+  SearchFileContentsByRegexBaseArgsSchema,
   SearchFileContentsByRegexResultSchema,
 } from "@domain/inspection/search-file-contents-by-regex/schema";
 import { handleSearchFixedString, getSearchFixedStringResult as getSearchFixedStringStructuredResult } from "@domain/inspection/search-file-contents-by-fixed-string/handler";
 import {
   SearchFileContentsByFixedStringArgsSchema,
+  SearchFileContentsByFixedStringBaseArgsSchema,
   SearchFileContentsByFixedStringResultSchema,
 } from "@domain/inspection/search-file-contents-by-fixed-string/schema";
 import {
@@ -136,7 +138,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         "The ranged and cursor modes accept their mode-specific option blocks (`line_range`, `byte_range`, `chunk_cursor`) and are normalized at the MCP boundary into the canonical bounded-read contract. " +
         "Full mode remains limited to smaller files; valid larger access must switch to range or cursor modes, while unsupported or over-hard-gap workloads still refuse.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
-      inputSchema: ReadFileContentArgsSchema,
+      inputSchema: ReadFileContentFlatArgsSchema,
       outputSchema: ReadFileContentResultSchema,
     },
     async (args) =>
@@ -334,7 +336,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
         "Scope reduction remains a first-class alternative: narrow roots, add `includeGlobs`, or tighten the regex to the intended file set.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
-      inputSchema: SearchFileContentsByRegexArgsSchema,
+      inputSchema: SearchFileContentsByRegexBaseArgsSchema,
       outputSchema: SearchFileContentsByRegexResultSchema,
     },
     async (args) =>
@@ -406,7 +408,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
         "Scope reduction remains a first-class alternative: narrow roots, add `includeGlobs`, or reduce the search to the relevant subtree.",
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
-      inputSchema: SearchFileContentsByFixedStringArgsSchema,
+      inputSchema: SearchFileContentsByFixedStringBaseArgsSchema,
       outputSchema: SearchFileContentsByFixedStringResultSchema,
     },
     async (args) =>
