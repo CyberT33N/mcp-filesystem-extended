@@ -86,7 +86,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  regex: z.string().max(REGEX_PATTERN_MAX_CHARS).optional().default("").describe("Regular expression applied to counted lines. Base requests provide this field when regex-based line filtering is required; continuation-only requests omit it and reload the persisted request context."),
+  regex: z.string().max(REGEX_PATTERN_MAX_CHARS).optional().describe("Regular expression applied to counted lines. Base requests provide this field when regex-based line filtering is required; continuation-only requests omit it and reload the persisted request context."),
   /**
    * Include glob filters.
    *
@@ -181,7 +181,7 @@ export const CountLinesArgsSchema = z.object({
   const hasQueryDefiningFields =
     args.paths.length > 0
     || args.recursive
-    || args.regex !== ""
+    || args.regex !== undefined
     || args.includeGlobs.length > 0
     || args.excludeGlobs.length > 0
     || args.respectGitIgnore

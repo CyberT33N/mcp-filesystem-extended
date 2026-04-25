@@ -4,6 +4,8 @@ import {
   DISCOVERY_RESPONSE_CAP_CHARS,
   GLOBAL_RESPONSE_HARD_CAP_CHARS,
   INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES,
+  INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS,
+  INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
   createInlineResumeEnvelope,
@@ -44,7 +46,11 @@ import {
   buildPatternAwareCountCommand,
   resolveCountQueryPolicy,
 } from "@domain/shared/search/count-query-policy";
-import { classifyInspectionContentState } from "@domain/shared/search/inspection-content-state";
+import {
+  classifyInspectionContentState,
+  type InspectionContentSampleWindowPosition,
+  type InspectionContentStateInput,
+} from "@domain/shared/search/inspection-content-state";
 import {
   classifyPattern,
   type PatternClassification,
@@ -325,7 +331,15 @@ function buildCountLinesContinuationEnvelope(
   );
 }
 
-async function readInspectionContentSample(filePath: string): Promise<Uint8Array | null> {
+interface InspectionContentSampleResult {
+  sample: Uint8Array;
+  sampledWindowPositions: readonly InspectionContentSampleWindowPosition[];
+}
+
+async function readMultiWindowInspectionContentSample(
+  filePath: string,
+  fileBytes: number,
+): Promise<InspectionContentSampleResult | null> {
   let fileHandle;
 
   try {
@@ -335,10 +349,59 @@ async function readInspectionContentSample(filePath: string): Promise<Uint8Array
   }
 
   try {
-    const probeBuffer = Buffer.alloc(INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES);
-    const { bytesRead } = await fileHandle.read(probeBuffer, 0, probeBuffer.length, 0);
+    const windowSize = INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES;
+    const isLargeSurface = fileBytes >= INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES;
+    const [headPosition, middlePosition, tailPosition] = INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS;
 
-    return probeBuffer.subarray(0, bytesRead);
+    if (!isLargeSurface) {
+      const headBuffer = Buffer.alloc(windowSize);
+      const { bytesRead } = await fileHandle.read(headBuffer, 0, windowSize, 0);
+
+      return {
+        sample: headBuffer.subarray(0, bytesRead),
+        sampledWindowPositions: headPosition !== undefined ? [headPosition] : [],
+      };
+    }
+
+    const middleOffset = Math.floor((fileBytes - windowSize) / 2);
+    const tailOffset = fileBytes - windowSize;
+
+    const headBuffer = Buffer.alloc(windowSize);
+    const middleBuffer = Buffer.alloc(windowSize);
+    const tailBuffer = Buffer.alloc(windowSize);
+
+    const [headRead, middleRead, tailRead] = await Promise.all([
+      fileHandle.read(headBuffer, 0, windowSize, 0),
+      fileHandle.read(middleBuffer, 0, windowSize, middleOffset),
+      fileHandle.read(tailBuffer, 0, windowSize, tailOffset),
+    ]);
+
+    const sampledWindowPositions: InspectionContentSampleWindowPosition[] = [];
+    const chunks: Uint8Array[] = [];
+
+    if (headPosition !== undefined && headRead.bytesRead > 0) {
+      chunks.push(headBuffer.subarray(0, headRead.bytesRead));
+      sampledWindowPositions.push(headPosition);
+    }
+
+    if (middlePosition !== undefined && middleRead.bytesRead > 0) {
+      chunks.push(middleBuffer.subarray(0, middleRead.bytesRead));
+      sampledWindowPositions.push(middlePosition);
+    }
+
+    if (tailPosition !== undefined && tailRead.bytesRead > 0) {
+      chunks.push(tailBuffer.subarray(0, tailRead.bytesRead));
+      sampledWindowPositions.push(tailPosition);
+    }
+
+    if (chunks.length === 0) {
+      return null;
+    }
+
+    return {
+      sample: Buffer.concat(chunks),
+      sampledWindowPositions,
+    };
   } finally {
     await fileHandle.close();
   }
@@ -827,20 +890,22 @@ async function countLinesInFile(
   ignoreEmptyLines: boolean
 ): Promise<FileLineCount> {
   const fileStats = await fs.stat(filePath);
-  const contentSample = await readInspectionContentSample(filePath);
+  const multiWindowSample = await readMultiWindowInspectionContentSample(filePath, fileStats.size);
   const ioCapabilityProfile = detectIoCapabilityProfile();
-  const inspectionContentState = classifyInspectionContentState(
-    contentSample === null
-      ? {
-          candidatePath: filePath,
-          candidateFileBytes: fileStats.size,
-        }
-      : {
-          candidatePath: filePath,
-          candidateFileBytes: fileStats.size,
-          contentSample,
-        },
-  );
+
+  const classifierInput: InspectionContentStateInput = multiWindowSample === null
+    ? {
+        candidatePath: filePath,
+        candidateFileBytes: fileStats.size,
+      }
+    : {
+        candidatePath: filePath,
+        candidateFileBytes: fileStats.size,
+        contentSample: multiWindowSample.sample,
+        sampledWindowPositions: multiWindowSample.sampledWindowPositions,
+      };
+
+  const inspectionContentState = classifyInspectionContentState(classifierInput);
   const countQueryPolicy = resolveCountQueryPolicy({
     ioCapabilityProfile,
     inspectionContentState: inspectionContentState.resolvedState,

@@ -12,6 +12,8 @@ This document is the entry point for the architecture conventions of this projec
 | [Resume Architecture Overview](conventions/resume-architecture/overview.md) | Resume-session model, delivery modes, endpoint families, and scope reduction |
 | [Resume Architecture Workflow](conventions/resume-architecture/workflow.md) | Step-by-step execution flow for each delivery mode |
 | [Guardrail–Resume Interaction](conventions/resume-architecture/guardrail-interaction.md) | Which guardrails apply in which mode, the mode-aware cap rule, and the global fuse as the non-bypassable floor |
+| [Content Classification Overview](conventions/content-classification/overview.md) | Classifier states, decision tree, sampling strategy, endpoint integration, and invariants |
+| [Schema Optionality Contract](conventions/content-classification/schema-optionality-contract.md) | Why optional string query fields must not carry `.default("")`, sentinel-check detection, and correct modeling |
 
 ---
 
