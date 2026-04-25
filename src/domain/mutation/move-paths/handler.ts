@@ -3,11 +3,8 @@ import path from "path";
 
 import { normalizeError } from "@shared/errors";
 
-import {
-  createRuntimeBudgetExceededFailure,
-  formatToolGuardrailFailureAsText,
-} from "@domain/shared/guardrails/tool-guardrail-error-contract";
-import { MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertPathMutationBatchBudget } from "../shared/mutation-guardrails";
+import { formatBatchMutationSummary } from "@infrastructure/formatting/batch-result-formatter";
 import {
   validatePath,
   validatePathForCreation,
@@ -35,15 +32,10 @@ export async function handleMovePaths(
   overwrite: boolean,
   allowedDirectories: string[]
 ): Promise<string> {
-  if (items.length > MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST) {
-    return formatToolGuardrailFailureAsText(
-      createRuntimeBudgetExceededFailure({
-        toolName: "move_paths",
-        budgetSurface: "move_paths.operations",
-        measuredValue: items.length,
-        limitValue: MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST,
-      })
-    );
+  try {
+    assertPathMutationBatchBudget("move_paths", items.length);
+  } catch (guardError) {
+    return guardError instanceof Error ? guardError.message : String(guardError);
   }
 
   const results: string[] = [];
@@ -119,18 +111,7 @@ export async function handleMovePaths(
     })
   );
 
-  // Format the results
   const successCount = results.length;
-  const errorCount = errors.length;
-  
-  let output = `Processed ${successCount + errorCount} move operations:\n`;
-  output += `- ${successCount} items moved successfully\n`;
-  
-  if (errorCount > 0) {
-    output += `- ${errorCount} operations failed\n\n`;
-    output += "Errors:\n" + errors.join("\n");
-  }
-  
-  log.debug({ successCount, errorCount }, "handleMovePaths completed");
-  return output;
+  log.debug({ successCount, errorCount: errors.length }, "handleMovePaths completed");
+  return formatBatchMutationSummary("move operations", successCount, errors);
 }

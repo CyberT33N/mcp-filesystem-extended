@@ -69,3 +69,34 @@ export function formatBatchTextOperationResults(
 
   return output;
 }
+
+/**
+ * Formats a concise batch mutation summary line suitable for path-mutation and
+ * content-mutation handler responses.
+ *
+ * @remarks
+ * This helper keeps mutation output concise and consistent across all handlers
+ * that currently hand-build the same `Processed N items: ...` string pattern.
+ * Mutation endpoints must never echo large content bodies back to the caller.
+ *
+ * @param operationNoun - Plural English noun describing the mutation target (e.g. "files", "paths", "directories").
+ * @param successCount - Number of successfully completed operations.
+ * @param errors - Error messages for each failed operation.
+ * @returns Concise formatted summary string.
+ */
+export function formatBatchMutationSummary(
+  operationNoun: string,
+  successCount: number,
+  errors: readonly string[],
+): string {
+  const errorCount = errors.length;
+  let output = `Processed ${successCount + errorCount} ${operationNoun}:\n`;
+  output += `- ${successCount} ${operationNoun} processed successfully\n`;
+
+  if (errorCount > 0) {
+    output += `- ${errorCount} ${operationNoun} failed\n\n`;
+    output += "Errors:\n" + errors.join("\n");
+  }
+
+  return output;
+}

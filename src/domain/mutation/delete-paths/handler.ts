@@ -1,9 +1,6 @@
 import fs from "fs/promises";
-import {
-  createRuntimeBudgetExceededFailure,
-  formatToolGuardrailFailureAsText,
-} from "@domain/shared/guardrails/tool-guardrail-error-contract";
-import { MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertPathMutationBatchBudget } from "../shared/mutation-guardrails";
+import { formatBatchMutationSummary } from "@infrastructure/formatting/batch-result-formatter";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 /**
@@ -25,15 +22,10 @@ export async function handleDeletePaths(
   recursive: boolean,
   allowedDirectories: string[]
 ): Promise<string> {
-  if (paths.length > MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST) {
-    return formatToolGuardrailFailureAsText(
-      createRuntimeBudgetExceededFailure({
-        toolName: "delete_paths",
-        budgetSurface: "delete_paths.paths",
-        measuredValue: paths.length,
-        limitValue: MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST,
-      })
-    );
+  try {
+    assertPathMutationBatchBudget("delete_paths", paths.length);
+  } catch (guardError) {
+    return guardError instanceof Error ? guardError.message : String(guardError);
   }
 
   const results: string[] = [];
@@ -67,17 +59,6 @@ export async function handleDeletePaths(
     })
   );
 
-  // Format the results
   const successCount = results.length;
-  const errorCount = errors.length;
-  
-  let output = `Processed ${successCount + errorCount} paths:\n`;
-  output += `- ${successCount} items deleted successfully\n`;
-  
-  if (errorCount > 0) {
-    output += `- ${errorCount} items failed\n\n`;
-    output += "Errors:\n" + errors.join("\n");
-  }
-  
-  return output;
+  return formatBatchMutationSummary("paths", successCount, errors);
 }

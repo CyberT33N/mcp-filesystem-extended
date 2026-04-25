@@ -3,15 +3,10 @@ import path from "path";
 
 import { normalizeError } from "@shared/errors";
 
-import {
-  CONTENT_MUTATION_TOTAL_INPUT_CHARS,
-  PATH_MUTATION_SUMMARY_CAP_CHARS,
-} from "@domain/shared/guardrails/tool-guardrail-limits";
-import {
-  createRuntimeBudgetExceededFailure,
-  formatToolGuardrailFailureAsText,
-} from "@domain/shared/guardrails/tool-guardrail-error-contract";
+import { PATH_MUTATION_SUMMARY_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
+import { assertContentMutationInputBudget } from "../shared/mutation-guardrails";
+import { formatBatchMutationSummary } from "@infrastructure/formatting/batch-result-formatter";
 import { validatePathForCreation } from "@infrastructure/filesystem/path-guard";
 
 /**
@@ -31,23 +26,7 @@ export async function handleCreateFiles(
   files: Array<{path: string, content: string}>, 
   allowedDirectories: string[]
 ): Promise<string> {
-  const totalInputChars = files.reduce(
-    (totalChars, file) => totalChars + file.content.length,
-    0,
-  );
-
-  if (totalInputChars > CONTENT_MUTATION_TOTAL_INPUT_CHARS) {
-    throw new Error(
-      formatToolGuardrailFailureAsText(
-        createRuntimeBudgetExceededFailure({
-          toolName: "create_files",
-          budgetSurface: "Cumulative content-bearing mutation input characters",
-          measuredValue: totalInputChars,
-          limitValue: CONTENT_MUTATION_TOTAL_INPUT_CHARS,
-        }),
-      ),
-    );
-  }
+  assertContentMutationInputBudget("create_files", files);
 
   const results: string[] = [];
   const errors: string[] = [];
@@ -86,17 +65,8 @@ export async function handleCreateFiles(
     })
   );
   
-  // Format the results
   const successCount = results.length;
-  const errorCount = errors.length;
-  
-  let output = `Processed ${successCount + errorCount} files:\n`;
-  output += `- ${successCount} files created successfully\n`;
-  
-  if (errorCount > 0) {
-    output += `- ${errorCount} files failed\n\n`;
-    output += "Errors:\n" + errors.join("\n");
-  }
+  const output = formatBatchMutationSummary("files", successCount, errors);
 
   assertActualTextBudget(
     "create_files",
@@ -104,6 +74,6 @@ export async function handleCreateFiles(
     PATH_MUTATION_SUMMARY_CAP_CHARS,
     "Create-files mutation summary",
   );
-  
+
   return output;
 }

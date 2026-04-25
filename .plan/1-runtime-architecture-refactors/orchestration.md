@@ -7,6 +7,7 @@ hierarchy_level: 1
 unit_status: "in_progress"
 total_tasks: 17
 completed_tasks: 16
+active_task: "1.17"
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "1.17"
@@ -149,10 +150,19 @@ todo_window_mode_override: "inherit"
   - Files Modified: src/domain/shared/utils/error-message.ts, src/domain/inspection/get-file-checksums/handler.ts, src/domain/inspection/verify-file-checksums/handler.ts, src/domain/inspection/get-path-metadata/handler.ts, src/domain/comparison/diff-files/handler.ts, src/domain/comparison/diff-text-content/handler.ts, src/domain/mutation/append-files/handler.ts, src/domain/mutation/create-files/handler.ts, src/domain/mutation/copy-paths/handler.ts, src/domain/mutation/move-paths/handler.ts, src/domain/mutation/replace-file-line-ranges/handler.ts, src/domain/shared/guardrails/filesystem-preflight.ts, src/domain/inspection/search-file-contents-by-regex/handler.ts
   - Blocked By: none (1.15 DONE)
   - Summary: Create extractErrorMessage utility in @domain/shared/utils/error-message; replace all inline error instanceof Error ? error.message : String(error) patterns across 12 consumer files; regex handler also picks up SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME from 1.15.
+- [~] **1.17 Mutation domain shared helpers — formatBatchMutationSummary, assertPathMutationBatchBudget, assertContentMutationInputBudget** → [`1.17-mutation-domain-shared-helpers.md`](./1.17-mutation-domain-shared-helpers.md)
+  - Classification: SEQUENTIAL
+  - Status: IN_PROGRESS
+  - Complexity: MEDIUM
+  - Execution Surface Band: YELLOW
+  - Files Modified: src/domain/mutation/shared/mutation-guardrails.ts, src/infrastructure/formatting/batch-result-formatter.ts, src/domain/mutation/delete-paths/handler.ts, src/domain/mutation/copy-paths/handler.ts, src/domain/mutation/move-paths/handler.ts, src/domain/mutation/create-directories/handler.ts, src/domain/mutation/append-files/handler.ts, src/domain/mutation/create-files/handler.ts
+  - Blocked By: none (1.16 DONE)
+  - Summary: Extract assertPathMutationBatchBudget, assertContentMutationInputBudget, and formatBatchMutationSummary from inline mutation handler patterns into shared helper modules; all 4 path-mutation handlers use try/catch wrapper to preserve return semantics; copy-paths guard-only (summary stays formatBatchTextOperationResults).
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
+| D12 | 1.17 | 1.16 | SEQUENTIAL | RESOLVED | Mutation shared helpers depend on 1.16 having already modified all mutation handlers; re-anchor all target files after 1.16. | `src/domain/mutation/append-files/handler.ts`, `src/domain/mutation/create-files/handler.ts`, `src/domain/mutation/copy-paths/handler.ts`, `src/domain/mutation/move-paths/handler.ts` |
 | D1 | 1.2 | 1.1 | SEQUENTIAL | RESOLVED | Fixed-string hybrid search depends on the shared inspection-state vocabulary. | `src/domain/shared/search/text-binary-classifier.ts` |
 | D2 | 1.3 | 1.2 | SEQUENTIAL | RESOLVED | Regex/count alignment assumes the fixed-string lane and shared state semantics are already bound. | `src/domain/shared/search/search-execution-policy.ts` |
 | D3 | 1.4 | 1.3 | SEQUENTIAL | RESOLVED | Read-core SSOT refactor depends on the finalized inspection-state and execution-lane rules. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
@@ -178,6 +188,10 @@ todo_window_mode_override: "inherit"
 10. 1.10
 11. 1.11
 12. 1.12
+13. 1.14
+14. 1.15
+15. 1.16
+16. 1.17
 
 ## Notes for Orchestrating Agent
 - Re-reference [`__bak__/plan-ugrep/PLAN.md`](../../__bak__/plan-ugrep/PLAN.md) only as historical implementation evidence.

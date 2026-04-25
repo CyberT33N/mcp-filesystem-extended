@@ -3,15 +3,10 @@ import path from "path";
 
 import { normalizeError } from "@shared/errors";
 
-import {
-  CONTENT_MUTATION_TOTAL_INPUT_CHARS,
-  PATH_MUTATION_SUMMARY_CAP_CHARS,
-} from "@domain/shared/guardrails/tool-guardrail-limits";
-import {
-  createRuntimeBudgetExceededFailure,
-  formatToolGuardrailFailureAsText,
-} from "@domain/shared/guardrails/tool-guardrail-error-contract";
+import { PATH_MUTATION_SUMMARY_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
+import { assertContentMutationInputBudget } from "../shared/mutation-guardrails";
+import { formatBatchMutationSummary } from "@infrastructure/formatting/batch-result-formatter";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 
 /**
@@ -31,23 +26,7 @@ export async function handleAppendFiles(
   files: Array<{path: string, content: string}>, 
   allowedDirectories: string[]
 ): Promise<string> {
-  const totalInputChars = files.reduce(
-    (totalChars, file) => totalChars + file.content.length,
-    0,
-  );
-
-  if (totalInputChars > CONTENT_MUTATION_TOTAL_INPUT_CHARS) {
-    throw new Error(
-      formatToolGuardrailFailureAsText(
-        createRuntimeBudgetExceededFailure({
-          toolName: "append_files",
-          budgetSurface: "Cumulative content-bearing mutation input characters",
-          measuredValue: totalInputChars,
-          limitValue: CONTENT_MUTATION_TOTAL_INPUT_CHARS,
-        }),
-      ),
-    );
-  }
+  assertContentMutationInputBudget("append_files", files);
 
   const results: string[] = [];
   const errors: string[] = [];
@@ -72,17 +51,8 @@ export async function handleAppendFiles(
     })
   );
   
-  // Format the results
   const successCount = results.length;
-  const errorCount = errors.length;
-  
-  let output = `Processed ${successCount + errorCount} files:\n`;
-  output += `- ${successCount} files appended successfully\n`;
-  
-  if (errorCount > 0) {
-    output += `- ${errorCount} files failed\n\n`;
-    output += "Errors:\n" + errors.join("\n");
-  }
+  const output = formatBatchMutationSummary("files", successCount, errors);
 
   assertActualTextBudget(
     "append_files",
@@ -90,6 +60,6 @@ export async function handleAppendFiles(
     PATH_MUTATION_SUMMARY_CAP_CHARS,
     "Append-files mutation summary",
   );
-  
+
   return output;
 }

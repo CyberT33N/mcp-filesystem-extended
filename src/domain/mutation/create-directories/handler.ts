@@ -1,9 +1,6 @@
 import fs from "fs/promises";
-import {
-  createRuntimeBudgetExceededFailure,
-  formatToolGuardrailFailureAsText,
-} from "@domain/shared/guardrails/tool-guardrail-error-contract";
-import { MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertPathMutationBatchBudget } from "../shared/mutation-guardrails";
+import { formatBatchMutationSummary } from "@infrastructure/formatting/batch-result-formatter";
 import { validatePathForCreation } from "@infrastructure/filesystem/path-guard";
 import { createModuleLogger } from "@infrastructure/logging/logger";
 
@@ -25,15 +22,10 @@ export async function handleCreateDirectories(
   paths: string[],
   allowedDirectories: string[]
 ): Promise<string> {
-  if (paths.length > MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST) {
-    return formatToolGuardrailFailureAsText(
-      createRuntimeBudgetExceededFailure({
-        toolName: "create_directories",
-        budgetSurface: "create_directories.paths",
-        measuredValue: paths.length,
-        limitValue: MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST,
-      })
-    );
+  try {
+    assertPathMutationBatchBudget("create_directories", paths.length);
+  } catch (guardError) {
+    return guardError instanceof Error ? guardError.message : String(guardError);
   }
 
   const results: string[] = [];
@@ -64,18 +56,7 @@ export async function handleCreateDirectories(
     })
   );
 
-  // Format the results
   const successCount = results.length;
-  const errorCount = errors.length;
-  
-  let output = `Processed ${successCount + errorCount} directories:\n`;
-  output += `- ${successCount} directories created successfully\n`;
-  
-  if (errorCount > 0) {
-    output += `- ${errorCount} directories failed\n\n`;
-    output += "Errors:\n" + errors.join("\n");
-  }
-  
-  log.debug({ successCount, errorCount }, "handleCreateDirectories completed");
-  return output;
+  log.debug({ successCount, errorCount: errors.length }, "handleCreateDirectories completed");
+  return formatBatchMutationSummary("directories", successCount, errors);
 }

@@ -3,11 +3,7 @@ import path from "path";
 
 import { normalizeError } from "@shared/errors";
 
-import {
-  createRuntimeBudgetExceededFailure,
-  formatToolGuardrailFailureAsText,
-} from "@domain/shared/guardrails/tool-guardrail-error-contract";
-import { MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { assertPathMutationBatchBudget } from "../shared/mutation-guardrails";
 import { validatePath, validatePathForCreation } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
@@ -88,15 +84,10 @@ export async function handleCopyPaths(
   operations: CopyPathsOperation[],
   allowedDirectories: string[]
 ): Promise<string> {
-  if (operations.length > MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST) {
-    return formatToolGuardrailFailureAsText(
-      createRuntimeBudgetExceededFailure({
-        toolName: "copy_paths",
-        budgetSurface: "copy_paths.operations",
-        measuredValue: operations.length,
-        limitValue: MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST,
-      })
-    );
+  try {
+    assertPathMutationBatchBudget("copy_paths", operations.length);
+  } catch (guardError) {
+    return guardError instanceof Error ? guardError.message : String(guardError);
   }
 
   const preparedOperations = await Promise.all(
