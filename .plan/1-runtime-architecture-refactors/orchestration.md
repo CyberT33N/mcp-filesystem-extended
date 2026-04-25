@@ -6,7 +6,7 @@ parent_orchestration: "PLAN.md"
 hierarchy_level: 1
 unit_status: "in_progress"
 total_tasks: 17
-completed_tasks: 13
+completed_tasks: 14
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "1.14"
