@@ -195,7 +195,7 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
     result.resume.resumable
     && result.resume.resumeToken !== null;
 
-  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE) {
+  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableContinuation) {
     return formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
   }
 
@@ -205,14 +205,6 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
       ? `Fixed-string-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`
       : `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`;
   const structuredPayloadGuidance = "The authoritative match payload remains in structuredContent.";
-
-  if (!hasResumableContinuation) {
-    return [
-      previewSummary,
-      structuredPayloadGuidance,
-      "This response is finalized and exposes no active resume token.",
-    ].join("\n");
-  }
 
   return [
     previewSummary,

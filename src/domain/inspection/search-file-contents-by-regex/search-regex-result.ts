@@ -207,7 +207,7 @@ export function formatSearchRegexContinuationAwareTextOutput(
     result.resume.resumable
     && result.resume.resumeToken !== null;
 
-  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE) {
+  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableContinuation) {
     return formatSearchRegexResultOutput(result, pattern, effectiveMaxResults);
   }
 
@@ -217,14 +217,6 @@ export function formatSearchRegexContinuationAwareTextOutput(
       ? `Regex-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`
       : `Regex-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.`;
   const structuredPayloadGuidance = "The authoritative match payload remains in structuredContent.";
-
-  if (!hasResumableContinuation) {
-    return [
-      previewSummary,
-      structuredPayloadGuidance,
-      "This response is finalized and exposes no active resume token.",
-    ].join("\n");
-  }
 
   return [
     previewSummary,

@@ -109,7 +109,7 @@ function formatFindPathsByNameTextOutput(
     result.resume.resumable
     && result.resume.resumeToken !== null;
 
-  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE) {
+  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableResume) {
     if (result.roots.length === 1) {
       const firstRootResult = result.roots[0];
 
@@ -136,14 +136,6 @@ function formatFindPathsByNameTextOutput(
       ? `Name-discovery completion progress is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`
       : `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.`;
   const structuredPayloadGuidance = "The authoritative match payload remains in structuredContent.";
-
-  if (!hasResumableResume) {
-    return [
-      previewSummary,
-      structuredPayloadGuidance,
-      "This response is finalized and exposes no active resume token.",
-    ].join("\n");
-  }
 
   return [
     previewSummary,

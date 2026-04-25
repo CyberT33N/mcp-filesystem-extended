@@ -186,7 +186,7 @@ function formatListDirectoryEntriesTextOutput(
     result.resume.resumable
     && result.resume.resumeToken !== null;
 
-  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE) {
+  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableResume) {
     return encode(result);
   }
 
@@ -200,24 +200,7 @@ function formatListDirectoryEntriesTextOutput(
       ? `Directory listing completion progress is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.`
       : `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.`;
   const previewChunkPayload = formatListDirectoryEntriesChunkPayload(result);
-
-  if (!hasResumableResume) {
-    return [
-      previewSummary,
-      "Final bounded directory-entry payload:",
-      previewChunkPayload,
-    ].join("\n");
-  }
-
   const activeResumeToken = result.resume.resumeToken;
-
-  if (activeResumeToken === null) {
-    return [
-      previewSummary,
-      "Bounded directory-entry payload:",
-      previewChunkPayload,
-    ].join("\n");
-  }
 
   return [
     previewSummary,
