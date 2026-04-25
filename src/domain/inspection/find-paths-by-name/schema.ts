@@ -8,47 +8,13 @@ import {
   PATH_MAX_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
-  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  applyCommonResumeSchemaRefinement,
+  InspectionResumeAdmissionSchema,
+  InspectionResumeMetadataSchema,
   INSPECTION_RESUME_MODES,
   INSPECTION_RESUME_MODE_FIELD,
-  INSPECTION_RESUME_STATUSES,
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
-
-const InspectionResumeAdmissionSchema = z.object({
-  outcome: z.enum([
-    INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
-    INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
-    INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
-    INSPECTION_RESUME_ADMISSION_OUTCOMES.NARROWING_REQUIRED,
-  ]),
-  guidanceText: z.string().nullable(),
-  scopeReductionGuidanceText: z.string().nullable(),
-});
-
-const InspectionResumeMetadataSchema = z.object({
-  resumeToken: z.string().nullable(),
-  supportedResumeModes: z.array(
-    z.enum([
-      INSPECTION_RESUME_MODES.NEXT_CHUNK,
-      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
-    ]),
-  ),
-  recommendedResumeMode: z
-    .enum([
-      INSPECTION_RESUME_MODES.NEXT_CHUNK,
-      INSPECTION_RESUME_MODES.COMPLETE_RESULT,
-    ])
-    .nullable(),
-  status: z.enum([
-    INSPECTION_RESUME_STATUSES.ACTIVE,
-    INSPECTION_RESUME_STATUSES.CANCELLED,
-    INSPECTION_RESUME_STATUSES.COMPLETED,
-    INSPECTION_RESUME_STATUSES.EXPIRED,
-  ]).nullable(),
-  resumable: z.boolean(),
-  expiresAt: z.string().nullable(),
-});
 
 export const FindPathsByNameArgsSchema = z.object({
   [INSPECTION_RESUME_TOKEN_FIELD]: z
@@ -221,30 +187,7 @@ export const FindPathsByNameArgsSchema = z.object({
     });
   }
 
-  if (!resumeRequest && args.resumeMode !== undefined) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Base requests must not provide a resume mode without a resume token.",
-      path: [INSPECTION_RESUME_MODE_FIELD],
-    });
-  }
-
-  if (resumeRequest && args.resumeMode === undefined) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Resume-only requests must provide a resumeMode.",
-      path: [INSPECTION_RESUME_MODE_FIELD],
-    });
-  }
-
-  if (resumeRequest && hasQueryDefiningFields) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message:
-        "Resume-only requests must omit new query-defining fields and rely on the persisted request context.",
-      path: [INSPECTION_RESUME_TOKEN_FIELD],
-    });
-  }
+  applyCommonResumeSchemaRefinement(args, ctx, hasQueryDefiningFields);
 });
 
 export const FindPathsByNameResultSchema = z.object({

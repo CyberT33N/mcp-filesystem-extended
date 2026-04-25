@@ -1,5 +1,8 @@
 import { z } from "zod";
 import {
+  BatchOperationErrorBaseSchema,
+} from "@domain/inspection/shared/filesystem-entry-metadata-contract";
+import {
   HASH_STRING_MAX_CHARS,
   MAX_GENERIC_PATHS_PER_REQUEST,
   PATH_MAX_CHARS,
@@ -168,21 +171,7 @@ export const VerifyFileChecksumsResultSchema = z.object({
    * ```
    */
   errors: z.array(
-    z.object({
-      /**
-       * Failed file path.
-       *
-       * @remarks
-       * This property identifies the file whose verification attempt failed.
-       *
-       * @example
-       * ```ts
-       * {
-       *   path: "missing.txt"
-       * }
-       * ```
-       */
-      path: z.string(),
+    BatchOperationErrorBaseSchema.extend({
       /**
        * Expected hash echo.
        *
@@ -198,21 +187,6 @@ export const VerifyFileChecksumsResultSchema = z.object({
        * ```
        */
       expectedHash: z.string(),
-      /**
-       * Failure message.
-       *
-       * @remarks
-       * This property contains the error text that explains why verification did
-       * not complete for the file.
-       *
-       * @example
-       * ```ts
-       * {
-       *   error: "ENOENT: no such file or directory"
-       * }
-       * ```
-       */
-      error: z.string(),
     }),
   ),
   /**

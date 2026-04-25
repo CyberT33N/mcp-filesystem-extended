@@ -157,3 +157,22 @@ export const FileSystemEntryMetadataSchema = z.object({
   accessed: z.string().optional(),
   permissions: z.string().optional(),
 });
+
+/**
+ * Base error schema shared by batch inspection endpoints that report per-path failures.
+ *
+ * @remarks
+ * This schema is the single source of truth for the common `{ path, error }` error
+ * shape used by `get_file_checksums` and `get_path_metadata`. The `verify_file_checksums`
+ * endpoint extends this base with `.extend({ expectedHash: z.string() })` to add its
+ * additional required field.
+ */
+export const BatchOperationErrorBaseSchema = z.object({
+  path: z.string(),
+  error: z.string(),
+});
+
+/**
+ * Inferred TypeScript type for the batch operation base error shape.
+ */
+export type BatchOperationError = z.infer<typeof BatchOperationErrorBaseSchema>;

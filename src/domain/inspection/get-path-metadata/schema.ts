@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  BatchOperationErrorBaseSchema,
   DefaultedFileSystemEntryMetadataSelectionSchema,
   FileSystemEntryMetadataSchema,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
@@ -103,37 +104,5 @@ export const GetPathMetadataResultSchema = z.object({
    * }
    * ```
    */
-  errors: z.array(
-    z.object({
-      /**
-       * Failed path echo.
-       *
-       * @remarks
-       * This property identifies the path whose metadata lookup failed.
-       *
-       * @example
-       * ```ts
-       * {
-       *   path: "missing.txt"
-       * }
-       * ```
-       */
-      path: z.string(),
-      /**
-       * Failure message.
-       *
-       * @remarks
-       * This property provides the error text that explains why the metadata
-       * lookup could not be completed.
-       *
-       * @example
-       * ```ts
-       * {
-       *   error: "ENOENT: no such file or directory"
-       * }
-       * ```
-       */
-      error: z.string(),
-    }),
-  ),
+  errors: z.array(BatchOperationErrorBaseSchema),
 });

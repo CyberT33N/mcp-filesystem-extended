@@ -1,5 +1,8 @@
 import { z } from "zod";
 import {
+  BatchOperationErrorBaseSchema,
+} from "@domain/inspection/shared/filesystem-entry-metadata-contract";
+import {
   MAX_GENERIC_PATHS_PER_REQUEST,
   PATH_MAX_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
@@ -103,37 +106,5 @@ export const GetFileChecksumsResultSchema = z.object({
    * }
    * ```
    */
-  errors: z.array(
-    z.object({
-      /**
-       * Failed file path.
-       *
-       * @remarks
-       * This property identifies the file whose checksum operation failed.
-       *
-       * @example
-       * ```ts
-       * {
-       *   path: "missing.txt"
-       * }
-       * ```
-       */
-      path: z.string(),
-      /**
-       * Failure message.
-       *
-       * @remarks
-       * This property carries the error message that explains why checksum
-       * generation did not succeed for the file.
-       *
-       * @example
-       * ```ts
-       * {
-       *   error: "ENOENT: no such file or directory"
-       * }
-       * ```
-       */
-      error: z.string(),
-    }),
-  ),
+  errors: z.array(BatchOperationErrorBaseSchema),
 });

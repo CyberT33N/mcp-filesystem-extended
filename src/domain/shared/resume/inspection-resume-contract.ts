@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Public request field that resumes one persisted server-owned inspection session.
  */
@@ -281,6 +283,138 @@ export interface ValidateResumeOnlyRequestResult {
    * Whether the request omitted the mandatory resume intent.
    */
   missingResumeMode: boolean;
+}
+
+/**
+ * Zod schema for the admission metadata returned by preview-family inspection endpoints.
+ *
+ * @remarks
+ * Mirrors the {@link InspectionResumeAdmission} interface and is the shared Zod contract
+ * used by all five preview-family endpoint result schemas. Use
+ * {@link InspectionCompletionOnlyAdmissionSchema} for completion-backed-only families.
+ */
+export const InspectionResumeAdmissionSchema = z.object({
+  outcome: z.enum([
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.NARROWING_REQUIRED,
+  ]),
+  guidanceText: z.string().nullable(),
+  scopeReductionGuidanceText: z.string().nullable(),
+});
+
+/**
+ * Zod schema for the resume metadata returned by preview-family inspection endpoints.
+ *
+ * @remarks
+ * Mirrors the {@link InspectionResumeMetadata} interface and is the shared Zod contract
+ * used by all five preview-family endpoint result schemas. Use
+ * {@link InspectionCompletionOnlyResumeMetadataSchema} for completion-backed-only families.
+ */
+export const InspectionResumeMetadataSchema = z.object({
+  resumeToken: z.string().nullable(),
+  supportedResumeModes: z.array(
+    z.enum([INSPECTION_RESUME_MODES.NEXT_CHUNK, INSPECTION_RESUME_MODES.COMPLETE_RESULT]),
+  ),
+  recommendedResumeMode: z
+    .enum([INSPECTION_RESUME_MODES.NEXT_CHUNK, INSPECTION_RESUME_MODES.COMPLETE_RESULT])
+    .nullable(),
+  status: z.enum([
+    INSPECTION_RESUME_STATUSES.ACTIVE,
+    INSPECTION_RESUME_STATUSES.CANCELLED,
+    INSPECTION_RESUME_STATUSES.COMPLETED,
+    INSPECTION_RESUME_STATUSES.EXPIRED,
+  ]).nullable(),
+  resumable: z.boolean(),
+  expiresAt: z.string().nullable(),
+});
+
+/**
+ * Zod schema for the admission metadata returned by completion-backed-only inspection endpoints.
+ *
+ * @remarks
+ * Restricted variant that excludes `PREVIEW_FIRST` from the admission outcome enum.
+ * Used by `count_lines` which supports only `complete-result` resume mode.
+ */
+export const InspectionCompletionOnlyAdmissionSchema = z.object({
+  outcome: z.enum([
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+    INSPECTION_RESUME_ADMISSION_OUTCOMES.NARROWING_REQUIRED,
+  ]),
+  guidanceText: z.string().nullable(),
+  scopeReductionGuidanceText: z.string().nullable(),
+});
+
+/**
+ * Zod schema for the resume metadata returned by completion-backed-only inspection endpoints.
+ *
+ * @remarks
+ * Restricted variant that allows only `complete-result` in `supportedResumeModes` and
+ * `recommendedResumeMode`. Used by `count_lines` which is strictly completion-backed-only.
+ */
+export const InspectionCompletionOnlyResumeMetadataSchema = z.object({
+  resumeToken: z.string().nullable(),
+  supportedResumeModes: z.array(z.enum([INSPECTION_RESUME_MODES.COMPLETE_RESULT])),
+  recommendedResumeMode: z.enum([INSPECTION_RESUME_MODES.COMPLETE_RESULT]).nullable(),
+  status: z.enum([
+    INSPECTION_RESUME_STATUSES.ACTIVE,
+    INSPECTION_RESUME_STATUSES.CANCELLED,
+    INSPECTION_RESUME_STATUSES.COMPLETED,
+    INSPECTION_RESUME_STATUSES.EXPIRED,
+  ]).nullable(),
+  resumable: z.boolean(),
+  expiresAt: z.string().nullable(),
+});
+
+/**
+ * Shared superRefine helper that applies the three common resume-mode/token validation
+ * checks shared by all preview-family and completion-backed-only inspection endpoint schemas.
+ *
+ * @remarks
+ * Each endpoint schema retains its own primary-field checks (e.g. roots required, pattern
+ * required). This helper owns only the three mode/token invariants that are identical across
+ * every consumer: mode-without-token, missing-mode-on-resume, and query-fields-on-resume.
+ *
+ * @param args - Validated args object carrying at minimum `resumeToken` and `resumeMode`.
+ * @param ctx - Zod refinement context used to report issues.
+ * @param hasQueryDefiningFields - Whether the caller supplied any query-defining fields.
+ */
+export function applyCommonResumeSchemaRefinement(
+  args: {
+    readonly resumeToken?: string | undefined;
+    readonly resumeMode?: string | undefined;
+  },
+  ctx: z.RefinementCtx,
+  hasQueryDefiningFields: boolean,
+): void {
+  const isResumeRequest = args.resumeToken !== undefined;
+
+  if (!isResumeRequest && args.resumeMode !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Base requests must not provide a resume mode without a resume token.",
+      path: [INSPECTION_RESUME_MODE_FIELD],
+    });
+  }
+
+  if (isResumeRequest && args.resumeMode === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Resume-only requests must provide a resumeMode.",
+      path: [INSPECTION_RESUME_MODE_FIELD],
+    });
+  }
+
+  if (isResumeRequest && hasQueryDefiningFields) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Resume-only requests must omit new query-defining fields and rely on the persisted request context.",
+      path: [INSPECTION_RESUME_TOKEN_FIELD],
+    });
+  }
 }
 
 function createEmptyResumeMetadata(): InspectionResumeMetadata {

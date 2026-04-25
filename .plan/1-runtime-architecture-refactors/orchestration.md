@@ -24,8 +24,8 @@ todo_window_mode_override: "inherit"
 - **Progress:** 11/12 tasks
 
 ## Execution Frontier
-- **Resume Frontier Task:** `1.12`
-- **Next Frontier Task:** `1.12`
+- **Resume Frontier Task:** `1.14`
+- **Next Frontier Task:** `1.15`
 - **Todo Window Mode:** `inherit`
 
 ## Tasks
@@ -125,6 +125,14 @@ todo_window_mode_override: "inherit"
   - Files Modified: shared resume-session contracts, preview-family schemas/handlers/result surfaces, `count_lines`, and caller-visible server/endpoint guidance wording
   - Blocked By: none
   - Summary: Replace the chunk-only continuation vocabulary with a cleaner resume-session model, add dual preview-family resume intents plus completion-backed `count_lines` semantics, harden family-wide cursor precision, and align server plus endpoint guidance to prompt-efficient autonomous agent use.
+- [x] **1.14 Schema contract layer centralization — shared Zod schemas, superRefine helper, and error base schema** → [`1.14-schema-contract-layer-centralization.md`](./1.14-schema-contract-layer-centralization.md)
+  - Classification: ISOLATED
+  - Status: DONE
+  - Complexity: MEDIUM
+  - Execution Surface Band: YELLOW
+  - Files Modified: src/domain/shared/resume/inspection-resume-contract.ts, src/domain/inspection/shared/filesystem-entry-metadata-contract.ts, 5 preview-family schema files, count-lines/schema.ts, get-file-checksums/schema.ts, get-path-metadata/schema.ts, verify-file-checksums/schema.ts
+  - Blocked By: none
+  - Summary: Centralize duplicated Zod resume schemas from 5 preview-family endpoint schemas into the shared resume contract, add restricted variants for count-lines, and add a base error schema to the shared metadata contract for 3 metadata-family consumers.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
