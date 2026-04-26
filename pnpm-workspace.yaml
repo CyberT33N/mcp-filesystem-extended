@@ -75,7 +75,7 @@ catalog:
   prettier-plugin-packagejson: ~2.5.19
   publint: ~0.3.12
   radash: ~12.1.1
-  remeda: 'catalog:'
+  remeda: ~2.33.7
   rimraf: ~6.0.1
   safe-stable-stringify: 2.5.0
   semver: 7.7.3
