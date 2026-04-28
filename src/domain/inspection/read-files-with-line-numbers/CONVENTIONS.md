@@ -2,12 +2,12 @@
 
 ## Architectural Principle: Content Fidelity (1:1 Guarantee)
 
-The `read_files_with_line_numbers` endpoint guarantees **100% verbatim, lossless content reproduction** for all files in every batch request. No transformation, normalization, trimming, or whitespace modification is applied to the raw file content at any point in the pipeline.
+The `read_files_with_line_numbers` endpoint guarantees **100% verbatim, lossless content reproduction** for all files in every batch request. No transformation, normalization, trimming, or whitespace modification is applied to the decoded file content at any point in the pipeline.
 
 This guarantee is enforced at the infrastructure level:
 
 - `readFile()` reads raw bytes from the filesystem without any modification.
-- `.toString("utf8")` converts bytes to a UTF-8 string without stripping or altering any characters.
+- The shared inspection pipeline resolves one supported text encoding before decoded text is emitted to the caller-facing surface.
 - `formatLineNumberedTextContent` applies only additive prefix annotation (`N: `) per line — the original line content is never modified.
 
 The visual appearance of indentation or whitespace in MCP client UIs is a rendering concern, not a transport concern. See `DESCRIPTION.md` for the troubleshooting section on MCP client rendering artifacts.

@@ -8,9 +8,13 @@ import {
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
   classifyInspectionContentState,
+  decodeInspectionContentTextBytes,
+  INSPECTION_CONTENT_OPERATION_LITERALS,
   INSPECTION_CONTENT_STATE_LITERALS,
+  resolveInspectionContentOperationCapability,
   type InspectionContentStateClassification,
   type InspectionContentSampleWindowPosition,
+  type InspectionContentTextEncoding,
 } from "@domain/shared/search/inspection-content-state";
 
 /**
@@ -38,7 +42,7 @@ export interface TextReadCoreEntry {
  */
 export interface ReadValidatedFullTextFileResult {
   /**
-   * UTF-8 text content returned after shared content-state validation succeeds.
+   * Decoded text content returned after shared content-state validation succeeds.
    */
   content: string;
 
@@ -57,6 +61,21 @@ interface SampleWindowSpec {
   position: InspectionContentSampleWindowPosition;
   startByte: number;
   byteCount: number;
+}
+
+/**
+ * Shared bounded inspection sample returned by the infrastructure sampling SSOT.
+ */
+export interface SharedInspectionContentSample {
+  /**
+   * Raw sampled bytes used by the shared domain classifier.
+   */
+  contentSample: Uint8Array;
+
+  /**
+   * Canonical sample-window positions represented by the sampled bytes.
+   */
+  sampledWindowPositions: readonly InspectionContentSampleWindowPosition[];
 }
 
 function buildSampleWindowSpecs(totalFileBytes: number): SampleWindowSpec[] {
@@ -125,18 +144,77 @@ async function readBoundedInspectionContentSample(
   return Buffer.concat(sampledBuffers);
 }
 
+/**
+ * Reads the shared inspection sample for one validated file surface.
+ *
+ * @remarks
+ * See {@link ../../../../conventions/content-classification/overview.md | Content Classification Architecture Overview}
+ * for the shared sampling contract that requires complete small-surface evidence and bounded
+ * head/middle/tail evidence for large surfaces.
+ *
+ * @param validPath - Absolute validated filesystem path that may be read safely.
+ * @param totalFileBytes - Total byte size of the validated target file.
+ * @returns Shared bounded inspection sample and the canonical sampled window positions.
+ */
+export async function readSharedInspectionContentSample(
+  validPath: string,
+  totalFileBytes: number,
+): Promise<SharedInspectionContentSample> {
+  if (totalFileBytes <= INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES) {
+    return {
+      contentSample: await readFile(validPath),
+      sampledWindowPositions: getFullCoverageWindowPositions(),
+    };
+  }
+
+  return {
+    contentSample: await readBoundedInspectionContentSample({
+      requestedPath: validPath,
+      totalFileBytes,
+      validPath,
+    }),
+    sampledWindowPositions: INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS,
+  };
+}
+
+/**
+ * Reads and decodes one validated file through the shared inspection text encoding.
+ *
+ * @param validPath - Absolute validated filesystem path that may be read safely.
+ * @param textEncoding - Shared text encoding resolved by the inspection classifier.
+ * @returns Decoded text content together with the raw returned byte count.
+ */
+export async function readDecodedInspectionTextFile(
+  validPath: string,
+  textEncoding: InspectionContentTextEncoding,
+): Promise<{ content: string; returnedByteCount: number }> {
+  const contentBuffer = await readFile(validPath);
+
+  return {
+    content: decodeInspectionContentTextBytes(contentBuffer, textEncoding),
+    returnedByteCount: contentBuffer.byteLength,
+  };
+}
+
 function createUnsupportedTextReadStateMessage(
   toolName: string,
   entry: Pick<TextReadCoreEntry, "requestedPath">,
   classification: InspectionContentStateClassification,
 ): string {
+  const capability = resolveInspectionContentOperationCapability(
+    classification,
+    INSPECTION_CONTENT_OPERATION_LITERALS.READ_TEXT,
+  );
+
   switch (classification.resolvedState) {
     case INSPECTION_CONTENT_STATE_LITERALS.BINARY_CONFIDENT:
       return `${toolName} supports only text-compatible reads. '${entry.requestedPath}' was classified as ${classification.resolvedState}. ${classification.classificationReason}`;
+    case INSPECTION_CONTENT_STATE_LITERALS.HYBRID_BINARY_DOMINANT:
+      return `${toolName} cannot read '${entry.requestedPath}' as decoded text because the sampled surface is binary-dominant. ${capability.reason}`;
     case INSPECTION_CONTENT_STATE_LITERALS.UNKNOWN_LARGE_SURFACE:
       return `${toolName} cannot confirm a text-compatible surface for '${entry.requestedPath}' from bounded sampling. ${classification.classificationReason}`;
     default:
-      return `${toolName} cannot read '${entry.requestedPath}' as bounded UTF-8 text. ${classification.classificationReason}`;
+      return `${toolName} cannot read '${entry.requestedPath}' as bounded decoded text. ${capability.reason}`;
   }
 }
 
@@ -149,24 +227,16 @@ function createUnsupportedTextReadStateMessage(
 export async function resolveTextReadInspectionState(
   entry: TextReadCoreEntry,
 ): Promise<InspectionContentStateClassification> {
-  if (entry.totalFileBytes <= INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES) {
-    const contentSample = await readFile(entry.validPath);
-
-    return classifyInspectionContentState({
-      candidatePath: entry.requestedPath,
-      candidateFileBytes: entry.totalFileBytes,
-      contentSample,
-      sampledWindowPositions: getFullCoverageWindowPositions(),
-    });
-  }
-
-  const contentSample = await readBoundedInspectionContentSample(entry);
+  const sharedInspectionSample = await readSharedInspectionContentSample(
+    entry.validPath,
+    entry.totalFileBytes,
+  );
 
   return classifyInspectionContentState({
     candidatePath: entry.requestedPath,
     candidateFileBytes: entry.totalFileBytes,
-    contentSample,
-    sampledWindowPositions: INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS,
+    contentSample: sharedInspectionSample.contentSample,
+    sampledWindowPositions: sharedInspectionSample.sampledWindowPositions,
   });
 }
 
@@ -182,11 +252,12 @@ export function assertSupportedTextReadSurface(
   entry: Pick<TextReadCoreEntry, "requestedPath">,
   classification: InspectionContentStateClassification,
 ): void {
-  if (
-    classification.resolvedState === INSPECTION_CONTENT_STATE_LITERALS.BINARY_CONFIDENT
-    || classification.resolvedState
-      === INSPECTION_CONTENT_STATE_LITERALS.UNKNOWN_LARGE_SURFACE
-  ) {
+  const capability = resolveInspectionContentOperationCapability(
+    classification,
+    INSPECTION_CONTENT_OPERATION_LITERALS.READ_TEXT,
+  );
+
+  if (!capability.isAllowed) {
     throw new Error(
       createUnsupportedTextReadStateMessage(toolName, entry, classification),
     );
@@ -194,7 +265,7 @@ export function assertSupportedTextReadSurface(
 }
 
 /**
- * Reads one validated file as bounded UTF-8 text after shared content-state validation succeeds.
+ * Reads one validated file as bounded decoded text after shared content-state validation succeeds.
  *
  * @param entry - Validated path metadata for the candidate text-read surface.
  * @param toolName - Exact public tool name that owns the read surface.
@@ -211,11 +282,14 @@ export async function readValidatedFullTextFile(
 
   assertSupportedTextReadSurface(toolName, entry, classification);
 
-  const contentBuffer = await readFile(entry.validPath);
+  const decodedTextFile = await readDecodedInspectionTextFile(
+    entry.validPath,
+    classification.resolvedTextEncoding,
+  );
 
   return {
-    content: contentBuffer.toString("utf8"),
-    returnedByteCount: contentBuffer.byteLength,
+    content: decodedTextFile.content,
+    returnedByteCount: decodedTextFile.returnedByteCount,
     classification,
   };
 }
@@ -223,7 +297,7 @@ export async function readValidatedFullTextFile(
 /**
  * Renders canonical line-numbered text output for bounded inline read surfaces.
  *
- * @param content - UTF-8 text content that should be rendered with line numbers.
+ * @param content - Decoded text content that should be rendered with line numbers.
  * @param startLine - One-based absolute line number for the first line of the content surface.
  * Defaults to `1` for full-file reads. Pass the `startLine` value from a bounded read result
  * to produce absolute file-position prefixes instead of window-relative offsets.

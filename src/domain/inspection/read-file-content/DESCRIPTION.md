@@ -16,7 +16,7 @@ This endpoint complements `read_files_with_line_numbers`, which is optimized for
 
 ### `full`
 
-Reads the complete file content as UTF-8 text. Limited to files within the inline full-read ceiling. Returns content with **inline one-based absolute line-number prefixes** on every line.
+Reads the complete file content as decoded text through the shared inspection encoding. Limited to files within the inline full-read ceiling. Returns content with **inline one-based absolute line-number prefixes** on every line.
 
 This mode is functionally equivalent to `read_files_with_line_numbers` for a single file and produces the same line-annotated output format. For batch reads, use `read_files_with_line_numbers` directly.
 
@@ -26,17 +26,17 @@ Reads a bounded window of lines using a one-based start line and a maximum line 
 
 ### `byte_range`
 
-Reads a bounded window of bytes using a zero-based start offset and a byte count. Content is returned as raw UTF-8 text **without inline line-number prefixes** because byte ranges may begin or end mid-line. Continuation is supported via `nextByteOffset`.
+Reads a bounded window of bytes using a zero-based start offset and a byte count. Content is returned as decoded text **without inline line-number prefixes** because byte ranges may begin or end mid-line. Continuation is supported via `nextByteOffset`.
 
 ### `chunk_cursor`
 
-Reads sequential byte-bounded chunks using an opaque cursor string. Content is returned as raw UTF-8 text **without inline line-number prefixes** because chunks are defined by byte boundaries, not line boundaries. Continuation is supported via `nextCursor`. Pass `null` as the cursor to begin from the first byte.
+Reads sequential byte-bounded chunks using an opaque cursor string. Content is returned as decoded text **without inline line-number prefixes** because chunks are defined by byte boundaries, not line boundaries. Continuation is supported via `nextCursor`. Pass `null` as the cursor to begin from the first byte.
 
 ---
 
 ## Content Fidelity Guarantee
 
-The content field in all response modes reproduces the file content **100% verbatim and losslessly**. No transformation, trimming, whitespace normalization, or encoding conversion is applied beyond the mandatory UTF-8 decoding of the raw byte stream.
+The content field in all response modes reproduces the file content **100% verbatim and losslessly** after the shared inspection pipeline has resolved the supported text encoding. No transformation, trimming, whitespace normalization, or semantic rewriting is applied beyond that mandatory decoded-text projection.
 
 Line-number prefixes (where applied) are purely additive — they prepend `N: ` to each line without modifying the line content itself. The original characters, including all leading whitespace, tabs, and indentation, are preserved exactly as stored in the file.
 

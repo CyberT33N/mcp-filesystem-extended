@@ -44,7 +44,7 @@ src/example/file-b.ts:
 
 ## Content Fidelity Guarantee
 
-The content field for every file reproduces the file content **100% verbatim and losslessly**. No transformation, trimming, whitespace normalization, or encoding conversion is applied beyond the mandatory UTF-8 decoding of the raw byte stream.
+The content field for every file reproduces the file content **100% verbatim and losslessly** after the shared inspection pipeline has resolved the supported text encoding. No transformation, trimming, whitespace normalization, or semantic rewriting is applied beyond that mandatory decoded-text projection.
 
 Line-number prefixes are purely additive — they prepend `N: ` to each line without modifying the line content itself. The original characters, including all leading whitespace, tabs, and indentation, are preserved exactly as stored in the file.
 

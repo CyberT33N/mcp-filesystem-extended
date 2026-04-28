@@ -42,10 +42,17 @@ import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardr
 import { classifyPattern } from "@domain/shared/search/pattern-classifier";
 import { resolveSearchExecutionPolicy, type SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import {
-  classifyInspectionContentState,
-  INSPECTION_CONTENT_STATE_LITERALS,
-  type InspectionContentStateClassification,
+  INSPECTION_CONTENT_OPERATION_LITERALS,
+  resolveInspectionContentOperationCapability,
 } from "@domain/shared/search/inspection-content-state";
+import {
+  classifyTextBinarySurface,
+  type TextBinaryClassification,
+} from "@domain/shared/search/text-binary-classifier";
+import {
+  readDecodedInspectionTextFile,
+  readSharedInspectionContentSample,
+} from "@infrastructure/filesystem/text-read-core";
 import {
   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
   REGEX_SEARCH_RESPONSE_CAP_CHARS,
@@ -57,7 +64,6 @@ import { minimatch } from "minimatch";
 
 import { type RegexSearchMatch, type SearchRegexPathResult } from "./search-regex-result";
 
-const TEXT_BINARY_PROBE_SAMPLE_BYTES = 4_096;
 const SEARCH_REGEX_INLINE_RESPONSE_OVERHEAD_CHARS = 96;
 const SEARCH_REGEX_INLINE_MATCH_RESPONSE_CHARS = 400;
 
@@ -163,56 +169,76 @@ function getLineMatchContext(
   };
 }
 
-async function readTextBinaryProbeSample(candidatePath: string): Promise<Uint8Array | null> {
-  let fileHandle;
-
-  try {
-    fileHandle = await fs.open(candidatePath, "r");
-  } catch {
-    return null;
-  }
-
-  try {
-    const probeBuffer = Buffer.alloc(TEXT_BINARY_PROBE_SAMPLE_BYTES);
-    const { bytesRead } = await fileHandle.read(probeBuffer, 0, probeBuffer.length, 0);
-
-    return probeBuffer.subarray(0, bytesRead);
-  } finally {
-    await fileHandle.close();
-  }
-}
-
 async function resolveTextEligibility(
   candidatePath: string,
-  ): Promise<InspectionContentStateClassification & { isTextEligible: boolean }> {
-  const toTextEligibilityResult = (
-    classification: InspectionContentStateClassification,
-  ): InspectionContentStateClassification & { isTextEligible: boolean } => ({
-    ...classification,
-    isTextEligible:
-      classification.resolvedState === INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT,
+  candidateFileBytes: number,
+): Promise<TextBinaryClassification> {
+  const sharedInspectionSample = await readSharedInspectionContentSample(
+    candidatePath,
+    candidateFileBytes,
+  );
+
+  return classifyTextBinarySurface({
+    candidatePath,
+    candidateFileBytes,
+    contentSample: sharedInspectionSample.contentSample,
+    sampledWindowPositions: sharedInspectionSample.sampledWindowPositions,
   });
+}
 
-  const initialClassification = toTextEligibilityResult(
-    classifyInspectionContentState({ candidatePath }),
-  );
+function collectRegexMatchesFromDecodedText(
+  candidateEntry: FilesystemPreflightEntry,
+  regex: RegExp,
+  content: string,
+  maxAdditionalResults: number,
+  matchesToSkipBeforeCollecting: number,
+): {
+  matches: RegexSearchMatch[];
+  totalMatches: number;
+  truncated: boolean;
+} {
+  const matches: RegexSearchMatch[] = [];
+  let totalMatches = 0;
+  let truncated = false;
+  let remainingMatchesToSkip = matchesToSkipBeforeCollecting;
+  const lines = content.split(/\r?\n/u);
 
-  if (initialClassification.isTextEligible) {
-    return initialClassification;
+  for (let index = 0; index < lines.length; index += 1) {
+    const lineContent = lines[index] ?? "";
+    let lineMatch: RegExpExecArray | null;
+
+    resetRegexLastIndex(regex);
+
+    while ((lineMatch = regex.exec(lineContent)) !== null) {
+      if (remainingMatchesToSkip > 0) {
+        remainingMatchesToSkip -= 1;
+        continue;
+      }
+
+      totalMatches += 1;
+      matches.push({
+        content: normalizeRegexMatchExcerpt(lineContent, lineMatch[0]),
+        file: candidateEntry.requestedPath,
+        line: index + 1,
+        match: lineMatch[0],
+      });
+
+      if (matches.length >= maxAdditionalResults) {
+        truncated = true;
+        break;
+      }
+    }
+
+    if (truncated) {
+      break;
+    }
   }
 
-  const contentSample = await readTextBinaryProbeSample(candidatePath);
-
-  if (contentSample === null) {
-    return initialClassification;
-  }
-
-  return toTextEligibilityResult(
-    classifyInspectionContentState({
-      candidatePath,
-      contentSample,
-    }),
-  );
+  return {
+    matches,
+    totalMatches,
+    truncated,
+  };
 }
 
 function parseUgrepMatchLine(outputLine: string): {
@@ -308,21 +334,28 @@ async function collectRegexMatchesFromFileEntry(
 
   aggregateBudgetState.totalCandidateBytesScanned = nextAggregateBytesScanned;
 
-  const textEligibility = await resolveTextEligibility(candidateEntry.validPath);
+  const textEligibility = await resolveTextEligibility(
+    candidateEntry.validPath,
+    candidateEntry.size,
+  );
+  const searchCapability = resolveInspectionContentOperationCapability(
+    textEligibility,
+    INSPECTION_CONTENT_OPERATION_LITERALS.SEARCH_TEXT,
+  );
 
-  if (!textEligibility.isTextEligible) {
+  if (!searchCapability.isAllowed) {
     if (refuseUnsupportedFileScope) {
-      throw new Error(textEligibility.classificationReason);
+      throw new Error(searchCapability.reason);
     }
 
     return {
       matches: [],
-      fileSearched: false,
-      totalMatches: 0,
-      totalBytesScanned: nextTotalBytesScanned,
-      truncated: false,
-      unsupportedStateReason: textEligibility.classificationReason,
-    };
+        fileSearched: false,
+        totalMatches: 0,
+        totalBytesScanned: nextTotalBytesScanned,
+        truncated: false,
+        unsupportedStateReason: searchCapability.reason,
+      };
   }
 
   if (maxAdditionalResults <= 0) {
@@ -348,6 +381,35 @@ async function collectRegexMatchesFromFileEntry(
         ),
       )
     : maxAdditionalResults;
+
+  if (searchCapability.requiresDecodedTextFallback) {
+    const decodedTextFile = await readDecodedInspectionTextFile(
+      candidateEntry.validPath,
+      textEligibility.resolvedTextEncoding,
+    );
+    const decodedTextSearchResult = collectRegexMatchesFromDecodedText(
+      candidateEntry,
+      regex,
+      decodedTextFile.content,
+      effectiveLocationCap,
+      matchesToSkipBeforeCollecting,
+    );
+
+    assertRegexRuntimeBudget(
+      toolName,
+      collectedLocationsBeforeRead + decodedTextSearchResult.matches.length,
+      nextAggregateBytesScanned,
+    );
+
+    return {
+      matches: decodedTextSearchResult.matches,
+      fileSearched: true,
+      totalMatches: decodedTextSearchResult.totalMatches,
+      totalBytesScanned: nextTotalBytesScanned,
+      truncated: decodedTextSearchResult.truncated,
+      unsupportedStateReason: null,
+    };
+  }
 
   const command = buildUgrepCommand({
     patternClassification: classifyPattern(pattern),

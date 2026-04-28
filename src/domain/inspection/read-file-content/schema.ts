@@ -368,7 +368,7 @@ const ReadFileContentCommonResultSchema = z.object({
 
 const ReadFileContentFullResultSchema = ReadFileContentCommonResultSchema.extend({
   mode: z.literal("full"),
-  encoding: z.literal("utf-8"),
+  encoding: z.enum(["utf16le", "utf8"]),
 });
 
 const ReadFileContentLineRangeResultSchema = ReadFileContentCommonResultSchema.extend({
@@ -412,7 +412,7 @@ const ReadFileContentModeSpecificResultSchema = z.discriminatedUnion("mode", [
  */
 export const ReadFileContentResultSchema = ReadFileContentCommonResultSchema.extend({
   mode: z.enum(["full", "line_range", "byte_range", "chunk_cursor"]),
-  encoding: z.literal("utf-8").optional(),
+  encoding: z.enum(["utf16le", "utf8"]).optional(),
   startLine: z.number().int().min(1).optional(),
   endLine: z.number().int().min(0).optional(),
   returnedLineCount: z.number().int().min(0).optional(),

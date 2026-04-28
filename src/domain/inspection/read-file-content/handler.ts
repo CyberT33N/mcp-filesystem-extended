@@ -9,7 +9,9 @@ import {
 } from "@domain/shared/guardrails/text-response-budget";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import {
+  assertSupportedTextReadSurface,
   formatLineNumberedTextContent,
+  resolveTextReadInspectionState,
   readValidatedFullTextFile,
 } from "@infrastructure/filesystem/text-read-core";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
@@ -146,34 +148,46 @@ export async function getReadFileContentResult(
   allowedDirectories: string[],
 ): Promise<ReadFileContentResult> {
   const entry = await getValidatedSingleFileEntry(args.path, allowedDirectories);
+  const textReadEntry = {
+    requestedPath: entry.requestedPath,
+    totalFileBytes: entry.size,
+    validPath: entry.validPath,
+  };
 
   switch (args.mode) {
     case "full": {
       assertProjectedInlineFullReadBudget(entry.size);
+      const classification = await resolveTextReadInspectionState(textReadEntry);
       const { content, returnedByteCount } = await readValidatedFullTextFile(
-        {
-          requestedPath: entry.requestedPath,
-          validPath: entry.validPath,
-          totalFileBytes: entry.size,
-        },
+        textReadEntry,
         READ_FILE_CONTENT_TOOL_NAME,
+        classification,
       );
 
       return {
         mode: "full",
         path: entry.requestedPath,
         content,
-        encoding: "utf-8",
+        encoding: classification.resolvedTextEncoding,
         totalFileBytes: entry.size,
         returnedByteCount,
         hasMore: false,
       };
     }
     case "line_range": {
+      const classification = await resolveTextReadInspectionState(textReadEntry);
+
+      assertSupportedTextReadSurface(
+        READ_FILE_CONTENT_TOOL_NAME,
+        textReadEntry,
+        classification,
+      );
+
       const lineRangeResult = await readFileContentLineRange({
         validPath: entry.validPath,
         startLine: args.startLine,
         lineCount: args.lineCount,
+        textEncoding: classification.resolvedTextEncoding,
       });
 
       return {
@@ -184,11 +198,20 @@ export async function getReadFileContentResult(
       };
     }
     case "byte_range": {
+      const classification = await resolveTextReadInspectionState(textReadEntry);
+
+      assertSupportedTextReadSurface(
+        READ_FILE_CONTENT_TOOL_NAME,
+        textReadEntry,
+        classification,
+      );
+
       const byteRangeResult = await readFileContentByteRange({
         validPath: entry.validPath,
         totalFileBytes: entry.size,
         startByte: args.startByte,
         byteCount: args.byteCount,
+        textEncoding: classification.resolvedTextEncoding,
       });
 
       return {
@@ -199,11 +222,20 @@ export async function getReadFileContentResult(
       };
     }
     case "chunk_cursor": {
+      const classification = await resolveTextReadInspectionState(textReadEntry);
+
+      assertSupportedTextReadSurface(
+        READ_FILE_CONTENT_TOOL_NAME,
+        textReadEntry,
+        classification,
+      );
+
       const chunkCursorResult = await readFileContentChunkCursor({
         validPath: entry.validPath,
         totalFileBytes: entry.size,
         cursor: args.cursor,
         byteCount: args.byteCount,
+        textEncoding: classification.resolvedTextEncoding,
       });
 
       return {

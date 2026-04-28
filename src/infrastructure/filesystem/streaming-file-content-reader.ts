@@ -2,6 +2,10 @@ import { Buffer } from "node:buffer";
 import { createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
 import { createInterface } from "node:readline";
+import {
+  decodeInspectionContentTextBytes,
+  type InspectionContentTextEncoding,
+} from "@domain/shared/search/inspection-content-state";
 
 const READ_FILE_CONTENT_CURSOR_PREFIX = "cursor:";
 
@@ -23,6 +27,11 @@ export interface ReadFileContentLineRangeRequest {
    * Maximum number of lines to return.
    */
   lineCount: number;
+
+  /**
+   * Shared text encoding resolved by the content-inspection classifier.
+   */
+  textEncoding: InspectionContentTextEncoding;
 }
 
 /**
@@ -30,7 +39,7 @@ export interface ReadFileContentLineRangeRequest {
  */
 export interface ReadFileContentLineRangeResult {
   /**
-   * Joined UTF-8 content returned for the requested line window.
+   * Joined decoded text content returned for the requested line window.
    */
   content: string;
 
@@ -50,7 +59,7 @@ export interface ReadFileContentLineRangeResult {
   returnedLineCount: number;
 
   /**
-   * Returned UTF-8 byte count for the emitted content surface.
+   * Returned byte count for the emitted decoded content surface.
    */
   returnedByteCount: number;
 
@@ -88,6 +97,11 @@ export interface ReadFileContentByteRangeRequest {
    * Maximum number of bytes to read.
    */
   byteCount: number;
+
+  /**
+   * Shared text encoding resolved by the content-inspection classifier.
+   */
+  textEncoding: InspectionContentTextEncoding;
 }
 
 /**
@@ -95,12 +109,12 @@ export interface ReadFileContentByteRangeRequest {
  */
 export interface ReadFileContentByteRangeResult {
   /**
-   * Joined UTF-8 content returned for the requested byte window.
+   * Joined decoded text content returned for the requested byte window.
    */
   content: string;
 
   /**
-   * Returned UTF-8 byte count for the emitted content surface.
+   * Returned byte count for the emitted decoded content surface.
    */
   returnedByteCount: number;
 
@@ -148,6 +162,11 @@ export interface ReadFileContentChunkCursorRequest {
    * Maximum number of bytes to read in the next chunk.
    */
   byteCount: number;
+
+  /**
+   * Shared text encoding resolved by the content-inspection classifier.
+   */
+  textEncoding: InspectionContentTextEncoding;
 }
 
 /**
@@ -155,12 +174,12 @@ export interface ReadFileContentChunkCursorRequest {
  */
 export interface ReadFileContentChunkCursorResult {
   /**
-   * Joined UTF-8 content returned for the requested chunk.
+   * Joined decoded text content returned for the requested chunk.
    */
   content: string;
 
   /**
-   * Returned UTF-8 byte count for the emitted content surface.
+   * Returned byte count for the emitted decoded content surface.
    */
   returnedByteCount: number;
 
@@ -212,17 +231,51 @@ function parseReadFileContentCursor(cursor: string | null): number {
   return Number.parseInt(rawOffset, 10);
 }
 
+function assertEncodingAlignedByteWindow(
+  startByte: number,
+  byteCount: number,
+  textEncoding: InspectionContentTextEncoding,
+): void {
+  if (textEncoding !== "utf16le") {
+    return;
+  }
+
+  if (startByte % 2 !== 0) {
+    throw new Error(
+      "UTF-16 LE byte-oriented reads require an even startByte so decoding remains code-unit aligned.",
+    );
+  }
+
+  if (byteCount % 2 !== 0) {
+    throw new Error(
+      "UTF-16 LE byte-oriented reads require an even byteCount so decoding remains code-unit aligned.",
+    );
+  }
+}
+
 async function readByteWindow(
   validPath: string,
   startByte: number,
   byteCount: number,
+  textEncoding: InspectionContentTextEncoding,
 ): Promise<{ content: string; returnedByteCount: number }> {
+  assertEncodingAlignedByteWindow(startByte, byteCount, textEncoding);
   const fileHandle = await open(validPath, "r");
 
   try {
     const buffer = Buffer.alloc(byteCount);
     const { bytesRead } = await fileHandle.read(buffer, 0, byteCount, startByte);
-    const content = buffer.subarray(0, bytesRead).toString("utf8");
+
+    if (textEncoding === "utf16le" && bytesRead % 2 !== 0) {
+      throw new Error(
+        "UTF-16 LE byte-oriented read returned an odd byte count that cannot be decoded safely.",
+      );
+    }
+
+    const content = decodeInspectionContentTextBytes(
+      buffer.subarray(0, bytesRead),
+      textEncoding,
+    );
 
     return {
       content,
@@ -247,7 +300,7 @@ export async function readFileContentLineRange(
   let currentLine = 0;
   let hasMore = false;
 
-  const stream = createReadStream(request.validPath, { encoding: "utf8" });
+  const stream = createReadStream(request.validPath, { encoding: request.textEncoding });
   const lineReader = createInterface({
     input: stream,
     crlfDelay: Infinity,
@@ -286,7 +339,7 @@ export async function readFileContentLineRange(
     startLine: request.startLine,
     endLine,
     returnedLineCount,
-    returnedByteCount: Buffer.byteLength(content, "utf8"),
+    returnedByteCount: Buffer.byteLength(content, request.textEncoding),
     hasMore,
     nextLine: hasMore ? endLine + 1 : null,
   };
@@ -305,6 +358,7 @@ export async function readFileContentByteRange(
     request.validPath,
     request.startByte,
     request.byteCount,
+    request.textEncoding,
   );
   const endByteExclusive = request.startByte + returnedByteCount;
   const hasMore = endByteExclusive < request.totalFileBytes;
@@ -333,6 +387,7 @@ export async function readFileContentChunkCursor(
     request.validPath,
     startByte,
     request.byteCount,
+    request.textEncoding,
   );
   const endByteExclusive = startByte + returnedByteCount;
   const hasMore = endByteExclusive < request.totalFileBytes;

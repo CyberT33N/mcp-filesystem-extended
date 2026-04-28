@@ -1,7 +1,9 @@
 import {
   classifyInspectionContentState,
+  INSPECTION_CONTENT_OPERATION_LITERALS,
   INSPECTION_CONTENT_STATE_LITERALS,
   type InspectionContentStateClassification,
+  resolveInspectionContentOperationCapability,
   type InspectionContentStateInput,
 } from "./inspection-content-state";
 
@@ -52,14 +54,15 @@ export function classifyTextBinarySurface(
   input: TextBinaryClassificationInput,
 ): TextBinaryClassification {
   const stateClassification = classifyInspectionContentState(input);
+  const searchCapability = resolveInspectionContentOperationCapability(
+    stateClassification,
+    INSPECTION_CONTENT_OPERATION_LITERALS.SEARCH_TEXT,
+  );
 
   return {
     ...stateClassification,
-    isTextEligible:
-      stateClassification.resolvedState
-      === INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT
-      || stateClassification.resolvedState
-      === INSPECTION_CONTENT_STATE_LITERALS.HYBRID_SEARCHABLE,
+    classificationReason: searchCapability.reason,
+    isTextEligible: searchCapability.isAllowed,
     usedAssistList: stateClassification.evidence.usedTextExtensionHint,
     usedContentProbe: stateClassification.evidence.usedContentProbe,
   };

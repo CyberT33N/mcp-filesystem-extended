@@ -1,4 +1,3 @@
-import fs from "fs/promises";
 import path from "path";
 
 import {
@@ -15,12 +14,11 @@ import {
   classifyTextBinarySurface,
   type TextBinaryClassification,
 } from "@domain/shared/search/text-binary-classifier";
+import { readSharedInspectionContentSample } from "@infrastructure/filesystem/text-read-core";
 import { minimatch } from "minimatch";
 
 import { SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME } from "./schema";
 import { type SearchFixedStringPathResult } from "./search-fixed-string-result";
-
-const TEXT_BINARY_PROBE_SAMPLE_BYTES = 4_096;
 
 /**
  * Creates the canonical literal pattern classification for fixed-string search.
@@ -66,25 +64,6 @@ export function matchesIncludedFilePatterns(candidateRelativePath: string, fileP
   });
 }
 
-async function readTextBinaryProbeSample(candidatePath: string): Promise<Uint8Array | null> {
-  let fileHandle;
-
-  try {
-    fileHandle = await fs.open(candidatePath, "r");
-  } catch {
-    return null;
-  }
-
-  try {
-    const probeBuffer = Buffer.alloc(TEXT_BINARY_PROBE_SAMPLE_BYTES);
-    const { bytesRead } = await fileHandle.read(probeBuffer, 0, probeBuffer.length, 0);
-
-    return probeBuffer.subarray(0, bytesRead);
-  } finally {
-    await fileHandle.close();
-  }
-}
-
 /**
  * Resolves the shared text-eligibility classification for one concrete file surface.
  *
@@ -96,20 +75,16 @@ export async function resolveTextEligibility(
   candidatePath: string,
   candidateFileBytes: number,
 ): Promise<TextBinaryClassification> {
-  const initialClassification = classifyTextBinarySurface({
+  const sharedInspectionSample = await readSharedInspectionContentSample(
     candidatePath,
     candidateFileBytes,
-  });
-  const contentSample = await readTextBinaryProbeSample(candidatePath);
-
-  if (contentSample === null) {
-    return initialClassification;
-  }
+  );
 
   return classifyTextBinarySurface({
     candidatePath,
     candidateFileBytes,
-    contentSample,
+    contentSample: sharedInspectionSample.contentSample,
+    sampledWindowPositions: sharedInspectionSample.sampledWindowPositions,
   });
 }
 

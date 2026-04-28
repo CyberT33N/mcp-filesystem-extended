@@ -3,9 +3,6 @@ import path from "path";
 import {
   DISCOVERY_RESPONSE_CAP_CHARS,
   GLOBAL_RESPONSE_HARD_CAP_CHARS,
-  INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES,
-  INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS,
-  INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import {
   createInlineResumeEnvelope,
@@ -35,6 +32,10 @@ import {
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
+  compileGuardrailedSearchRegex,
+  resetRegexLastIndex,
+} from "@domain/shared/guardrails/regex-search-safety";
+import {
   assertTraversalRuntimeBudget,
   createTraversalRuntimeBudgetState,
   isTraversalRuntimeBudgetExceededError,
@@ -48,8 +49,6 @@ import {
 } from "@domain/shared/search/count-query-policy";
 import {
   classifyInspectionContentState,
-  type InspectionContentSampleWindowPosition,
-  type InspectionContentStateInput,
 } from "@domain/shared/search/inspection-content-state";
 import {
   classifyPattern,
@@ -59,7 +58,11 @@ import {
   shouldExcludeTraversalScopePath,
   shouldTraverseTraversalScopeDirectoryPath,
 } from "@domain/shared/guardrails/traversal-scope-policy";
-import { countTotalLinesInFile } from "@infrastructure/filesystem/streaming-line-counter";
+import {
+  countMatchingLinesInFile,
+  countTotalLinesInFile,
+} from "@infrastructure/filesystem/streaming-line-counter";
+import { readSharedInspectionContentSample } from "@infrastructure/filesystem/text-read-core";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
@@ -329,82 +332,6 @@ function buildCountLinesContinuationEnvelope(
     "Scope reduction alternative: narrow paths, reduce recursive breadth, or constrain files with includeGlobs.",
     INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
   );
-}
-
-interface InspectionContentSampleResult {
-  sample: Uint8Array;
-  sampledWindowPositions: readonly InspectionContentSampleWindowPosition[];
-}
-
-async function readMultiWindowInspectionContentSample(
-  filePath: string,
-  fileBytes: number,
-): Promise<InspectionContentSampleResult | null> {
-  let fileHandle;
-
-  try {
-    fileHandle = await fs.open(filePath, "r");
-  } catch {
-    return null;
-  }
-
-  try {
-    const windowSize = INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_BYTES;
-    const isLargeSurface = fileBytes >= INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES;
-    const [headPosition, middlePosition, tailPosition] = INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS;
-
-    if (!isLargeSurface) {
-      const headBuffer = Buffer.alloc(windowSize);
-      const { bytesRead } = await fileHandle.read(headBuffer, 0, windowSize, 0);
-
-      return {
-        sample: headBuffer.subarray(0, bytesRead),
-        sampledWindowPositions: headPosition !== undefined ? [headPosition] : [],
-      };
-    }
-
-    const middleOffset = Math.floor((fileBytes - windowSize) / 2);
-    const tailOffset = fileBytes - windowSize;
-
-    const headBuffer = Buffer.alloc(windowSize);
-    const middleBuffer = Buffer.alloc(windowSize);
-    const tailBuffer = Buffer.alloc(windowSize);
-
-    const [headRead, middleRead, tailRead] = await Promise.all([
-      fileHandle.read(headBuffer, 0, windowSize, 0),
-      fileHandle.read(middleBuffer, 0, windowSize, middleOffset),
-      fileHandle.read(tailBuffer, 0, windowSize, tailOffset),
-    ]);
-
-    const sampledWindowPositions: InspectionContentSampleWindowPosition[] = [];
-    const chunks: Uint8Array[] = [];
-
-    if (headPosition !== undefined && headRead.bytesRead > 0) {
-      chunks.push(headBuffer.subarray(0, headRead.bytesRead));
-      sampledWindowPositions.push(headPosition);
-    }
-
-    if (middlePosition !== undefined && middleRead.bytesRead > 0) {
-      chunks.push(middleBuffer.subarray(0, middleRead.bytesRead));
-      sampledWindowPositions.push(middlePosition);
-    }
-
-    if (tailPosition !== undefined && tailRead.bytesRead > 0) {
-      chunks.push(tailBuffer.subarray(0, tailRead.bytesRead));
-      sampledWindowPositions.push(tailPosition);
-    }
-
-    if (chunks.length === 0) {
-      return null;
-    }
-
-    return {
-      sample: Buffer.concat(chunks),
-      sampledWindowPositions,
-    };
-  } finally {
-    await fileHandle.close();
-  }
 }
 
 function formatUnsupportedCountQueryMessage(
@@ -890,25 +817,21 @@ async function countLinesInFile(
   ignoreEmptyLines: boolean
 ): Promise<FileLineCount> {
   const fileStats = await fs.stat(filePath);
-  const multiWindowSample = await readMultiWindowInspectionContentSample(filePath, fileStats.size);
+  const sharedInspectionSample = await readSharedInspectionContentSample(
+    filePath,
+    fileStats.size,
+  );
   const ioCapabilityProfile = detectIoCapabilityProfile();
 
-  const classifierInput: InspectionContentStateInput = multiWindowSample === null
-    ? {
-        candidatePath: filePath,
-        candidateFileBytes: fileStats.size,
-      }
-    : {
-        candidatePath: filePath,
-        candidateFileBytes: fileStats.size,
-        contentSample: multiWindowSample.sample,
-        sampledWindowPositions: multiWindowSample.sampledWindowPositions,
-      };
-
-  const inspectionContentState = classifyInspectionContentState(classifierInput);
+  const inspectionContentState = classifyInspectionContentState({
+    candidatePath: filePath,
+    candidateFileBytes: fileStats.size,
+    contentSample: sharedInspectionSample.contentSample,
+    sampledWindowPositions: sharedInspectionSample.sampledWindowPositions,
+  });
   const countQueryPolicy = resolveCountQueryPolicy({
     ioCapabilityProfile,
-    inspectionContentState: inspectionContentState.resolvedState,
+    inspectionContentClassification: inspectionContentState,
     pattern,
   });
 
@@ -922,7 +845,10 @@ async function countLinesInFile(
     );
   }
 
-  const totalLineCount = await countTotalLinesInFile(filePath, { ignoreEmptyLines });
+  const totalLineCount = await countTotalLinesInFile(filePath, {
+    encoding: inspectionContentState.resolvedTextEncoding,
+    ignoreEmptyLines,
+  });
 
   if (pattern === undefined) {
     return {
@@ -933,6 +859,28 @@ async function countLinesInFile(
 
   if (patternClassification === undefined) {
     throw new Error("Pattern-aware line counting requires a shared pattern classification.");
+  }
+
+  if (countQueryPolicy.executionLane === CountQueryExecutionLane.STREAMING_PATTERN_AWARE) {
+    const regex = compileGuardrailedSearchRegex("count_lines", pattern, true);
+    const matchingCount = await countMatchingLinesInFile(
+      filePath,
+      (line) => {
+        resetRegexLastIndex(regex);
+
+        return regex.test(line);
+      },
+      {
+        encoding: inspectionContentState.resolvedTextEncoding,
+        ignoreEmptyLines,
+      },
+    );
+
+    return {
+      file: filePath,
+      count: totalLineCount,
+      matchingCount,
+    };
   }
 
   if (countQueryPolicy.executionLane !== CountQueryExecutionLane.NATIVE_PATTERN_AWARE) {

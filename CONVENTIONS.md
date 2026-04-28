@@ -15,6 +15,7 @@ This document is the entry point for the architecture conventions of this projec
 | [Guardrail–Resume Interaction](conventions/resume-architecture/guardrail-interaction.md) | Which guardrails apply in which mode, the mode-aware cap rule, and the global fuse as the non-bypassable floor |
 | [Resume Endpoint Schema Contract](conventions/resume-architecture/endpoint-schema-contract.md) | MCP SDK flat-schema constraint, required `superRefine` pattern, sentinel-check discipline, shared field builders, and affected endpoint list |
 | [Content Classification Overview](conventions/content-classification/overview.md) | Classifier states, decision tree, sampling strategy, endpoint integration, and invariants |
+| [Content Inspection Capability Matrix](conventions/content-classification/operation-capability-matrix.md) | Content-inspecting endpoint list, shared capability matrix, encoding-aware hybrid policy, and discovery-family exclusion |
 | [Schema Optionality Contract](conventions/content-classification/schema-optionality-contract.md) | Why optional string query fields must not carry `.default("")`, sentinel-check detection, and correct modeling |
 
 ---

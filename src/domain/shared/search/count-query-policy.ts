@@ -10,6 +10,7 @@ import {
 
 import {
   INSPECTION_CONTENT_STATE_LITERALS,
+  type InspectionContentStateClassification,
   type InspectionContentState,
 } from "./inspection-content-state";
 import {
@@ -27,6 +28,7 @@ import {
  */
 export enum CountQueryExecutionLane {
   NATIVE_PATTERN_AWARE = "NATIVE_PATTERN_AWARE",
+  STREAMING_PATTERN_AWARE = "STREAMING_PATTERN_AWARE",
   STREAMING_TOTAL_ONLY = "STREAMING_TOTAL_ONLY",
   UNSUPPORTED_STATE = "UNSUPPORTED_STATE",
 }
@@ -111,9 +113,12 @@ export interface ResolveCountQueryPolicyInput {
   pattern: string | undefined;
 
   /**
-   * Shared inspection content state already resolved for the current candidate surface.
+   * Shared inspection content classification already resolved for the current candidate surface.
    */
-  inspectionContentState: InspectionContentState;
+  inspectionContentClassification: Pick<
+    InspectionContentStateClassification,
+    "resolvedState" | "resolvedTextEncoding"
+  >;
 }
 
 /**
@@ -207,10 +212,14 @@ export function resolveCountQueryPolicy(
   input: ResolveCountQueryPolicyInput,
 ): CountQueryPolicy {
   const searchExecutionPolicy = resolveSearchExecutionPolicy(input.ioCapabilityProfile);
-  const { inspectionContentState } = input;
+  const inspectionContentState = input.inspectionContentClassification.resolvedState;
+  const countLinesStateAllowed =
+    inspectionContentState === INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT
+    || inspectionContentState
+      === INSPECTION_CONTENT_STATE_LITERALS.HYBRID_TEXT_DOMINANT;
 
   if (input.pattern === undefined) {
-    if (inspectionContentState !== INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT) {
+    if (!countLinesStateAllowed) {
       return createUnsupportedCountQueryPolicy(
         searchExecutionPolicy,
         inspectionContentState,
@@ -237,7 +246,7 @@ export function resolveCountQueryPolicy(
 
   const patternClassification = classifyPattern(input.pattern);
 
-  if (inspectionContentState !== INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT) {
+  if (!countLinesStateAllowed) {
     return createUnsupportedCountQueryPolicy(
       searchExecutionPolicy,
       inspectionContentState,
@@ -245,6 +254,25 @@ export function resolveCountQueryPolicy(
       resolvePatternAwareRerouteGuidance(inspectionContentState),
       patternClassification,
     );
+  }
+
+  if (
+    inspectionContentState === INSPECTION_CONTENT_STATE_LITERALS.HYBRID_TEXT_DOMINANT
+    || input.inspectionContentClassification.resolvedTextEncoding !== "utf8"
+  ) {
+    return {
+      executionLane: CountQueryExecutionLane.STREAMING_PATTERN_AWARE,
+      inspectionContentState,
+      patternClassification,
+      previewFirstResponseCapFraction: searchExecutionPolicy.previewFirstResponseCapFraction,
+      rerouteGuidance: null,
+      searchExecutionPolicy,
+      serviceHardGapBytes: null,
+      syncCandidateBytesCap: null,
+      syncComfortWindowSeconds: searchExecutionPolicy.syncComfortWindowSeconds,
+      taskRecommendedAfterSeconds: searchExecutionPolicy.taskRecommendedAfterSeconds,
+      unsupportedStateReason: null,
+    };
   }
 
   const { serviceHardGapBytes, syncCandidateBytesCap } = resolvePatternAwareCaps(
@@ -283,7 +311,10 @@ export function buildPatternAwareCountCommand(
 ): UgrepCommand {
   const policy = resolveCountQueryPolicy({
     ioCapabilityProfile: input.ioCapabilityProfile,
-    inspectionContentState: INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT,
+    inspectionContentClassification: {
+      resolvedState: INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT,
+      resolvedTextEncoding: "utf8",
+    },
     pattern: input.pattern,
   });
 
