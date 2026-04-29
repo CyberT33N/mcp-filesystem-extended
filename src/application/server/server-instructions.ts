@@ -7,7 +7,7 @@ const SERVER_INSTRUCTION_LINES = [
   "- Hard request and response safety caps are enforced server-side across all tool families.",
   "- Callers may narrow scope, but they cannot disable or override server-side hard caps.",
   "- Metadata-first admission control applies to file-read-style operations, and callers should switch to narrower ranges or cursor modes when inline full responses are not allowed.",
-  "- Large valid text workloads may degrade into preview-first or completion-backed behavior under family guardrails, and resume-bearing responses may use compact text guidance while unsupported or over-hard-gap workloads still refuse.",
+  "- Explicit large text-compatible file search may proceed after content-state eligibility succeeds, while broad recursive search and discovery workloads may still degrade into preview-first or completion-backed behavior under family guardrails; resume-bearing responses may use compact text guidance, while unsupported surfaces and recursive workloads that still exceed server-owned lane budgets continue to refuse.",
   "- When a tool returns additive `admission` and `resume` metadata, `structuredContent.admission` and `structuredContent.resume` remain authoritative.",
   "- Scope reduction remains a first-class alternative to resume: callers may narrow roots, choose deeper paths, tighten globs, tighten name filters, or constrain files with include globs when that is architecturally preferable.",
   "- For `list_directory_entries`, preview-first responses may also surface the current bounded directory-entry chunk and any active `resumeToken` in `content.text` so text-only consumers keep a usable same-endpoint continuation path while `structuredContent` remains authoritative.",

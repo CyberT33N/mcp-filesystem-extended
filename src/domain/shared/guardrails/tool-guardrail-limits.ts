@@ -477,13 +477,16 @@ export const FIXED_STRING_SEARCH_RESPONSE_CAP_CHARS = REGEX_SEARCH_RESPONSE_CAP_
 export const REGEX_SEARCH_MAX_RESULTS_HARD_CAP = 400;
 
 /**
- * Maximum number of candidate bytes that regex runtime scanning may inspect.
+ * Maximum number of recursive aggregate candidate bytes that regex-oriented search governance may
+ * inspect.
  *
  * @remarks
- * Apply this ceiling during regex execution so legitimate broad roots still terminate safely when
- * the candidate surface becomes too large. Candidate-byte scanning is a server-side CPU and I/O
- * hardgap rather than a caller-context hardgap, so it can be materially broader than the final
- * response cap without increasing model-context pressure directly.
+ * Apply this ceiling to recursive aggregate search governance so legitimate broad roots still
+ * terminate safely when the candidate surface becomes too large. Candidate-byte scanning is a
+ * server-side CPU and I/O hardgap rather than a caller-context hardgap, so it can be materially
+ * broader than the final response cap without increasing model-context pressure directly. This
+ * shared constant is not a blanket front-door blocker for explicit large text-compatible file
+ * search once content-state eligibility has already been established.
  *
  * @example
  * `assertRegexRuntimeBudget(toolName, collectedLocations, totalBytesScanned)`

@@ -129,12 +129,12 @@ export interface SearchExecutionPolicy {
   fixedStringSyncCandidateBytesCap: number;
 
   /**
-   * Absolute service hard gap for regex search candidate bytes.
+   * Absolute service hard gap for recursive aggregate regex-search candidate bytes.
    */
   regexServiceHardGapBytes: number;
 
   /**
-   * Absolute service hard gap for fixed-string search candidate bytes.
+   * Absolute service hard gap for recursive aggregate fixed-string-search candidate bytes.
    */
   fixedStringServiceHardGapBytes: number;
 
@@ -289,6 +289,10 @@ function resolveSearchExecutionTierBudget(tier: SourceReadTier) {
  * tier `D`. The higher tier tables keep valid recursive workloads inline and preview-first longer,
  * while the explicit `0.50` and `0.85` band fractions preserve deterministic escalation semantics.
  * The deeper runtime fuse remains a later safeguard rather than the primary caller-facing band.
+ * The returned `regexServiceHardGapBytes` and `fixedStringServiceHardGapBytes` surfaces describe
+ * recursive aggregate candidate governance after explicit-file eligibility and content-state
+ * compatibility have already been established; they are not front-door blockers for explicit large
+ * text-compatible file search.
  *
  * @param profile - Conservative runtime capability profile produced by the runtime detector.
  * @returns Deterministic sync, preview-first, task, and hard-gap policy values for search workloads.
@@ -310,6 +314,7 @@ export function resolveSearchExecutionPolicy(
   );
   const effectiveTierBudget = resolveSearchExecutionTierBudget(effectiveSourceReadTier);
   const regexTierBudget = resolveSearchExecutionTierBudget(regexExecutionTier);
+  const recursiveAggregateCandidateHardGapBytes = REGEX_SEARCH_MAX_CANDIDATE_BYTES;
 
   return {
     effectiveSourceReadTier,
@@ -321,8 +326,8 @@ export function resolveSearchExecutionPolicy(
     taskBackedResponseCapFraction: SEARCH_TASK_BACKED_RESPONSE_CAP_FRACTION,
     regexSyncCandidateBytesCap: regexTierBudget.regexSyncCandidateBytesCap,
     fixedStringSyncCandidateBytesCap: effectiveTierBudget.fixedStringSyncCandidateBytesCap,
-    regexServiceHardGapBytes: REGEX_SEARCH_MAX_CANDIDATE_BYTES,
-    fixedStringServiceHardGapBytes: REGEX_SEARCH_MAX_CANDIDATE_BYTES,
+    regexServiceHardGapBytes: recursiveAggregateCandidateHardGapBytes,
+    fixedStringServiceHardGapBytes: recursiveAggregateCandidateHardGapBytes,
     traversalInlineEntryBudget: effectiveTierBudget.traversalInlineEntryBudget,
     traversalInlineDirectoryBudget: effectiveTierBudget.traversalInlineDirectoryBudget,
     traversalInlineCandidateFileBudget: effectiveTierBudget.traversalInlineCandidateFileBudget,

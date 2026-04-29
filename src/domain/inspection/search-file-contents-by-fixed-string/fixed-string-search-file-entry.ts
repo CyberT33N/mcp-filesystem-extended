@@ -93,6 +93,7 @@ function collectFixedStringMatchesFromDecodedText(
  * @param caseSensitive - Whether literal matching should preserve caller case sensitivity.
  * @param executionPolicy - Shared runtime execution policy for the current request.
  * @param aggregateBudgetState - Request-level aggregate candidate-byte accounting surface.
+ * @param enforceAggregateCandidateByteBudget - Whether recursive aggregate candidate-byte governance applies to this file search call.
  * @param refuseUnsupportedFileScope - Whether unsupported file scopes should raise instead of skipping.
  * @param maxAdditionalResults - Remaining location budget for the current root.
  * @param totalBytesScannedBeforeRead - Root-local candidate-byte accounting before this file is processed.
@@ -106,6 +107,7 @@ export async function collectFixedStringMatchesFromFileEntry(
   caseSensitive: boolean,
   executionPolicy: SearchExecutionPolicy,
   aggregateBudgetState: FixedStringSearchAggregateBudgetState,
+  enforceAggregateCandidateByteBudget: boolean,
   refuseUnsupportedFileScope: boolean,
   maxAdditionalResults: number,
   matchesToSkipBeforeCollecting: number,
@@ -130,14 +132,16 @@ export async function collectFixedStringMatchesFromFileEntry(
   const nextTotalBytesScanned = totalBytesScannedBeforeRead + candidateEntry.size;
   const nextAggregateBytesScanned = aggregateBudgetState.totalCandidateBytesScanned + candidateEntry.size;
 
-  assertCandidateByteBudget(
-    SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME,
-    nextAggregateBytesScanned,
-    executionPolicy.fixedStringServiceHardGapBytes,
-    `fixed-string aggregate candidate bytes before reading ${candidateEntry.requestedPath}`,
-  );
+  if (enforceAggregateCandidateByteBudget) {
+    assertCandidateByteBudget(
+      SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME,
+      nextAggregateBytesScanned,
+      executionPolicy.fixedStringServiceHardGapBytes,
+      `fixed-string aggregate candidate bytes before reading ${candidateEntry.requestedPath}`,
+    );
 
-  aggregateBudgetState.totalCandidateBytesScanned = nextAggregateBytesScanned;
+    aggregateBudgetState.totalCandidateBytesScanned = nextAggregateBytesScanned;
+  }
 
   const textEligibility = await resolveTextEligibility(candidateEntry.validPath, candidateEntry.size);
   const searchCapability = resolveInspectionContentOperationCapability(

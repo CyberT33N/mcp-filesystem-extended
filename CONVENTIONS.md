@@ -17,6 +17,10 @@ This document is the entry point for the architecture conventions of this projec
 | [Content Classification Overview](conventions/content-classification/overview.md) | Classifier states, decision tree, sampling strategy, endpoint integration, and invariants |
 | [Content Inspection Capability Matrix](conventions/content-classification/operation-capability-matrix.md) | Content-inspecting endpoint list, shared capability matrix, encoding-aware hybrid policy, and discovery-family exclusion |
 | [Schema Optionality Contract](conventions/content-classification/schema-optionality-contract.md) | Why optional string query fields must not carry `.default("")`, sentinel-check detection, and correct modeling |
+| [Search Platform Overview](conventions/search-platform/overview.md) | Ugrep search architecture, endpoint-family search roles, explicit-file versus recursive lane model, and search/read/count boundaries |
+| [Search Platform Endpoint Lane Matrix](conventions/search-platform/endpoint-family-lane-matrix.md) | Complete affected endpoint matrix, lane capabilities, resume modes, refusal surfaces, and supported large-file behaviors |
+| [Search Platform Preflight and Hardgap Governance](conventions/search-platform/preflight-and-hardgap-governance.md) | Correct preflight ownership, recursive admission lanes, explicit-file search entry rules, and hardgap boundaries |
+| [Search Platform Threshold and Variable Registry](conventions/search-platform/threshold-and-variable-registry.md) | Canonical search-platform variables, family thresholds, hardgaps, sync caps, response caps, and their intended ownership |
 
 ---
 

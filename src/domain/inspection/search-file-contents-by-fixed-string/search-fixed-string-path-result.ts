@@ -242,31 +242,6 @@ export async function getSearchFixedStringPathResult(
       : 0;
     const explicitFileScopePatterns: string[] = [];
 
-    if (
-      shouldStopTraversalPreviewLane(
-        aggregateBudgetState.totalCandidateBytesScanned,
-        searchScopeEntry.size,
-        previewLanePlan,
-      )
-    ) {
-      return {
-        root: searchPath,
-        matches: [],
-        filesSearched: 0,
-        totalMatches: 0,
-        truncated: true,
-        error: previewLanePlan.guidanceText,
-        admissionOutcome: traversalAdmissionDecision.outcome,
-        nextContinuationState: previewFirstAdmissionActive
-          ? {
-              traversalFrames: [],
-              activeFileRelativePath: "",
-              activeFileMatchOffset,
-            }
-          : null,
-      };
-    }
-
     const fileSearchResult = await collectFixedStringMatchesFromFileEntry(
       searchScopeEntry,
       searchPath,
@@ -275,6 +250,7 @@ export async function getSearchFixedStringPathResult(
       caseSensitive,
       executionPolicy,
       aggregateBudgetState,
+      false,
       true,
       admissionAdjustedMaxResults,
       activeFileMatchOffset,
@@ -348,6 +324,7 @@ export async function getSearchFixedStringPathResult(
       caseSensitive,
       executionPolicy,
       aggregateBudgetState,
+      activeFileRelativePath !== "",
       false,
       admissionAdjustedMaxResults,
       activeFileMatchOffset,
@@ -503,6 +480,7 @@ export async function getSearchFixedStringPathResult(
         caseSensitive,
         executionPolicy,
         aggregateBudgetState,
+        true,
         false,
         admissionAdjustedMaxResults - results.length,
         0,
