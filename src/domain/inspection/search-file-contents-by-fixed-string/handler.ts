@@ -56,25 +56,91 @@ interface SearchFixedStringExecutionContext {
   requestedResumeMode: InspectionResumeMode | null;
 }
 
+interface ResolveSearchFixedStringExecutionContextOptions {
+  resumeToken: string | undefined;
+  resumeMode: InspectionResumeMode | undefined;
+  searchPaths: string[];
+  fixedString: string;
+  filePatterns: string[];
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+  caseSensitive: boolean;
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined;
+  now: Date;
+}
+
+interface HandleSearchFixedStringOptions {
+  resumeToken: string | undefined;
+  resumeMode: InspectionResumeMode | undefined;
+  searchPaths: string[];
+  fixedString: string;
+  filePatterns: string[];
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+  caseSensitive: boolean;
+  allowedDirectories: string[];
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined;
+}
+
+interface GetSearchFixedStringResultOptions {
+  resumeToken: string | undefined;
+  resumeMode: InspectionResumeMode | undefined;
+  searchPaths: string[];
+  fixedString: string;
+  filePatterns: string[];
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+  caseSensitive: boolean;
+  allowedDirectories: string[];
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined;
+}
+
 type SearchFixedStringRootExecutionResult = SearchFixedStringPathResult & {
   admissionOutcome: TraversalWorkloadAdmissionOutcome;
   nextContinuationState: SearchFixedStringRootContinuationState | null;
 };
 
+interface BuildSearchFixedStringContinuationEnvelopeOptions {
+  resumeToken: string | null;
+  resumeExpiresAt: string | null;
+  nextContinuationState: SearchFixedStringContinuationState | null;
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined;
+  requestPayload: SearchFixedStringRequestPayload;
+  roots: SearchFixedStringRootExecutionResult[];
+  requestedResumeMode: InspectionResumeMode | null;
+  now: Date;
+}
+
+/**
+ * Resolves the execution context for one fixed-string search request or resume request.
+ *
+ * @param options - Request payload, resume metadata, and infrastructure dependencies needed to derive the active execution context.
+ * @returns Normalized execution context for the current fixed-string search flow.
+ */
 function resolveSearchFixedStringExecutionContext(
-  resumeToken: string | undefined,
-  resumeMode: InspectionResumeMode | undefined,
-  searchPaths: string[],
-  fixedString: string,
-  filePatterns: string[],
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  maxResults: number,
-  caseSensitive: boolean,
-  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
-  now: Date,
+  options: ResolveSearchFixedStringExecutionContextOptions,
 ): SearchFixedStringExecutionContext {
+  const {
+    resumeToken,
+    resumeMode,
+    searchPaths,
+    fixedString,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    inspectionResumeSessionStore,
+    now,
+  } = options;
+
   if (resumeToken === undefined) {
     return {
       requestPayload: {
@@ -124,16 +190,26 @@ function resolveSearchFixedStringExecutionContext(
   };
 }
 
+/**
+ * Builds the resume envelope for the fixed-string search family.
+ *
+ * @param options - Resume-session inputs, request payload, root results, and timing state for the current envelope decision.
+ * @returns Resume metadata for the current fixed-string search response.
+ */
 function buildSearchFixedStringContinuationEnvelope(
-  resumeToken: string | null,
-  resumeExpiresAt: string | null,
-  nextContinuationState: SearchFixedStringContinuationState | null,
-  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
-  requestPayload: SearchFixedStringRequestPayload,
-  roots: SearchFixedStringRootExecutionResult[],
-  requestedResumeMode: InspectionResumeMode | null,
-  now: Date,
+  options: BuildSearchFixedStringContinuationEnvelopeOptions,
 ): Pick<SearchFixedStringResult, "admission" | "resume"> {
+  const {
+    resumeToken,
+    resumeExpiresAt,
+    nextContinuationState,
+    inspectionResumeSessionStore,
+    requestPayload,
+    roots,
+    requestedResumeMode,
+    now,
+  } = options;
+
   const effectiveResumeMode = requestedResumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK;
   const admissionOutcome = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
     ? INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
@@ -216,46 +292,13 @@ function buildSearchFixedStringContinuationEnvelope(
 /**
  * Executes fixed-string search across one or more roots and returns the formatted text response surface.
  *
- * @param searchPaths - File or directory search scopes in caller-supplied order.
- * @param fixedString - Exact literal string supplied by the caller.
- * @param filePatterns - Include globs that narrow candidate file names before content scanning.
- * @param excludePatterns - Exclude globs that remove candidate paths from traversal.
- * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
- * @param maxResults - Caller-requested maximum number of returned locations per root.
- * @param caseSensitive - Whether literal matching should preserve case sensitivity.
- * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
+ * @param options - Request, resume, and environment options for the formatted fixed-string search flow.
  * @returns Formatted text output that respects the shared search-family response cap.
  */
 export async function handleSearchFixedString(
-  resumeToken: string | undefined,
-  resumeMode: InspectionResumeMode | undefined,
-  searchPaths: string[],
-  fixedString: string,
-  filePatterns: string[],
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  maxResults: number,
-  caseSensitive: boolean,
-  allowedDirectories: string[],
-  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
+  options: HandleSearchFixedStringOptions,
 ): Promise<string> {
-  const executionContext = resolveSearchFixedStringExecutionContext(
-    resumeToken,
-    resumeMode,
-    searchPaths,
-    fixedString,
-    filePatterns,
-    excludePatterns,
-    includeExcludedGlobs,
-    respectGitIgnore,
-    maxResults,
-    caseSensitive,
-    inspectionResumeSessionStore,
-    new Date(),
-  );
-  const structuredResult = await getSearchFixedStringResult(
+  const {
     resumeToken,
     resumeMode,
     searchPaths,
@@ -268,6 +311,39 @@ export async function handleSearchFixedString(
     caseSensitive,
     allowedDirectories,
     inspectionResumeSessionStore,
+  } = options;
+
+  const executionContext = resolveSearchFixedStringExecutionContext(
+    {
+      resumeToken,
+      resumeMode,
+      searchPaths,
+      fixedString,
+      filePatterns,
+      excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
+      maxResults,
+      caseSensitive,
+      inspectionResumeSessionStore,
+      now: new Date(),
+    },
+  );
+  const structuredResult = await getSearchFixedStringResult(
+    {
+      resumeToken,
+      resumeMode,
+      searchPaths,
+      fixedString,
+      filePatterns,
+      excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
+      maxResults,
+      caseSensitive,
+      allowedDirectories,
+      inspectionResumeSessionStore,
+    },
   );
   const effectiveMaxResults = Math.min(
     executionContext.requestPayload.maxResults,
@@ -295,33 +371,13 @@ export async function handleSearchFixedString(
 /**
  * Executes fixed-string search across one or more roots and returns the structured result surface.
  *
- * @param searchPaths - File or directory search scopes in caller-supplied order.
- * @param fixedString - Exact literal string supplied by the caller.
- * @param filePatterns - Include globs that narrow candidate file names before content scanning.
- * @param excludePatterns - Exclude globs that remove candidate paths from traversal.
- * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
- * @param maxResults - Caller-requested maximum number of returned locations per root.
- * @param caseSensitive - Whether literal matching should preserve case sensitivity.
- * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
+ * @param options - Request, resume, and environment options for the structured fixed-string search flow.
  * @returns Structured per-root results with harmonized partial-failure semantics.
  */
 export async function getSearchFixedStringResult(
-  resumeToken: string | undefined,
-  resumeMode: InspectionResumeMode | undefined,
-  searchPaths: string[],
-  fixedString: string,
-  filePatterns: string[],
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  maxResults: number,
-  caseSensitive: boolean,
-  allowedDirectories: string[],
-  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
+  options: GetSearchFixedStringResultOptions,
 ): Promise<SearchFixedStringResult> {
-  const now = new Date();
-  const executionContext = resolveSearchFixedStringExecutionContext(
+  const {
     resumeToken,
     resumeMode,
     searchPaths,
@@ -332,8 +388,26 @@ export async function getSearchFixedStringResult(
     respectGitIgnore,
     maxResults,
     caseSensitive,
+    allowedDirectories,
     inspectionResumeSessionStore,
-    now,
+  } = options;
+
+  const now = new Date();
+  const executionContext = resolveSearchFixedStringExecutionContext(
+    {
+      resumeToken,
+      resumeMode,
+      searchPaths,
+      fixedString,
+      filePatterns,
+      excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
+      maxResults,
+      caseSensitive,
+      inspectionResumeSessionStore,
+      now,
+    },
   );
   const effectiveMaxResults = Math.min(
     executionContext.requestPayload.maxResults,
@@ -366,22 +440,22 @@ export async function getSearchFixedStringResult(
 
   for (const searchPath of activeSearchPaths) {
     try {
-      const result = await getSearchFixedStringPathResult(
+      const result = await getSearchFixedStringPathResult({
         searchPath,
-        executionContext.requestPayload.fixedString,
-        executionContext.requestPayload.filePatterns,
-        executionContext.requestPayload.excludePatterns,
-        executionContext.requestPayload.includeExcludedGlobs,
-        executionContext.requestPayload.respectGitIgnore,
-        effectiveMaxResults,
-        executionContext.requestPayload.caseSensitive,
+        fixedString: executionContext.requestPayload.fixedString,
+        filePatterns: executionContext.requestPayload.filePatterns,
+        excludePatterns: executionContext.requestPayload.excludePatterns,
+        includeExcludedGlobs: executionContext.requestPayload.includeExcludedGlobs,
+        respectGitIgnore: executionContext.requestPayload.respectGitIgnore,
+        maxResults: effectiveMaxResults,
+        caseSensitive: executionContext.requestPayload.caseSensitive,
         allowedDirectories,
         executionPolicy,
         aggregateBudgetState,
-        activeSearchPaths.length,
-        executionContext.continuationState?.rootTraversalStates[searchPath] ?? null,
-        executionContext.requestedResumeMode,
-      );
+        batchRootCount: activeSearchPaths.length,
+        continuationState: executionContext.continuationState?.rootTraversalStates[searchPath] ?? null,
+        requestedResumeMode: executionContext.requestedResumeMode,
+      });
 
       roots.push(result);
     } catch (error) {
@@ -410,16 +484,16 @@ export async function getSearchFixedStringResult(
     },
     null,
   );
-  const continuationEnvelope = buildSearchFixedStringContinuationEnvelope(
-    executionContext.activeResumeToken,
-    executionContext.activeResumeExpiresAt,
+  const continuationEnvelope = buildSearchFixedStringContinuationEnvelope({
+    resumeToken: executionContext.activeResumeToken,
+    resumeExpiresAt: executionContext.activeResumeExpiresAt,
     nextContinuationState,
     inspectionResumeSessionStore,
-    executionContext.requestPayload,
+    requestPayload: executionContext.requestPayload,
     roots,
-    executionContext.requestedResumeMode,
+    requestedResumeMode: executionContext.requestedResumeMode,
     now,
-  );
+  });
 
   return {
     roots: roots.map(({ root, matches, filesSearched, totalMatches, truncated, error }) => ({

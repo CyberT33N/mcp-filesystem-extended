@@ -59,10 +59,66 @@ interface SearchRegexExecutionContext {
   requestedResumeMode: InspectionResumeMode | null;
 }
 
+interface HandleSearchRegexOptions {
+  resumeToken: string | undefined;
+  resumeMode: InspectionResumeMode | undefined;
+  searchPaths: string[];
+  pattern: string;
+  filePatterns: string[];
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+  caseSensitive: boolean;
+  allowedDirectories: string[];
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined;
+}
+
+interface GetSearchRegexResultOptions {
+  resumeToken: string | undefined;
+  resumeMode: InspectionResumeMode | undefined;
+  searchPaths: string[];
+  pattern: string;
+  filePatterns: string[];
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+  caseSensitive: boolean;
+  allowedDirectories: string[];
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined;
+}
+
+interface ResolveSearchRegexExecutionContextOptions {
+  resumeToken: string | undefined;
+  resumeMode: InspectionResumeMode | undefined;
+  searchPaths: string[];
+  pattern: string;
+  filePatterns: string[];
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+  caseSensitive: boolean;
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined;
+  now: Date;
+}
+
 type SearchRegexRootExecutionResult = SearchRegexPathResult & {
   admissionOutcome: TraversalWorkloadAdmissionOutcome;
   nextContinuationState: SearchRegexRootContinuationState | null;
 };
+
+interface BuildSearchRegexContinuationEnvelopeOptions {
+  resumeToken: string | null;
+  resumeExpiresAt: string | null;
+  nextContinuationState: SearchRegexContinuationState | null;
+  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined;
+  requestPayload: SearchRegexRequestPayload;
+  roots: SearchRegexRootExecutionResult[];
+  requestedResumeMode: InspectionResumeMode | null;
+  now: Date;
+}
 
 function createRegexRootErrorResult(
   searchPath: string,
@@ -93,20 +149,30 @@ function createSharedRegexExecutionContext(
   };
 }
 
+/**
+ * Resolves the execution context for one regex-search request or resume request.
+ *
+ * @param options - Request payload, resume metadata, and infrastructure dependencies needed to derive the active execution context.
+ * @returns Normalized execution context for the current regex-search flow.
+ */
 function resolveSearchRegexExecutionContext(
-  resumeToken: string | undefined,
-  resumeMode: InspectionResumeMode | undefined,
-  searchPaths: string[],
-  pattern: string,
-  filePatterns: string[],
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  maxResults: number,
-  caseSensitive: boolean,
-  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
-  now: Date,
+  options: ResolveSearchRegexExecutionContextOptions,
 ): SearchRegexExecutionContext {
+  const {
+    resumeToken,
+    resumeMode,
+    searchPaths,
+    pattern,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    inspectionResumeSessionStore,
+    now,
+  } = options;
+
   if (resumeToken === undefined) {
     return {
       requestPayload: {
@@ -156,16 +222,26 @@ function resolveSearchRegexExecutionContext(
   };
 }
 
+/**
+ * Builds the resume envelope for the regex-search family.
+ *
+ * @param options - Resume-session inputs, request payload, root results, and timing state for the current envelope decision.
+ * @returns Resume metadata for the current regex-search response.
+ */
 function buildSearchRegexContinuationEnvelope(
-  resumeToken: string | null,
-  resumeExpiresAt: string | null,
-  nextContinuationState: SearchRegexContinuationState | null,
-  inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
-  requestPayload: SearchRegexRequestPayload,
-  roots: SearchRegexRootExecutionResult[],
-  requestedResumeMode: InspectionResumeMode | null,
-  now: Date,
+  options: BuildSearchRegexContinuationEnvelopeOptions,
 ): Pick<SearchRegexResult, "admission" | "resume"> {
+  const {
+    resumeToken,
+    resumeExpiresAt,
+    nextContinuationState,
+    inspectionResumeSessionStore,
+    requestPayload,
+    roots,
+    requestedResumeMode,
+    now,
+  } = options;
+
   const effectiveResumeMode = requestedResumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK;
   const admissionOutcome = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
     ? INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
@@ -254,46 +330,13 @@ function buildSearchRegexContinuationEnvelope(
  * native `ugrep` backend. Invalid regex patterns remain global failures, while multi-root runtime
  * problems are preserved as root-local failures instead of collapsing the whole batch response.
  *
- * @param searchPaths - File or directory search scopes in caller-supplied order.
- * @param pattern - Raw regex pattern supplied by the caller.
- * @param filePatterns - Include globs that narrow candidate file names before content scanning.
- * @param excludePatterns - Exclude globs that remove candidate paths from traversal.
- * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
- * @param maxResults - Caller-requested maximum number of returned locations per root.
- * @param caseSensitive - Whether regex compilation should preserve case sensitivity.
- * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
+ * @param options - Request, resume, and environment options for the formatted regex-search flow.
  * @returns Formatted text output that respects the regex-search family response cap.
  */
 export async function handleSearchRegex(
-  resumeToken: string | undefined,
-  resumeMode: InspectionResumeMode | undefined,
-  searchPaths: string[],
-  pattern: string,
-  filePatterns: string[],
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  maxResults: number,
-  caseSensitive: boolean,
-  allowedDirectories: string[],
-  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
+  options: HandleSearchRegexOptions,
 ): Promise<string> {
-  const executionContext = resolveSearchRegexExecutionContext(
-    resumeToken,
-    resumeMode,
-    searchPaths,
-    pattern,
-    filePatterns,
-    excludePatterns,
-    includeExcludedGlobs,
-    respectGitIgnore,
-    maxResults,
-    caseSensitive,
-    inspectionResumeSessionStore,
-    new Date(),
-  );
-  const structuredResult = await getSearchRegexResult(
+  const {
     resumeToken,
     resumeMode,
     searchPaths,
@@ -306,7 +349,38 @@ export async function handleSearchRegex(
     caseSensitive,
     allowedDirectories,
     inspectionResumeSessionStore,
+  } = options;
+
+  const executionContext = resolveSearchRegexExecutionContext(
+    {
+      resumeToken,
+      resumeMode,
+      searchPaths,
+      pattern,
+      filePatterns,
+      excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
+      maxResults,
+      caseSensitive,
+      inspectionResumeSessionStore,
+      now: new Date(),
+    },
   );
+  const structuredResult = await getSearchRegexResult({
+    resumeToken,
+    resumeMode,
+    searchPaths,
+    pattern,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    allowedDirectories,
+    inspectionResumeSessionStore,
+  });
   const effectiveMaxResults = Math.min(
     executionContext.requestPayload.maxResults,
     REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
@@ -339,33 +413,13 @@ export async function handleSearchRegex(
  * requests encode root-local failures inside the per-root result surface so later consumers can
  * distinguish partial root failures from successful roots.
  *
- * @param searchPaths - File or directory search scopes in caller-supplied order.
- * @param pattern - Raw regex pattern supplied by the caller.
- * @param filePatterns - Include globs that narrow candidate file names before content scanning.
- * @param excludePatterns - Exclude globs that remove candidate paths from traversal.
- * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
- * @param maxResults - Caller-requested maximum number of returned locations per root.
- * @param caseSensitive - Whether regex compilation should preserve case sensitivity.
- * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
+ * @param options - Request, resume, and environment options for the structured regex-search flow.
  * @returns Structured per-root results with preserved field names and harmonized failure semantics.
  */
 export async function getSearchRegexResult(
-  resumeToken: string | undefined,
-  resumeMode: InspectionResumeMode | undefined,
-  searchPaths: string[],
-  pattern: string,
-  filePatterns: string[],
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  maxResults: number,
-  caseSensitive: boolean,
-  allowedDirectories: string[],
-  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
+  options: GetSearchRegexResultOptions,
 ): Promise<SearchRegexResult> {
-  const now = new Date();
-  const executionContext = resolveSearchRegexExecutionContext(
+  const {
     resumeToken,
     resumeMode,
     searchPaths,
@@ -376,8 +430,26 @@ export async function getSearchRegexResult(
     respectGitIgnore,
     maxResults,
     caseSensitive,
+    allowedDirectories,
     inspectionResumeSessionStore,
-    now,
+  } = options;
+
+  const now = new Date();
+  const executionContext = resolveSearchRegexExecutionContext(
+    {
+      resumeToken,
+      resumeMode,
+      searchPaths,
+      pattern,
+      filePatterns,
+      excludePatterns,
+      includeExcludedGlobs,
+      respectGitIgnore,
+      maxResults,
+      caseSensitive,
+      inspectionResumeSessionStore,
+      now,
+    },
   );
   const effectiveMaxResults = Math.min(
     executionContext.requestPayload.maxResults,
@@ -412,23 +484,23 @@ export async function getSearchRegexResult(
 
   for (const searchPath of activeSearchPaths) {
     try {
-      const result = await getSearchRegexPathResult(
-        SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
         searchPath,
-        executionContext.requestPayload.pattern,
-        executionContext.requestPayload.filePatterns,
-        executionContext.requestPayload.excludePatterns,
-        executionContext.requestPayload.includeExcludedGlobs,
-        executionContext.requestPayload.respectGitIgnore,
-        effectiveMaxResults,
-        executionContext.requestPayload.caseSensitive,
+        pattern: executionContext.requestPayload.pattern,
+        filePatterns: executionContext.requestPayload.filePatterns,
+        excludePatterns: executionContext.requestPayload.excludePatterns,
+        includeExcludedGlobs: executionContext.requestPayload.includeExcludedGlobs,
+        respectGitIgnore: executionContext.requestPayload.respectGitIgnore,
+        maxResults: effectiveMaxResults,
+        caseSensitive: executionContext.requestPayload.caseSensitive,
         allowedDirectories,
         executionPolicy,
         aggregateBudgetState,
-        activeSearchPaths.length,
-        executionContext.continuationState?.rootTraversalStates[searchPath] ?? null,
-        executionContext.requestedResumeMode,
-      );
+        batchRootCount: activeSearchPaths.length,
+        continuationState: executionContext.continuationState?.rootTraversalStates[searchPath] ?? null,
+        requestedResumeMode: executionContext.requestedResumeMode,
+      });
 
       roots.push(result);
     } catch (error) {
@@ -457,16 +529,16 @@ export async function getSearchRegexResult(
     },
     null,
   );
-  const continuationEnvelope = buildSearchRegexContinuationEnvelope(
-    executionContext.activeResumeToken,
-    executionContext.activeResumeExpiresAt,
+  const continuationEnvelope = buildSearchRegexContinuationEnvelope({
+    resumeToken: executionContext.activeResumeToken,
+    resumeExpiresAt: executionContext.activeResumeExpiresAt,
     nextContinuationState,
     inspectionResumeSessionStore,
-    executionContext.requestPayload,
+    requestPayload: executionContext.requestPayload,
     roots,
-    executionContext.requestedResumeMode,
+    requestedResumeMode: executionContext.requestedResumeMode,
     now,
-  );
+  });
 
   return {
     roots: roots.map(({ root, matches, filesSearched, totalMatches, truncated, error }) => ({

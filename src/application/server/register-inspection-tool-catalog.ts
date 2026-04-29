@@ -354,34 +354,34 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         const maxResults = "maxResults" in args ? args.maxResults : 100;
         const caseSensitive = "caseSensitive" in args ? args.caseSensitive : false;
 
-        const result = await getSearchRegexStructuredResult(
+        const result = await getSearchRegexStructuredResult({
           resumeToken,
           resumeMode,
-          roots,
-          regex,
-          includeGlobs,
-          excludeGlobs,
+          searchPaths: roots,
+          pattern: regex,
+          filePatterns: includeGlobs,
+          excludePatterns: excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
           maxResults,
           caseSensitive,
           allowedDirectories,
           inspectionResumeSessionStore,
-        );
-        const text = await handleSearchRegex(
+        });
+        const text = await handleSearchRegex({
           resumeToken,
           resumeMode,
-          roots,
-          regex,
-          includeGlobs,
-          excludeGlobs,
+          searchPaths: roots,
+          pattern: regex,
+          filePatterns: includeGlobs,
+          excludePatterns: excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
           maxResults,
           caseSensitive,
           allowedDirectories,
           inspectionResumeSessionStore,
-        );
+        });
 
         return {
           content: [{ type: "text", text }],
@@ -426,34 +426,34 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         const maxResults = "maxResults" in args ? args.maxResults : 100;
         const caseSensitive = "caseSensitive" in args ? args.caseSensitive : false;
 
-        const result = await getSearchFixedStringStructuredResult(
+        const result = await getSearchFixedStringStructuredResult({
           resumeToken,
           resumeMode,
-          roots,
+          searchPaths: roots,
           fixedString,
-          includeGlobs,
-          excludeGlobs,
+          filePatterns: includeGlobs,
+          excludePatterns: excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
           maxResults,
           caseSensitive,
           allowedDirectories,
           inspectionResumeSessionStore,
-        );
-        const text = await handleSearchFixedString(
+        });
+        const text = await handleSearchFixedString({
           resumeToken,
           resumeMode,
-          roots,
+          searchPaths: roots,
           fixedString,
-          includeGlobs,
-          excludeGlobs,
+          filePatterns: includeGlobs,
+          excludePatterns: excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
           maxResults,
           caseSensitive,
           allowedDirectories,
           inspectionResumeSessionStore,
-        );
+        });
 
         return {
           content: [{ type: "text", text }],

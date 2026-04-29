@@ -268,6 +268,24 @@ function parseUgrepMatchLine(outputLine: string): {
   };
 }
 
+interface GetSearchRegexPathResultOptions {
+  toolName: string;
+  searchPath: string;
+  pattern: string;
+  filePatterns: string[];
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+  caseSensitive: boolean;
+  allowedDirectories: string[];
+  executionPolicy?: SearchExecutionPolicy;
+  aggregateBudgetState?: RegexSearchAggregateBudgetState;
+  batchRootCount?: number;
+  continuationState?: SearchRegexRootContinuationState | null;
+  requestedResumeMode?: import("@domain/shared/resume/inspection-resume-contract").InspectionResumeMode | null;
+}
+
 async function getValidatedPreflightEntry(
   toolName: string,
   requestedPath: string,
@@ -527,41 +545,35 @@ async function collectRegexMatchesFromFileEntry(
  * The module stays inside the regex endpoint boundary because mixed file-versus-directory scope
  * normalization is part of the public regex contract rather than a generic shared-search concern.
  *
- * @param toolName - Exact MCP tool name that owns the current regex execution.
- * @param searchPath - File or directory search scope in caller-supplied form.
- * @param pattern - Raw regex pattern supplied by the caller.
- * @param filePatterns - Include globs that narrow candidate file names before content scanning.
- * @param excludePatterns - Exclude globs that remove candidate paths from traversal.
- * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
- * @param maxResults - Caller-requested maximum number of returned locations per root.
- * @param caseSensitive - Whether regex compilation should preserve case sensitivity.
- * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
- * @param batchRootCount - Number of roots participating in the current caller-visible batch surface.
+ * @param options - Request, traversal, resume, and runtime options for one regex-search scope.
  * @returns Structured per-root regex output that later text and structured response surfaces consume.
  */
 export async function getSearchRegexPathResult(
-  toolName: string,
-  searchPath: string,
-  pattern: string,
-  filePatterns: string[],
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  maxResults: number,
-  caseSensitive: boolean,
-  allowedDirectories: string[],
-  executionPolicy: SearchExecutionPolicy = resolveSearchExecutionPolicy(
-    detectIoCapabilityProfile(),
-  ),
-  aggregateBudgetState: RegexSearchAggregateBudgetState = createRegexSearchAggregateBudgetState(),
-  batchRootCount: number = 1,
-  continuationState: SearchRegexRootContinuationState | null = null,
-  requestedResumeMode: import("@domain/shared/resume/inspection-resume-contract").InspectionResumeMode | null = null,
+  options: GetSearchRegexPathResultOptions,
 ): Promise<SearchRegexPathResult & {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
   nextContinuationState: SearchRegexRootContinuationState | null;
 }> {
+  const {
+    toolName,
+    searchPath,
+    pattern,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    allowedDirectories,
+    executionPolicy = resolveSearchExecutionPolicy(
+      detectIoCapabilityProfile(),
+    ),
+    aggregateBudgetState = createRegexSearchAggregateBudgetState(),
+    batchRootCount = 1,
+    continuationState = null,
+    requestedResumeMode = null,
+  } = options;
+
   const traversalPreflightContext = await resolveTraversalPreflightContext(
     toolName,
     searchPath,

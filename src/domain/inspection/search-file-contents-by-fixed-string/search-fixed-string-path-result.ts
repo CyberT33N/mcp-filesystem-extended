@@ -103,44 +103,54 @@ function matchesPreviewLaneFilePatterns(
   });
 }
 
+interface GetSearchFixedStringPathResultOptions {
+  searchPath: string;
+  fixedString: string;
+  filePatterns: string[];
+  excludePatterns: string[];
+  includeExcludedGlobs: string[];
+  respectGitIgnore: boolean;
+  maxResults: number;
+  caseSensitive: boolean;
+  allowedDirectories: string[];
+  executionPolicy?: SearchExecutionPolicy;
+  aggregateBudgetState?: FixedStringSearchAggregateBudgetState;
+  batchRootCount?: number;
+  continuationState?: SearchFixedStringRootContinuationState | null;
+  requestedResumeMode?: import("@domain/shared/resume/inspection-resume-contract").InspectionResumeMode | null;
+}
+
 /**
  * Resolves the fixed-string search result for one validated file or directory scope.
  *
- * @param searchPath - File or directory search scope in caller-supplied form.
- * @param fixedString - Exact literal string supplied by the caller.
- * @param filePatterns - Include globs that narrow candidate file names before content scanning.
- * @param excludePatterns - Exclude globs that remove candidate paths from traversal.
- * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
- * @param maxResults - Caller-requested maximum number of returned locations per root.
- * @param caseSensitive - Whether literal matching should preserve case sensitivity.
- * @param allowedDirectories - Allowed directory roots enforced by the shared path guard.
- * @param batchRootCount - Number of roots participating in the current caller-visible batch surface.
- * @param executionPolicy - Shared runtime execution policy for the current request.
- * @param aggregateBudgetState - Request-level aggregate byte accounting surface.
+ * @param options - Request, traversal, resume, and runtime options for one fixed-string search scope.
  * @returns Structured per-root fixed-string output that later text and structured surfaces consume.
  */
 export async function getSearchFixedStringPathResult(
-  searchPath: string,
-  fixedString: string,
-  filePatterns: string[],
-  excludePatterns: string[],
-  includeExcludedGlobs: string[],
-  respectGitIgnore: boolean,
-  maxResults: number,
-  caseSensitive: boolean,
-  allowedDirectories: string[],
-  executionPolicy: SearchExecutionPolicy = resolveSearchExecutionPolicy(
-    detectIoCapabilityProfile(),
-  ),
-  aggregateBudgetState: FixedStringSearchAggregateBudgetState = createFixedStringSearchAggregateBudgetState(),
-  batchRootCount: number = 1,
-  continuationState: SearchFixedStringRootContinuationState | null = null,
-  requestedResumeMode: import("@domain/shared/resume/inspection-resume-contract").InspectionResumeMode | null = null,
+  options: GetSearchFixedStringPathResultOptions,
 ): Promise<SearchFixedStringPathResult & {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
   nextContinuationState: SearchFixedStringRootContinuationState | null;
 }> {
+  const {
+    searchPath,
+    fixedString,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    allowedDirectories,
+    executionPolicy = resolveSearchExecutionPolicy(
+      detectIoCapabilityProfile(),
+    ),
+    aggregateBudgetState = createFixedStringSearchAggregateBudgetState(),
+    batchRootCount = 1,
+    continuationState = null,
+    requestedResumeMode = null,
+  } = options;
+
   const traversalPreflightContext = await resolveTraversalPreflightContext(
     SEARCH_FIXED_STRING_TOOL_NAME,
     searchPath,
