@@ -6,10 +6,10 @@ parent_orchestration: "PLAN.md"
 hierarchy_level: 1
 unit_status: "in_progress"
 total_tasks: 3
-completed_tasks: 1
+completed_tasks: 2
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "7.2"
+resume_frontier_task: "7.3"
 next_frontier_task: "7.3"
 todo_window_mode_override: "inherit"
 ---
