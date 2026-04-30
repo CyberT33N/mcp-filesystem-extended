@@ -8,13 +8,13 @@ created: "2026-04-18T00:00:00Z"
   total_units: 11
     completed_units: 6
   total_tasks_all_levels: 38
-    completed_tasks_all_levels: 29
+    completed_tasks_all_levels: 30
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
     resume_frontier_unit: "7"
-    resume_frontier_task: "7.1"
-    next_frontier_task: "7.2"
+    resume_frontier_task: "7.2"
+    next_frontier_task: "7.3"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -42,17 +42,17 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Total Units:** 11
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 29/38 tasks completed
+- **Progress:** 30/38 tasks completed
 - **Historical Backup Plan:** [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md)
 
 ## Execution Frontier
 [INTENT: REFERENCE]
 
 - **Resume Frontier Unit:** `7`
-- **Resume Frontier Task:** `7.1`
-- **Next Frontier Task:** `7.2`
+- **Resume Frontier Task:** `7.2`
+- **Next Frontier Task:** `7.3`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
-- **Frontier Rule:** Units `1`, `2`, `3`, `4`, `5`, and `6` are fully complete. Unit `7` is now the active documentation frontier, and task `7.1` is the next operative endpoint-local documentation task.
+- **Frontier Rule:** Units `1`, `2`, `3`, `4`, `5`, and `6` are fully complete. Unit `7` is now the active documentation frontier, and task `7.2` is the next operative endpoint-local documentation task.
 
 ## Units
 [INTENT: REFERENCE]
@@ -83,7 +83,7 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
   - Summary: Create endpoint-local documentation sets for the comparison-domain tool surfaces.
 - [ ] **7. Content Mutation Docs** → [`.plan/7-content-mutation-docs/orchestration.md`](.plan/7-content-mutation-docs/orchestration.md)
   - Classification: Mixed
-  - Status: pending | Tasks: 3 | Completed: 0
+  - Status: in_progress | Tasks: 3 | Completed: 1
   - Summary: Create endpoint-local documentation sets for content-bearing mutation endpoints.
 - [ ] **8. Path Mutation Docs** → [`.plan/8-path-mutation-docs/orchestration.md`](.plan/8-path-mutation-docs/orchestration.md)
   - Classification: Mixed

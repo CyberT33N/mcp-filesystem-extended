@@ -4,13 +4,13 @@ file_id: "7"
 unit_name: "Content Mutation Docs"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "in_progress"
 total_tasks: 3
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "7.1"
-next_frontier_task: "7.2"
+resume_frontier_task: "7.2"
+next_frontier_task: "7.3"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,13 +20,13 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/7-content-mutation-docs/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/3 tasks
+- **Unit Status:** in_progress
+- **Progress:** 1/3 tasks
 
 ## Tasks
-- [ ] **7.1 `create_files` doc set** → [`7.1-create-files-doc-set.md`](./7.1-create-files-doc-set.md)
+- [x] **7.1 `create_files` doc set** → [`7.1-create-files-doc-set.md`](./7.1-create-files-doc-set.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: MEDIUM
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
@@ -52,7 +52,7 @@ todo_window_mode_override: "inherit"
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
-| D1 | 7.3 | 7.1 | SEQUENTIAL | UNRESOLVED | Replacement docs should contrast themselves with additive creation semantics. | content mutation docs |
+| D1 | 7.3 | 7.1 | SEQUENTIAL | RESOLVED | Replacement docs should contrast themselves with additive creation semantics. | content mutation docs |
 | D2 | 7.3 | 7.2 | SEQUENTIAL | UNRESOLVED | Replacement docs should contrast themselves with append-only semantics. | content mutation docs |
 
 ## Execution Order
