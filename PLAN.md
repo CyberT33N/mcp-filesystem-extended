@@ -6,15 +6,15 @@ created: "2026-04-18T00:00:00Z"
   last_updated: "2026-04-26T00:00:00Z"
     status: "in_progress"
   total_units: 11
-    completed_units: 3
+    completed_units: 4
   total_tasks_all_levels: 38
-    completed_tasks_all_levels: 24
+    completed_tasks_all_levels: 25
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-    resume_frontier_unit: "4"
-    resume_frontier_task: "4.3"
-    next_frontier_task: "4.3"
+    resume_frontier_unit: "5"
+    resume_frontier_task: "5.1"
+    next_frontier_task: "5.1"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -42,17 +42,17 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Total Units:** 11
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 23/38 tasks completed
+- **Progress:** 25/38 tasks completed
 - **Historical Backup Plan:** [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md)
 
 ## Execution Frontier
 [INTENT: REFERENCE]
 
-- **Resume Frontier Unit:** `4`
-- **Resume Frontier Task:** `4.1`
-- **Next Frontier Task:** `4.1`
+- **Resume Frontier Unit:** `5`
+- **Resume Frontier Task:** `5.1`
+- **Next Frontier Task:** `5.1`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
-- **Frontier Rule:** Units `1`, `2`, and `3` are fully complete. Unit `4` is now the active documentation frontier, and task `4.1` is the next operative endpoint-local documentation task.
+- **Frontier Rule:** Units `1`, `2`, `3`, and `4` are fully complete. Unit `5` is now the active documentation frontier, and task `5.1` is the next operative endpoint-local documentation task.
 
 ## Units
 [INTENT: REFERENCE]
@@ -69,9 +69,9 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
   - Classification: Mixed
   - Status: done | Tasks: 3 | Completed: 3
   - Summary: Create endpoint-local documentation sets for metadata, checksum, and integrity-oriented inspection tools.
-- [ ] **4. Inspection Search and Count Docs** → [`.plan/4-inspection-search-and-count-docs/orchestration.md`](.plan/4-inspection-search-and-count-docs/orchestration.md)
+- [x] **4. Inspection Search and Count Docs** → [`.plan/4-inspection-search-and-count-docs/orchestration.md`](.plan/4-inspection-search-and-count-docs/orchestration.md)
   - Classification: Mixed
-  - Status: pending | Tasks: 3 | Completed: 0
+  - Status: done | Tasks: 3 | Completed: 3
   - Summary: Create endpoint-local documentation sets for regex search, fixed-string search, and count-lines after the runtime/search refactors land.
 - [ ] **5. Inspection Read Docs** → [`.plan/5-inspection-read-docs/orchestration.md`](.plan/5-inspection-read-docs/orchestration.md)
   - Classification: Mixed

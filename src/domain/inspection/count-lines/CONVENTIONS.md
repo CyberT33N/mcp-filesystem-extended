@@ -1,38 +1,44 @@
-# CONVENTIONS — `count-lines` Domain Handler
+# CONVENTIONS — `count_lines` Endpoint
 
 ## Zweck dieses Dokuments
 
-Dieses Dokument legt die architektonellen Konventionen, Designentscheidungen und Erweiterungsverbote für den `count-lines`-Endpunkt fest. Es dient als verbindliche Referenz für alle zukünftigen Entwicklungen in diesem Verzeichnis.
+Dieses Dokument hält die endpoint-lokalen Konventionen, Designentscheidungen und Erweiterungsverbote für `count_lines` fest. Es dient als lokale Referenz für die Aspekte, die für diesen Endpunkt spezifisch sind und nicht bereits durch die Workspace-SSOT oder die Shared-Search-/Resume-Architektur vollständig erklärt werden.
 
 ---
 
 ## Vertragsdefinition — Was dieser Endpunkt ist
 
-Der `count-lines`-Endpunkt hat **eine einzige, klar definierte Verantwortlichkeit**:
+Der `count_lines`-Endpunkt hat **eine klar definierte counting-Verantwortlichkeit mit zwei zulässigen Counting-Lanes**:
 
-> **Er zählt Zeilen. Er gibt zurück, wie viele es sind.**
+> **Er zählt Zeilen über Dateien oder Verzeichnisbäume und liefert strukturierte Totals. Optional kann er zusätzlich zählen, wie viele Zeilen ein Regex-Muster matchen.**
 
-Das ist der vollständige und unveränderliche Vertrag dieses Endpunkts. Alle Designentscheidungen leiten sich aus diesem Vertrag ab.
+Das ist der aktuelle code- und registrierungsgebundene Vertrag dieses Endpunkts. Alle lokalen Konventionsentscheidungen müssen diesen Vertrag bewahren, statt ihn stillschweigend in Read- oder Search-Lokalisierungssemantik auszuweiten.
 
-### Aktueller Response (architektonisch korrekt)
+### Aktueller Vertragszuschnitt (architektonisch korrekt)
 
-```
-count_lines
+`count_lines` akzeptiert heute nicht nur `paths`, sondern optional auch `recursive`, `regex`, `includeGlobs`, `excludeGlobs`, `includeExcludedGlobs`, `respectGitIgnore`, `ignoreEmptyLines` sowie completion-backed Resume-Felder.
 
-{
-  "paths": ["src/application/server/server-instructions.ts"],
-  "recursive": false,
-  "regex": "preview-first|task-backed"
-}
+Der Endpunkt hat dabei zwei unterschiedliche, aber zusammengehörige Zählfragen:
 
-Line counts:
+| Lane | Frage | Primäre Ausführung |
+|---|---|---|
+| Total-only counting | Wie viele Zeilen existieren im Scope? | large-file-safe streaming counter |
+| Pattern-aware counting | Wie viele Zeilen matchen das angegebene Regex? | shared native-search lane plus state-aware policy |
 
-C:\...\server-instructions.ts: 40 lines total, 3 matching lines
+Der öffentliche Ergebnisvertrag bleibt trotzdem eine Counting-Oberfläche:
 
-Total: 1 files, 40 lines, 3 matching lines
-```
+- per-path Aggregation,
+- `totalFiles`,
+- `totalLines`,
+- `totalMatchingLines`,
+- `admission`,
+- `resume`.
 
-Dieser Response ist **vollständig und korrekt** — er erfüllt exakt seinen Vertrag.
+Wichtig ist dabei:
+
+- Der Endpunkt bleibt **kein** Location-Search-Endpoint.
+- Der Endpunkt bleibt **kein** Read-Endpoint.
+- Der Endpunkt bleibt **keine** Preview-Chunk-Familie mit partiellen Zähltotals; sobald breite Workloads die Inline-Lane verlassen, nutzt `count_lines` nur completion-backed same-endpoint resume mit `resumeMode = 'complete-result'`.
 
 ---
 
@@ -130,10 +136,12 @@ Die MCP-Server-Architektur trennt diese Verantwortlichkeiten explizit:
 
 | Erweiterungskandidat | Entscheidung | Begründung |
 |---|---|---|
+| Regex-basierte `matchingCount`-Totals | **BESTANDTEIL DES VERTRAGS** | Bleibt eine Counting-Oberfläche, weil nur aggregierte Matching-Line-Totals zurückgegeben werden und keine Match-Lokalisierung entsteht |
+| Completion-backed Resume-Semantik | **BESTANDTEIL DES VERTRAGS** | Breite Workloads dürfen in eine same-endpoint `complete-result`-Fortsetzung wechseln, ohne dass daraus eine Preview- oder Read-Oberfläche wird |
 | Zeilenpositionen der Matches | **ABGELEHNT** | SRP-Verletzung, Vertragsdrift, Redundanz mit `search_*` |
 | Inhalt der gematchten Zeilen | **ABGELEHNT** | Vertragsbruch — kombiniert Count + Read + Search |
 | Erweiterte Aggregations-Metriken (z. B. Prozentanteil) | **Bedingt möglich** | Nur wenn es sich um reine Zähl-Metadaten handelt, Einzelfallentscheidung |
-| Aktueller Stand | **BEIBEHALTEN** | Vertragstreu, klar abgegrenzt, korrekt |
+| Aktueller Stand | **SELEKTIV ANGEPASST** | Structured counting surface mit total-only lane, pattern-aware lane und completion-backed resume, aber ohne Lokalisierungs- oder Read-Drift |
 
 ---
 
@@ -178,7 +186,7 @@ Falsches Tool: count_lines ✗
 Jeder Endpunkt hat genau eine Verantwortlichkeit. Erweiterungen, die eine zweite Verantwortlichkeit einführen, werden abgelehnt — unabhängig von der kurzfristigen Bequemlichkeit.
 
 ### 2. Vertragstreue (Contract Integrity)
-Der Name eines Endpunkts ist sein Vertrag. `count_lines` zählt Zeilen. Änderungen, die den semantischen Vertrag verletzen, sind architektonisch falsch.
+Der Name eines Endpunkts ist sein Vertrag. `count_lines` bleibt eine Counting-Oberfläche. Zulässig sind strukturierte Totals, optionale regex-basierte `matchingCount`-Aggregationen und completion-backed Resume-Semantik; unzulässig sind Lokalisierungs-, Inhalts- oder Read-Erweiterungen, die den Endpunkt semantisch in eine Search- oder Read-Oberfläche verschieben würden.
 
 ### 3. Redundanzvermeidung (No Redundancy)
 Wenn ein bestehender Endpunkt eine Funktion bereits korrekt abbildet, wird diese Funktion nicht in einem anderen Endpunkt dupliziert. Die Architektur des MCP-Servers ist bewusst so designed, dass die Endpunkte komplementär, nicht redundant sind.
