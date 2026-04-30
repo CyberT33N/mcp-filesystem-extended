@@ -6,15 +6,15 @@ created: "2026-04-18T00:00:00Z"
   last_updated: "2026-04-26T00:00:00Z"
     status: "in_progress"
   total_units: 11
-    completed_units: 4
+    completed_units: 5
   total_tasks_all_levels: 38
-    completed_tasks_all_levels: 26
+    completed_tasks_all_levels: 27
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-    resume_frontier_unit: "5"
-    resume_frontier_task: "5.2"
-    next_frontier_task: "5.2"
+    resume_frontier_unit: "6"
+    resume_frontier_task: "6.1"
+    next_frontier_task: "6.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -42,17 +42,17 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Total Units:** 11
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 25/38 tasks completed
+- **Progress:** 27/38 tasks completed
 - **Historical Backup Plan:** [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md)
 
 ## Execution Frontier
 [INTENT: REFERENCE]
 
-- **Resume Frontier Unit:** `5`
-- **Resume Frontier Task:** `5.1`
-- **Next Frontier Task:** `5.1`
+- **Resume Frontier Unit:** `6`
+- **Resume Frontier Task:** `6.1`
+- **Next Frontier Task:** `6.2`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
-- **Frontier Rule:** Units `1`, `2`, `3`, and `4` are fully complete. Unit `5` is now the active documentation frontier, and task `5.1` is the next operative endpoint-local documentation task.
+- **Frontier Rule:** Units `1`, `2`, `3`, `4`, and `5` are fully complete. Unit `6` is now the active documentation frontier, and task `6.1` is the next operative endpoint-local documentation task.
 
 ## Units
 [INTENT: REFERENCE]
@@ -73,9 +73,9 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
   - Classification: Mixed
   - Status: done | Tasks: 3 | Completed: 3
   - Summary: Create endpoint-local documentation sets for regex search, fixed-string search, and count-lines after the runtime/search refactors land.
-- [ ] **5. Inspection Read Docs** → [`.plan/5-inspection-read-docs/orchestration.md`](.plan/5-inspection-read-docs/orchestration.md)
+- [x] **5. Inspection Read Docs** → [`.plan/5-inspection-read-docs/orchestration.md`](.plan/5-inspection-read-docs/orchestration.md)
   - Classification: Mixed
-  - Status: pending | Tasks: 2 | Completed: 0
+  - Status: done | Tasks: 2 | Completed: 2
   - Summary: Create endpoint-local documentation sets for the two separate public read tools while documenting their intentionally distinct public roles and shared internal SSOT refactor.
 - [ ] **6. Comparison Docs** → [`.plan/6-comparison-docs/orchestration.md`](.plan/6-comparison-docs/orchestration.md)
   - Classification: Mixed

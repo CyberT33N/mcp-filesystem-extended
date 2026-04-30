@@ -4,9 +4,9 @@ file_id: "5"
 unit_name: "Inspection Read Docs"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "in_progress"
+unit_status: "done"
 total_tasks: 2
-completed_tasks: 1
+completed_tasks: 2
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "5.2"
@@ -20,8 +20,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/5-inspection-read-docs/`
 - **Hierarchy Level:** 1
-- **Unit Status:** in_progress
-- **Progress:** 1/2 tasks
+- **Unit Status:** done
+- **Progress:** 2/2 tasks
 
 ## Tasks
 - [x] **5.1 `read_files_with_line_numbers` doc set** → [`5.1-read-files-with-line-numbers-doc-set.md`](./5.1-read-files-with-line-numbers-doc-set.md)
@@ -32,9 +32,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: endpoint-local doc triplet
   - Blocked By: none
   - Summary: Document the small multi-file line-numbered reader and its distinct public role.
-- [ ] **5.2 `read_file_content` doc set** → [`5.2-read-file-content-doc-set.md`](./5.2-read-file-content-doc-set.md)
+- [x] **5.2 `read_file_content` doc set** → [`5.2-read-file-content-doc-set.md`](./5.2-read-file-content-doc-set.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: done
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
