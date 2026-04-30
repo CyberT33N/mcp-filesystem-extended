@@ -21,7 +21,7 @@ todo_window_mode_override: "inherit"
 - **This Unit:** `.plan/7-content-mutation-docs/`
 - **Hierarchy Level:** 1
 - **Unit Status:** in_progress
-- **Progress:** 1/3 tasks
+- **Progress:** 2/3 tasks
 
 ## Tasks
 - [x] **7.1 `create_files` doc set** → [`7.1-create-files-doc-set.md`](./7.1-create-files-doc-set.md)
@@ -32,9 +32,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: endpoint-local doc triplet
   - Blocked By: none
   - Summary: Document the additive file-creation endpoint and its per-item plus cumulative content budgets.
-- [ ] **7.2 `append_files` doc set** → [`7.2-append-files-doc-set.md`](./7.2-append-files-doc-set.md)
+- [x] **7.2 `append_files` doc set** → [`7.2-append-files-doc-set.md`](./7.2-append-files-doc-set.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: MEDIUM
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
@@ -53,7 +53,7 @@ todo_window_mode_override: "inherit"
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
 | D1 | 7.3 | 7.1 | SEQUENTIAL | RESOLVED | Replacement docs should contrast themselves with additive creation semantics. | content mutation docs |
-| D2 | 7.3 | 7.2 | SEQUENTIAL | UNRESOLVED | Replacement docs should contrast themselves with append-only semantics. | content mutation docs |
+| D2 | 7.3 | 7.2 | SEQUENTIAL | RESOLVED | Replacement docs should contrast themselves with append-only semantics. | content mutation docs |
 
 ## Execution Order
 1. 7.1
