@@ -8,13 +8,13 @@ created: "2026-04-18T00:00:00Z"
   total_units: 11
     completed_units: 4
   total_tasks_all_levels: 38
-    completed_tasks_all_levels: 25
+    completed_tasks_all_levels: 26
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
     resume_frontier_unit: "5"
-    resume_frontier_task: "5.1"
-    next_frontier_task: "5.1"
+    resume_frontier_task: "5.2"
+    next_frontier_task: "5.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
