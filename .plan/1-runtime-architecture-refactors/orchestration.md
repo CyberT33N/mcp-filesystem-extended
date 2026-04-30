@@ -4,10 +4,9 @@ file_id: "1"
 unit_name: "Runtime Architecture Refactors"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "in_progress"
+unit_status: "done"
 total_tasks: 17
-completed_tasks: 16
-active_task: "1.17"
+completed_tasks: 17
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "1.17"
@@ -21,8 +20,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/1-runtime-architecture-refactors/`
 - **Hierarchy Level:** 1
-- **Unit Status:** in_progress
-- **Progress:** 15/17 tasks
+- **Unit Status:** done
+- **Progress:** 17/17 tasks
 
 ## Execution Frontier
 - **Resume Frontier Task:** `1.14`
@@ -150,7 +149,7 @@ todo_window_mode_override: "inherit"
   - Files Modified: src/domain/shared/utils/error-message.ts, src/domain/inspection/get-file-checksums/handler.ts, src/domain/inspection/verify-file-checksums/handler.ts, src/domain/inspection/get-path-metadata/handler.ts, src/domain/comparison/diff-files/handler.ts, src/domain/comparison/diff-text-content/handler.ts, src/domain/mutation/append-files/handler.ts, src/domain/mutation/create-files/handler.ts, src/domain/mutation/copy-paths/handler.ts, src/domain/mutation/move-paths/handler.ts, src/domain/mutation/replace-file-line-ranges/handler.ts, src/domain/shared/guardrails/filesystem-preflight.ts, src/domain/inspection/search-file-contents-by-regex/handler.ts
   - Blocked By: none (1.15 DONE)
   - Summary: Create extractErrorMessage utility in @domain/shared/utils/error-message; replace all inline error instanceof Error ? error.message : String(error) patterns across 12 consumer files; regex handler also picks up SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME from 1.15.
-- [~] **1.17 Mutation domain shared helpers — formatBatchMutationSummary, assertPathMutationBatchBudget, assertContentMutationInputBudget** → [`1.17-mutation-domain-shared-helpers.md`](./1.17-mutation-domain-shared-helpers.md)
+- [x] **1.17 Mutation domain shared helpers — formatBatchMutationSummary, assertPathMutationBatchBudget, assertContentMutationInputBudget** → [`1.17-mutation-domain-shared-helpers.md`](./1.17-mutation-domain-shared-helpers.md)
   - Classification: SEQUENTIAL
   - Status: DONE
   - Complexity: MEDIUM

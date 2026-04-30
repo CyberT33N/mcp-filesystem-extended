@@ -4,13 +4,13 @@ file_id: "4"
 unit_name: "Inspection Search and Count Docs"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "in_progress"
 total_tasks: 3
-completed_tasks: 0
+completed_tasks: 2
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "4.1"
-next_frontier_task: "4.2"
+resume_frontier_task: "4.3"
+next_frontier_task: "4.3"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,25 +20,25 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/4-inspection-search-and-count-docs/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/3 tasks
+- **Unit Status:** in_progress
+- **Progress:** 2/3 tasks
 
 ## Tasks
-- [ ] **4.1 `search_file_contents_by_regex` doc set** → [`4.1-search-file-contents-by-regex-doc-set.md`](./4.1-search-file-contents-by-regex-doc-set.md)
+- [x] **4.1 `search_file_contents_by_regex` doc set** → [`4.1-search-file-contents-by-regex-doc-set.md`](./4.1-search-file-contents-by-regex-doc-set.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
   - Blocked By: none
   - Summary: Document the regex-search endpoint after the hybrid/text-state and traversal-governance refactors settle.
-- [ ] **4.2 `search_file_contents_by_fixed_string` doc set** → [`4.2-search-file-contents-by-fixed-string-doc-set.md`](./4.2-search-file-contents-by-fixed-string-doc-set.md)
+- [x] **4.2 `search_file_contents_by_fixed_string` doc set** → [`4.2-search-file-contents-by-fixed-string-doc-set.md`](./4.2-search-file-contents-by-fixed-string-doc-set.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: done
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
-  - Blocked By: 4.1
+  - Blocked By: none
   - Summary: Document the fixed-string endpoint as the preferred hybrid-searchable literal lane.
 - [ ] **4.3 `count_lines` doc set** → [`4.3-count-lines-doc-set.md`](./4.3-count-lines-doc-set.md)
   - Classification: SEQUENTIAL
@@ -46,14 +46,14 @@ todo_window_mode_override: "inherit"
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
-  - Blocked By: 4.1
+  - Blocked By: none
   - Summary: Document the count-lines endpoint after it is aligned to the shared state and preflight model.
 
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
-| D1 | 4.2 | 4.1 | SEQUENTIAL | UNRESOLVED | Fixed-string docs should reuse the shared search-family vocabulary established by the regex docs. | search endpoint docs |
-| D2 | 4.3 | 4.1 | SEQUENTIAL | UNRESOLVED | Count-lines docs should align their search-family wording after the regex conventions are established. | search/count docs |
+| D1 | 4.2 | 4.1 | SEQUENTIAL | RESOLVED | Fixed-string docs should reuse the shared search-family vocabulary established by the regex docs. | search endpoint docs |
+| D2 | 4.3 | 4.1 | SEQUENTIAL | RESOLVED | Count-lines docs should align their search-family wording after the regex conventions are established. | search/count docs |
 
 ## Execution Order
 1. 4.1

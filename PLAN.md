@@ -3,18 +3,18 @@ file_type: "master"
 file_id: "filesystem-mcp-enterprise-runtime-and-documentation-plan"
 plan_version: 1
 created: "2026-04-18T00:00:00Z"
- last_updated: "2026-04-26T00:00:00Z"
-   status: "in_progress"
- total_units: 11
-   completed_units: 1
- total_tasks_all_levels: 38
-   completed_tasks_all_levels: 13
+  last_updated: "2026-04-26T00:00:00Z"
+    status: "in_progress"
+  total_units: 11
+    completed_units: 3
+  total_tasks_all_levels: 38
+    completed_tasks_all_levels: 24
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-   resume_frontier_unit: "2"
-   resume_frontier_task: "2.2"
-   next_frontier_task: "2.2"
+    resume_frontier_unit: "4"
+    resume_frontier_task: "4.3"
+    next_frontier_task: "4.3"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -42,32 +42,32 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Total Units:** 11
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 13/38 tasks completed
+- **Progress:** 23/38 tasks completed
 - **Historical Backup Plan:** [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md)
 
 ## Execution Frontier
 [INTENT: REFERENCE]
 
-- **Resume Frontier Unit:** `2`
-- **Resume Frontier Task:** `2.2`
-- **Next Frontier Task:** `2.2`
+- **Resume Frontier Unit:** `4`
+- **Resume Frontier Task:** `4.1`
+- **Next Frontier Task:** `4.1`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
-- **Frontier Rule:** Unit 2 remains the active documentation frontier. Task `2.1` is complete, task `2.2` is now the next active endpoint-local discovery-doc task, and the root TOC tasks that depended on `2.1` are no longer blocked by that endpoint-local documentation prerequisite.
+- **Frontier Rule:** Units `1`, `2`, and `3` are fully complete. Unit `4` is now the active documentation frontier, and task `4.1` is the next operative endpoint-local documentation task.
 
 ## Units
 [INTENT: REFERENCE]
 
 - [x] **1. Runtime Architecture Refactors** → [`.plan/1-runtime-architecture-refactors/orchestration.md`](.plan/1-runtime-architecture-refactors/orchestration.md)
   - Classification: Mixed
-  - Status: done | Tasks: 12 | Completed: 12
+  - Status: done | Tasks: 17 | Completed: 17
   - Summary: Introduce the shared inspection content-state model, hybrid-aware routing, internal read-core SSOT, traversal/preflight governance refactors, recalibrated admission thresholds, the same-endpoint continuation baseline, the caller-visible continuation-delivery and consumer-alignment hardening layers, the end-to-end `list_directory_entries` response-surfacing closure, and the final clean resume-session dual-delivery architecture with family-specific guidance and cursor hardening.
-- [ ] **2. Inspection Discovery Docs** → [`.plan/2-inspection-discovery-docs/orchestration.md`](.plan/2-inspection-discovery-docs/orchestration.md)
+- [x] **2. Inspection Discovery Docs** → [`.plan/2-inspection-discovery-docs/orchestration.md`](.plan/2-inspection-discovery-docs/orchestration.md)
   - Classification: ISOLATED
-  - Status: in_progress | Tasks: 3 | Completed: 1
+  - Status: done | Tasks: 3 | Completed: 3
   - Summary: Create endpoint-local documentation sets for discovery-oriented inspection tools whose conventions depend on the final traversal model.
-- [ ] **3. Inspection Metadata and Integrity Docs** → [`.plan/3-inspection-metadata-and-integrity-docs/orchestration.md`](.plan/3-inspection-metadata-and-integrity-docs/orchestration.md)
+- [x] **3. Inspection Metadata and Integrity Docs** → [`.plan/3-inspection-metadata-and-integrity-docs/orchestration.md`](.plan/3-inspection-metadata-and-integrity-docs/orchestration.md)
   - Classification: Mixed
-  - Status: pending | Tasks: 3 | Completed: 0
+  - Status: done | Tasks: 3 | Completed: 3
   - Summary: Create endpoint-local documentation sets for metadata, checksum, and integrity-oriented inspection tools.
 - [ ] **4. Inspection Search and Count Docs** → [`.plan/4-inspection-search-and-count-docs/orchestration.md`](.plan/4-inspection-search-and-count-docs/orchestration.md)
   - Classification: Mixed
@@ -94,7 +94,7 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
   - Status: pending | Tasks: 1 | Completed: 0
   - Summary: Create the endpoint-local documentation set for the application-owned `list_allowed_directories` tool.
 - [ ] **10. Root Documentation SSOT** → [`.plan/10-root-documentation-ssot/orchestration.md`](.plan/10-root-documentation-ssot/orchestration.md)
-  - Classification: WAITING
+  - Classification: Mixed
   - Status: pending | Tasks: 3 | Completed: 0
   - Summary: Introduce root-level TOC and SSOT documentation surfaces that point to endpoint-local documentation instead of duplicating it.
 - [ ] **11. Cross-Cutting Validation and Backup Policy** → [`.plan/11-cross-cutting-validation-and-backup-policy/orchestration.md`](.plan/11-cross-cutting-validation-and-backup-policy/orchestration.md)
@@ -110,9 +110,9 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 | D1 | 2.1-2.3 | 1.12 | WAITING | RESOLVED | Discovery-endpoint documentation must now re-anchor to the final resume-session dual-delivery and endpoint-guidance architecture from task `1.12`, including `list_directory_entries`, `find_files_by_glob`, and `find_paths_by_name` scope-reduction guidance plus dual preview-family resume intents. | `src/domain/shared/resume/**`, `src/infrastructure/persistence/**`, `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
 | D2 | 4.1-4.3 | 1.12 | WAITING | RESOLVED | Search/count documentation must now re-anchor to the final resume-session and endpoint-guidance architecture from task `1.12`, including dual preview-family delivery for regex/fixed-string and the completion-backed-only contract for `count_lines`. | `src/domain/shared/resume/**`, `src/infrastructure/persistence/**`, `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/domain/inspection/count-lines/**`, `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts` |
 | D3 | 5.1-5.2 | 1.4 | WAITING | RESOLVED | Read-endpoint documentation now re-anchors the finalized public split and internal shared read-core refactor from completed unit 1. | `src/domain/inspection/read-file-content/**`, `src/domain/inspection/read-files-with-line-numbers/**` |
-| D4 | 10.1 | 2.1 | WAITING | UNRESOLVED | Root conventions cannot become the SSOT TOC until endpoint-local conventions exist. | `CONVENTIONS.md` |
-| D5 | 10.2 | 2.1 | WAITING | UNRESOLVED | Root description cannot become the SSOT TOC until endpoint-local descriptions exist. | `DESCRIPTION.md` |
-| D6 | 10.3 | 2.1 | WAITING | UNRESOLVED | Root README cannot become the DX TOC until endpoint-local READMEs exist. | `README.md` |
+| D4 | 10.1 | 2.1 | WAITING | RESOLVED | Root conventions cannot become the SSOT TOC until endpoint-local conventions exist. | `CONVENTIONS.md` |
+| D5 | 10.2 | 2.1 | WAITING | RESOLVED | Root description cannot become the SSOT TOC until endpoint-local descriptions exist. | `DESCRIPTION.md` |
+| D6 | 10.3 | 2.1 | WAITING | RESOLVED | Root README cannot become the DX TOC until endpoint-local READMEs exist. | `README.md` |
 | D7 | 11.1 | 1.12 | WAITING | RESOLVED | Public tool descriptions and server instructions that cover resume behavior must now align to the final clean resume-session architecture from task `1.12`, including scope-reduction guidance, dual preview-family resume intents, and completion-backed `count_lines` semantics. | `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/server-instructions.ts`, `src/application/server/filesystem-server.ts`, `src/domain/shared/resume/**`, `src/domain/inspection/list-directory-entries/**`, `src/domain/inspection/find-files-by-glob/**`, `src/domain/inspection/find-paths-by-name/**`, `src/domain/inspection/search-file-contents-by-regex/**`, `src/domain/inspection/search-file-contents-by-fixed-string/**`, `src/domain/inspection/count-lines/**` |
 | D8 | 11.2 | 10.3 | WAITING | UNRESOLVED | The backup-reference policy and root-to-endpoint link audit require the completed root TOC surfaces. | `README.md`, `DESCRIPTION.md`, `CONVENTIONS.md` |
 | D9 | 11.3 | 11.2 | WAITING | UNRESOLVED | Final architecture validation runs only after code-contract alignment and link-policy validation complete. | `PLAN.md`, `.plan/**`, root docs, endpoint docs |
