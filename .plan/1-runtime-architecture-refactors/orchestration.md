@@ -152,7 +152,7 @@ todo_window_mode_override: "inherit"
   - Summary: Create extractErrorMessage utility in @domain/shared/utils/error-message; replace all inline error instanceof Error ? error.message : String(error) patterns across 12 consumer files; regex handler also picks up SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME from 1.15.
 - [~] **1.17 Mutation domain shared helpers — formatBatchMutationSummary, assertPathMutationBatchBudget, assertContentMutationInputBudget** → [`1.17-mutation-domain-shared-helpers.md`](./1.17-mutation-domain-shared-helpers.md)
   - Classification: SEQUENTIAL
-  - Status: IN_PROGRESS
+  - Status: DONE
   - Complexity: MEDIUM
   - Execution Surface Band: YELLOW
   - Files Modified: src/domain/mutation/shared/mutation-guardrails.ts, src/infrastructure/formatting/batch-result-formatter.ts, src/domain/mutation/delete-paths/handler.ts, src/domain/mutation/copy-paths/handler.ts, src/domain/mutation/move-paths/handler.ts, src/domain/mutation/create-directories/handler.ts, src/domain/mutation/append-files/handler.ts, src/domain/mutation/create-files/handler.ts

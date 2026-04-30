@@ -8,13 +8,13 @@ created: "2026-04-18T00:00:00Z"
  total_units: 11
    completed_units: 1
  total_tasks_all_levels: 38
-   completed_tasks_all_levels: 12
+   completed_tasks_all_levels: 13
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
    resume_frontier_unit: "2"
-   resume_frontier_task: "2.1"
-   next_frontier_task: "2.1"
+   resume_frontier_task: "2.2"
+   next_frontier_task: "2.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -42,17 +42,17 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Total Units:** 11
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 11/38 tasks completed
+- **Progress:** 13/38 tasks completed
 - **Historical Backup Plan:** [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md)
 
 ## Execution Frontier
 [INTENT: REFERENCE]
 
-- **Resume Frontier Unit:** `1`
-- **Resume Frontier Task:** `1.12`
-- **Next Frontier Task:** `1.12`
+- **Resume Frontier Unit:** `2`
+- **Resume Frontier Task:** `2.2`
+- **Next Frontier Task:** `2.2`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
-- **Frontier Rule:** Unit 1 completion is restored only after task `1.12` lands the clean resume-session remodel, dual preview-family delivery intents, completion-backed `count_lines` semantics, family-wide frontier hardening, and endpoint-specific guidance architecture. Downstream discovery/search/count docs and caller-visible contract alignment now re-anchor to task `1.12`, not to task `1.11` alone.
+- **Frontier Rule:** Unit 2 remains the active documentation frontier. Task `2.1` is complete, task `2.2` is now the next active endpoint-local discovery-doc task, and the root TOC tasks that depended on `2.1` are no longer blocked by that endpoint-local documentation prerequisite.
 
 ## Units
 [INTENT: REFERENCE]
@@ -63,7 +63,7 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
   - Summary: Introduce the shared inspection content-state model, hybrid-aware routing, internal read-core SSOT, traversal/preflight governance refactors, recalibrated admission thresholds, the same-endpoint continuation baseline, the caller-visible continuation-delivery and consumer-alignment hardening layers, the end-to-end `list_directory_entries` response-surfacing closure, and the final clean resume-session dual-delivery architecture with family-specific guidance and cursor hardening.
 - [ ] **2. Inspection Discovery Docs** → [`.plan/2-inspection-discovery-docs/orchestration.md`](.plan/2-inspection-discovery-docs/orchestration.md)
   - Classification: ISOLATED
-  - Status: pending | Tasks: 3 | Completed: 0
+  - Status: in_progress | Tasks: 3 | Completed: 1
   - Summary: Create endpoint-local documentation sets for discovery-oriented inspection tools whose conventions depend on the final traversal model.
 - [ ] **3. Inspection Metadata and Integrity Docs** → [`.plan/3-inspection-metadata-and-integrity-docs/orchestration.md`](.plan/3-inspection-metadata-and-integrity-docs/orchestration.md)
   - Classification: Mixed

@@ -25,28 +25,28 @@ todo_window_mode_override: "inherit"
 
 ## Tasks
 - [ ] **10.1 Root `CONVENTIONS.md` SSOT** → [`10.1-root-conventions-ssot.md`](./10.1-root-conventions-ssot.md)
-  - Classification: WAITING
+  - Classification: ISOLATED
   - Status: pending
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: `CONVENTIONS.md`
-  - Blocked By: 2.1
+  - Blocked By: none
   - Summary: Create the root conventions surface and make it the TOC/SSOT for project-wide policies and endpoint-local conventions links.
 - [ ] **10.2 Root `DESCRIPTION.md` TOC** → [`10.2-root-description-toc-and-architecture-scope.md`](./10.2-root-description-toc-and-architecture-scope.md)
-  - Classification: WAITING
+  - Classification: SEQUENTIAL
   - Status: pending
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: `DESCRIPTION.md`
-  - Blocked By: 2.1
+  - Blocked By: 10.1
   - Summary: Refactor the root description surface into a TOC-based architecture index that re-references endpoint-local descriptions.
 - [ ] **10.3 Root `README.md` DX TOC** → [`10.3-root-readme-dx-toc.md`](./10.3-root-readme-dx-toc.md)
-  - Classification: WAITING
+  - Classification: SEQUENTIAL
   - Status: pending
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: `README.md`
-  - Blocked By: 2.1
+  - Blocked By: 10.2
   - Summary: Refactor the root README into a DX-first summary that links to endpoint-local READMEs instead of duplicating endpoint detail.
 
 ## Internal Dependencies (This Level)

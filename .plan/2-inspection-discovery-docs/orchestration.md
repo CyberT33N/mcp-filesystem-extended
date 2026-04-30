@@ -4,13 +4,13 @@ file_id: "2"
 unit_name: "Inspection Discovery Docs"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "in_progress"
 total_tasks: 3
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "2.1"
-next_frontier_task: "2.2"
+resume_frontier_task: "2.2"
+next_frontier_task: "2.3"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,13 +20,13 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/2-inspection-discovery-docs/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/3 tasks
+- **Unit Status:** in_progress
+- **Progress:** 1/3 tasks
 
 ## Tasks
-- [ ] **2.1 `list_directory_entries` doc set** → [`2.1-list-directory-entries-doc-set.md`](./2.1-list-directory-entries-doc-set.md)
+- [x] **2.1 `list_directory_entries` doc set** → [`2.1-list-directory-entries-doc-set.md`](./2.1-list-directory-entries-doc-set.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: MEDIUM
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
