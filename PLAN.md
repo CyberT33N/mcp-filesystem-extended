@@ -6,15 +6,15 @@ created: "2026-04-18T00:00:00Z"
   last_updated: "2026-04-26T00:00:00Z"
     status: "in_progress"
   total_units: 11
-    completed_units: 6
+    completed_units: 7
   total_tasks_all_levels: 38
-    completed_tasks_all_levels: 30
+    completed_tasks_all_levels: 33
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-    resume_frontier_unit: "7"
-    resume_frontier_task: "7.2"
-    next_frontier_task: "7.3"
+    resume_frontier_unit: "8"
+    resume_frontier_task: "8.1"
+    next_frontier_task: "8.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -159,4 +159,3 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - When a preview-family response is no longer resumable, the caller-visible response must fall back to the bounded final result surface rather than remaining in dead-end preview guidance mode.
 - Root documentation must become TOC-style and SSOT-aligned; endpoint-local `CONVENTIONS.md`, `DESCRIPTION.md`, and `README.md` files own endpoint-specific detail, including the family-specific guidance introduced by task `1.12`.
 - Every public endpoint must receive its own documentation triplet; no endpoint-local conventions may be documented only at root level.
-

@@ -4,9 +4,9 @@ file_id: "7"
 unit_name: "Content Mutation Docs"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "in_progress"
+unit_status: "done"
 total_tasks: 3
-completed_tasks: 2
+completed_tasks: 3
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "7.3"
