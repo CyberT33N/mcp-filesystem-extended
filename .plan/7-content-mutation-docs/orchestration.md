@@ -20,8 +20,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/7-content-mutation-docs/`
 - **Hierarchy Level:** 1
-- **Unit Status:** in_progress
-- **Progress:** 2/3 tasks
+- **Unit Status:** done
+- **Progress:** 3/3 tasks
 
 ## Tasks
 - [x] **7.1 `create_files` doc set** → [`7.1-create-files-doc-set.md`](./7.1-create-files-doc-set.md)
@@ -40,9 +40,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: endpoint-local doc triplet
   - Blocked By: none
   - Summary: Document the additive append-only endpoint and its distinction from targeted replacement.
-- [ ] **7.3 `replace_file_line_ranges` doc set** → [`7.3-replace-file-line-ranges-doc-set.md`](./7.3-replace-file-line-ranges-doc-set.md)
+- [x] **7.3 `replace_file_line_ranges` doc set** → [`7.3-replace-file-line-ranges-doc-set.md`](./7.3-replace-file-line-ranges-doc-set.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: HIGH
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
@@ -62,4 +62,3 @@ todo_window_mode_override: "inherit"
 
 ## Notes for Orchestrating Agent
 - Keep additive and targeted mutation semantics explicit and non-overlapping.
-
