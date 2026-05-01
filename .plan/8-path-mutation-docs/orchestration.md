@@ -4,13 +4,13 @@ file_id: "8"
 unit_name: "Path Mutation Docs"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "in_progress"
 total_tasks: 4
-completed_tasks: 0
+completed_tasks: 2
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "8.1"
-next_frontier_task: "8.2"
+resume_frontier_task: "8.3"
+next_frontier_task: "8.4"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,21 +20,21 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/8-path-mutation-docs/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/4 tasks
+- **Unit Status:** in_progress
+- **Progress:** 2/4 tasks
 
 ## Tasks
-- [ ] **8.1 `create_directories` doc set** → [`8.1-create-directories-doc-set.md`](./8.1-create-directories-doc-set.md)
+- [x] **8.1 `create_directories` doc set** → [`8.1-create-directories-doc-set.md`](./8.1-create-directories-doc-set.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: MEDIUM
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
   - Blocked By: none
   - Summary: Document the idempotent directory-creation surface.
-- [ ] **8.2 `copy_paths` doc set** → [`8.2-copy-paths-doc-set.md`](./8.2-copy-paths-doc-set.md)
+- [x] **8.2 `copy_paths` doc set** → [`8.2-copy-paths-doc-set.md`](./8.2-copy-paths-doc-set.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: MEDIUM
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
@@ -60,7 +60,7 @@ todo_window_mode_override: "inherit"
 ## Internal Dependencies (This Level)
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
-| D1 | 8.4 | 8.2 | SEQUENTIAL | UNRESOLVED | Delete docs should contrast themselves with copy semantics. | path mutation docs |
+| D1 | 8.4 | 8.2 | SEQUENTIAL | RESOLVED | Delete docs should contrast themselves with copy semantics. | path mutation docs |
 | D2 | 8.4 | 8.3 | SEQUENTIAL | UNRESOLVED | Delete docs should contrast themselves with move semantics. | path mutation docs |
 
 ## Execution Order
@@ -71,4 +71,3 @@ todo_window_mode_override: "inherit"
 
 ## Notes for Orchestrating Agent
 - Keep path-oriented mutation semantics distinct from content mutation semantics.
-
