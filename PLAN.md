@@ -42,17 +42,17 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Total Units:** 11
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 30/38 tasks completed
+- **Progress:** 35/38 tasks completed
 - **Historical Backup Plan:** [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md)
 
 ## Execution Frontier
 [INTENT: REFERENCE]
 
-- **Resume Frontier Unit:** `7`
-- **Resume Frontier Task:** `7.2`
-- **Next Frontier Task:** `7.3`
+- **Resume Frontier Unit:** `8`
+- **Resume Frontier Task:** `8.3`
+- **Next Frontier Task:** `8.4`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
-- **Frontier Rule:** Units `1`, `2`, `3`, `4`, `5`, and `6` are fully complete. Unit `7` is now the active documentation frontier, and task `7.2` is the next operative endpoint-local documentation task.
+- **Frontier Rule:** Units `1` through `7` are fully complete. Unit `8` is the active documentation frontier, task `8.3` is the next operative endpoint-local documentation task, and task `8.4` remains the direct successor inside the same unit.
 
 ## Units
 [INTENT: REFERENCE]
@@ -81,13 +81,13 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
   - Classification: Mixed
   - Status: done | Tasks: 2 | Completed: 2
   - Summary: Create endpoint-local documentation sets for the comparison-domain tool surfaces.
-- [ ] **7. Content Mutation Docs** → [`.plan/7-content-mutation-docs/orchestration.md`](.plan/7-content-mutation-docs/orchestration.md)
+- [x] **7. Content Mutation Docs** → [`.plan/7-content-mutation-docs/orchestration.md`](.plan/7-content-mutation-docs/orchestration.md)
   - Classification: Mixed
-  - Status: in_progress | Tasks: 3 | Completed: 1
+  - Status: done | Tasks: 3 | Completed: 3
   - Summary: Create endpoint-local documentation sets for content-bearing mutation endpoints.
 - [ ] **8. Path Mutation Docs** → [`.plan/8-path-mutation-docs/orchestration.md`](.plan/8-path-mutation-docs/orchestration.md)
   - Classification: Mixed
-  - Status: pending | Tasks: 4 | Completed: 0
+  - Status: in_progress | Tasks: 4 | Completed: 2
   - Summary: Create endpoint-local documentation sets for path-oriented mutation endpoints.
 - [ ] **9. Server-Scope Docs** → [`.plan/9-server-scope-docs/orchestration.md`](.plan/9-server-scope-docs/orchestration.md)
   - Classification: Mixed
