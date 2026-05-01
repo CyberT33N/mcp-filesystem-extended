@@ -6,11 +6,11 @@ parent_orchestration: "PLAN.md"
 hierarchy_level: 1
 unit_status: "in_progress"
 total_tasks: 4
-completed_tasks: 2
+completed_tasks: 3
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "8.3"
-next_frontier_task: "8.4"
+resume_frontier_task: "8.4"
+next_frontier_task: "9.1"
 todo_window_mode_override: "inherit"
 ---
 
@@ -42,14 +42,14 @@ todo_window_mode_override: "inherit"
   - Summary: Document the copy surface and its non-destructive destination semantics.
 - [ ] **8.3 `move_paths` doc set** → [`8.3-move-paths-doc-set.md`](./8.3-move-paths-doc-set.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: MEDIUM
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet
   - Blocked By: none
   - Summary: Document the move/rename surface and its overwrite semantics.
 - [ ] **8.4 `delete_paths` doc set** → [`8.4-delete-paths-doc-set.md`](./8.4-delete-paths-doc-set.md)
-  - Classification: ISOLATED
+  - Classification: SEQUENTIAL
   - Status: pending
   - Complexity: MEDIUM
   - Execution Surface Band: GREEN
@@ -61,7 +61,7 @@ todo_window_mode_override: "inherit"
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
 |----|------------|-------------|------|--------|-------------|--------------|
 | D1 | 8.4 | 8.2 | SEQUENTIAL | RESOLVED | Delete docs should contrast themselves with copy semantics. | path mutation docs |
-| D2 | 8.4 | 8.3 | SEQUENTIAL | UNRESOLVED | Delete docs should contrast themselves with move semantics. | path mutation docs |
+| D2 | 8.4 | 8.3 | SEQUENTIAL | RESOLVED | Delete docs should contrast themselves with move semantics. | path mutation docs |
 
 ## Execution Order
 1. 8.1
