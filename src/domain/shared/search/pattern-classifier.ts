@@ -43,6 +43,8 @@ export interface PatternClassification {
 }
 
 const PCRE2_HEAVY_PATTERN_MATCHERS = [
+  /\(\?=/,
+  /\(\?!/,
   /\(\?<=/,
   /\(\?<!/,
   /\(\?>/,

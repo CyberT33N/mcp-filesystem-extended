@@ -2,7 +2,10 @@ import { normalizeError } from "@shared/errors";
 
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
-import { compileGuardrailedSearchRegex } from "@domain/shared/guardrails/regex-search-safety";
+import {
+  createGuardrailedSearchRegexExecutionPlan,
+  isRegexSearchPatternContractError,
+} from "@domain/shared/guardrails/regex-search-safety";
 import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
 import type { TraversalWorkloadAdmissionOutcome } from "@domain/shared/guardrails/traversal-workload-admission";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
@@ -29,7 +32,6 @@ import {
 import {
   assertFormattedRegexResponseBudget,
   formatSearchRegexContinuationAwareTextOutput,
-  formatSearchRegexPathOutput,
   type SearchRegexPathResult,
   type SearchRegexResult,
 } from "./search-regex-result";
@@ -140,12 +142,18 @@ function createSharedRegexExecutionContext(
 ): {
   aggregateBudgetState: ReturnType<typeof createRegexSearchAggregateBudgetState>;
   executionPolicy: ReturnType<typeof resolveSearchExecutionPolicy>;
+  regexExecutionPlan: ReturnType<typeof createGuardrailedSearchRegexExecutionPlan>;
 } {
-  compileGuardrailedSearchRegex(SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME, pattern, caseSensitive);
+  const regexExecutionPlan = createGuardrailedSearchRegexExecutionPlan(
+    SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+    pattern,
+    caseSensitive,
+  );
 
   return {
     aggregateBudgetState: createRegexSearchAggregateBudgetState(),
     executionPolicy: resolveSearchExecutionPolicy(detectIoCapabilityProfile()),
+    regexExecutionPlan,
   };
 }
 
@@ -455,7 +463,7 @@ export async function getSearchRegexResult(
     executionContext.requestPayload.maxResults,
     REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
   );
-  const { aggregateBudgetState, executionPolicy } = createSharedRegexExecutionContext(
+  const { aggregateBudgetState, executionPolicy, regexExecutionPlan } = createSharedRegexExecutionContext(
     executionContext.requestPayload.pattern,
     executionContext.requestPayload.caseSensitive,
   );
@@ -500,10 +508,15 @@ export async function getSearchRegexResult(
         batchRootCount: activeSearchPaths.length,
         continuationState: executionContext.continuationState?.rootTraversalStates[searchPath] ?? null,
         requestedResumeMode: executionContext.requestedResumeMode,
+        regexExecutionPlan,
       });
 
       roots.push(result);
     } catch (error) {
+      if (isRegexSearchPatternContractError(error)) {
+        throw error;
+      }
+
       const errorMessage = normalizeError(error).message;
 
       roots.push({

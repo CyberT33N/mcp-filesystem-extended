@@ -93,6 +93,13 @@ That means:
 - endpoint-local docs must not present legacy in-process JavaScript full-file search as the authoritative search model,
 - and the historical backup plan remains lineage only, never the current authority.
 
+### Lane-aware request-validation rule
+
+- Regex validity is request-wide and lane-aware.
+- A caller pattern must be accepted by both the local JavaScript regex guardrail compiler and the selected native `ugrep` lane.
+- Backend-lane feature requirements such as lookahead or lookbehind must be classified before root execution begins.
+- If the pattern cannot be routed to a supported lane, the endpoint must return a request-wide guardrail failure instead of degrading the issue into a root-local runtime error.
+
 ### Preview-capable delivery rule
 
 This endpoint is a preview-capable search family.
@@ -153,6 +160,7 @@ The batch surface additionally owns:
 - `error` is root-local.
 - Multi-root requests may therefore contain successful roots and failed roots in the same structured response.
 - The endpoint-local docs must not imply that one root failure invalidates sibling roots automatically.
+- Request-wide regex contract failures are not root-local and must fail the whole request before sibling-root execution continues.
 
 ---
 

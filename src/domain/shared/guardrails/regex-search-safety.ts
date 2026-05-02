@@ -14,6 +14,10 @@ import {
   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
 } from "./tool-guardrail-limits";
 import {
+  classifyPattern,
+  type PatternClassification,
+} from "@domain/shared/search/pattern-classifier";
+import {
   createRegexRuntimeRejectedFailure,
   createRuntimeBudgetExceededFailure,
   formatToolGuardrailFailureAsText,
@@ -22,6 +26,44 @@ import {
 const CASE_SENSITIVE_REGEX_FLAGS = "mg";
 const CASE_INSENSITIVE_REGEX_FLAGS = "img";
 const ZERO_LENGTH_SENTINEL_INPUTS = ["", "a", " ", "\n"] as const;
+
+/**
+ * Canonical request-wide pattern-contract error for regex-search surfaces.
+ *
+ * @remarks
+ * Callers must treat this failure as a whole-request contract rejection instead of degrading it
+ * into a root-local operational error surface.
+ */
+export class RegexSearchPatternContractError extends Error {
+  /**
+   * Creates one request-wide regex pattern-contract failure.
+   *
+   * @param message - Canonical caller-visible guardrail message.
+   */
+  public constructor(message: string) {
+    super(message);
+    this.name = "RegexSearchPatternContractError";
+  }
+}
+
+/**
+ * Canonical request-wide execution plan for guarded regex search.
+ */
+export interface GuardrailedSearchRegexExecutionPlan {
+  /**
+   * Shared pattern-classification output consumed by native-lane routing.
+   */
+  patternClassification: PatternClassification;
+
+  /**
+   * JavaScript regex instance used for zero-length protection and local match extraction.
+   */
+  regex: RegExp;
+}
+
+function resolveSearchRegexFlags(caseSensitive: boolean): string {
+  return caseSensitive ? CASE_SENSITIVE_REGEX_FLAGS : CASE_INSENSITIVE_REGEX_FLAGS;
+}
 
 function formatRegexPatternSummary(pattern: string, flags: string): string {
   const preview =
@@ -32,12 +74,12 @@ function formatRegexPatternSummary(pattern: string, flags: string): string {
   return `/${preview}/${flags}`;
 }
 
-function throwRegexRuntimeRejected(
+function createRegexSearchPatternContractError(
   toolName: string,
   patternSummary: string,
   reason: string,
-): never {
-  throw new Error(
+): RegexSearchPatternContractError {
+  return new RegexSearchPatternContractError(
     formatToolGuardrailFailureAsText(
       createRegexRuntimeRejectedFailure({
         toolName,
@@ -47,6 +89,14 @@ function throwRegexRuntimeRejected(
       }),
     ),
   );
+}
+
+function throwRegexRuntimeRejected(
+  toolName: string,
+  patternSummary: string,
+  reason: string,
+): never {
+  throw createRegexSearchPatternContractError(toolName, patternSummary, reason);
 }
 
 function assertRegexDoesNotProduceZeroLengthMatches(
@@ -74,6 +124,54 @@ function assertRegexDoesNotProduceZeroLengthMatches(
 }
 
 /**
+ * Builds the canonical request-wide execution plan for one caller-supplied regex.
+ *
+ * @param toolName - Exact MCP tool name requesting regex execution.
+ * @param pattern - Raw regex pattern supplied by the caller.
+ * @param caseSensitive - Whether the resulting regex should omit the case-insensitive flag.
+ * @returns Request-wide execution plan shared by lane routing and local match extraction.
+ */
+export function createGuardrailedSearchRegexExecutionPlan(
+  toolName: string,
+  pattern: string,
+  caseSensitive: boolean,
+): GuardrailedSearchRegexExecutionPlan {
+  if (pattern.length === 0) {
+    throwRegexRuntimeRejected(
+      toolName,
+      "(empty pattern)",
+      "Empty regex patterns are not allowed for regex content search.",
+    );
+  }
+
+  const flags = resolveSearchRegexFlags(caseSensitive);
+  const patternSummary = formatRegexPatternSummary(pattern, flags);
+  const patternClassification = classifyPattern(pattern);
+
+  let regex: RegExp;
+
+  try {
+    regex = new RegExp(pattern, flags);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Invalid regular expression syntax.";
+
+    throwRegexRuntimeRejected(
+      toolName,
+      patternSummary,
+      `Invalid regular expression syntax: ${reason}`,
+    );
+  }
+
+  assertRegexDoesNotProduceZeroLengthMatches(toolName, regex, patternSummary);
+  resetRegexLastIndex(regex);
+
+  return {
+    patternClassification,
+    regex,
+  };
+}
+
+/**
  * Compiles a caller-supplied regex into the shared low-false-positive runtime safety model.
  *
  * @param toolName - Exact MCP tool name requesting regex execution.
@@ -86,31 +184,49 @@ export function compileGuardrailedSearchRegex(
   pattern: string,
   caseSensitive: boolean,
 ): RegExp {
-  if (pattern.length === 0) {
-    throwRegexRuntimeRejected(
-      toolName,
-      "(empty pattern)",
-      "Empty regex patterns are not allowed for regex content search.",
-    );
-  }
+  return createGuardrailedSearchRegexExecutionPlan(
+    toolName,
+    pattern,
+    caseSensitive,
+  ).regex;
+}
 
-  const flags = caseSensitive ? CASE_SENSITIVE_REGEX_FLAGS : CASE_INSENSITIVE_REGEX_FLAGS;
-  const patternSummary = formatRegexPatternSummary(pattern, flags);
+/**
+ * Creates a canonical request-wide pattern-contract error when the native backend rejects the
+ * caller pattern for the selected execution lane.
+ *
+ * @param toolName - Exact MCP tool name requesting regex execution.
+ * @param pattern - Raw regex pattern supplied by the caller.
+ * @param caseSensitive - Whether the resulting regex should omit the case-insensitive flag.
+ * @param reason - Native-backend rejection reason.
+ * @returns Request-wide regex pattern-contract error.
+ */
+export function createRegexBackendDialectRejectedError(
+  toolName: string,
+  pattern: string,
+  caseSensitive: boolean,
+  reason: string,
+): RegexSearchPatternContractError {
+  const flags = resolveSearchRegexFlags(caseSensitive);
 
-  let regex: RegExp;
+  return createRegexSearchPatternContractError(
+    toolName,
+    formatRegexPatternSummary(pattern, flags),
+    `Native regex backend rejected the pattern for the selected execution lane: ${reason}`,
+  );
+}
 
-  try {
-    regex = new RegExp(pattern, flags);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : "Invalid regular expression syntax.";
-
-    throwRegexRuntimeRejected(toolName, patternSummary, `Invalid regular expression syntax: ${reason}`);
-  }
-
-  assertRegexDoesNotProduceZeroLengthMatches(toolName, regex, patternSummary);
-  resetRegexLastIndex(regex);
-
-  return regex;
+/**
+ * Determines whether an unknown error is the canonical request-wide regex pattern-contract
+ * rejection.
+ *
+ * @param error - Unknown failure surface.
+ * @returns `true` when the error is a request-wide regex pattern-contract failure.
+ */
+export function isRegexSearchPatternContractError(
+  error: unknown,
+): error is RegexSearchPatternContractError {
+  return error instanceof RegexSearchPatternContractError;
 }
 
 /**

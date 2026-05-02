@@ -110,6 +110,14 @@ The endpoint keeps structural regex safety active before runtime execution proce
 
 Unsafe patterns are rejected as explicit policy outcomes rather than being allowed to degrade into unstable runtime behavior.
 
+That request-level safety is lane-aware:
+
+- the pattern must compile under the local JavaScript regex guardrail used for zero-length protection and local match extraction
+- the pattern must also be classifiable onto the selected native `ugrep` lane
+- backend-lane feature requirements such as lookahead or lookbehind must be resolved before any root execution begins
+
+If a pattern cannot satisfy that combined contract, the endpoint raises a request-wide guardrail failure instead of surfacing a root-local runtime error.
+
 ---
 
 ## Response Model
@@ -214,12 +222,18 @@ One of the most important local behaviors of this endpoint is root-local failure
 - a different root in the same request may still return matches
 - the whole request is not forced into one global failure merely because one root failed operationally
 
+### What it does not mean
+
+- request-wide regex contract failures are not downgraded into root-local `error` payloads
+- backend-lane pattern mismatches must fail before the per-root traversal loop continues
+
 ### Why it matters
 
 Autonomous agents need to distinguish:
 
 - no matches
 - partial root failure
+- request-wide regex contract rejection
 - broad workload continuation
 - hard refusal
 

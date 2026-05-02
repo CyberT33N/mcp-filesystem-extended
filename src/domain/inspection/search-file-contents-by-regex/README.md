@@ -4,6 +4,11 @@
 
 `search_file_contents_by_regex` searches text-compatible file content with a regular expression.
 
+The accepted pattern surface is the intersection of:
+
+- the local JavaScript regex guardrail used for zero-length protection and local match extraction
+- the selected native `ugrep` execution lane
+
 Use it when you need match locations, excerpts, and bounded continuation behavior for known file scopes or guarded directory-root search workloads.
 
 ---
@@ -39,8 +44,10 @@ Do **not** use it as a replacement for:
 
 - explicit large text-compatible files may still proceed through the shared regex lane
 - directory-root workloads use the shared traversal admission planner first
+- request-wide regex validation is lane-aware and resolves backend requirements such as lookahead or lookbehind before root execution begins
 - regex remains text-first and does not imply unrestricted hybrid support
 - per-root `error` surfaces preserve local failures without collapsing sibling roots
+- request-wide regex contract failures do not degrade into per-root `error` payloads
 - resumable responses keep full primary data in `content.text` and append continuation guidance afterward
 - `complete-result` uses the global fuse as the final ceiling instead of the regex-family cap
 

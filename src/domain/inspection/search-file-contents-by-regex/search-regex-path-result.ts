@@ -19,9 +19,11 @@ import {
 } from "@domain/shared/resume/inspection-resume-frontier";
 import {
   assertRegexRuntimeBudget,
-  compileGuardrailedSearchRegex,
+  createRegexBackendDialectRejectedError,
+  createGuardrailedSearchRegexExecutionPlan,
   normalizeRegexMatchExcerpt,
   resetRegexLastIndex,
+  type GuardrailedSearchRegexExecutionPlan,
 } from "@domain/shared/guardrails/regex-search-safety";
 import {
   assertTraversalRuntimeBudget,
@@ -39,7 +41,7 @@ import {
   shouldStopTraversalPreviewLane,
 } from "@domain/shared/guardrails/traversal-preview-lane";
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
-import { classifyPattern } from "@domain/shared/search/pattern-classifier";
+import type { PatternClassification } from "@domain/shared/search/pattern-classifier";
 import { resolveSearchExecutionPolicy, type SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import {
   INSPECTION_CONTENT_OPERATION_LITERALS,
@@ -268,6 +270,19 @@ function parseUgrepMatchLine(outputLine: string): {
   };
 }
 
+function isNativeRegexBackendPatternSyntaxFailure(runtimeError: string): boolean {
+  const normalizedRuntimeError = runtimeError.toLowerCase();
+
+  return normalizedRuntimeError.includes("invalid syntax")
+    || normalizedRuntimeError.includes("invalid regular expression")
+    || normalizedRuntimeError.includes("look-ahead")
+    || normalizedRuntimeError.includes("look-behind")
+    || (
+      normalizedRuntimeError.includes("regex")
+      && normalizedRuntimeError.includes("syntax")
+    );
+}
+
 interface GetSearchRegexPathResultOptions {
   toolName: string;
   searchPath: string;
@@ -284,6 +299,7 @@ interface GetSearchRegexPathResultOptions {
   batchRootCount?: number;
   continuationState?: SearchRegexRootContinuationState | null;
   requestedResumeMode?: import("@domain/shared/resume/inspection-resume-contract").InspectionResumeMode | null;
+  regexExecutionPlan?: GuardrailedSearchRegexExecutionPlan;
 }
 
 async function getValidatedPreflightEntry(
@@ -311,6 +327,7 @@ async function collectRegexMatchesFromFileEntry(
   candidateRelativePath: string,
   filePatterns: string[],
   regex: RegExp,
+  patternClassification: PatternClassification,
   pattern: string,
   caseSensitive: boolean,
   executionPolicy: SearchExecutionPolicy,
@@ -436,7 +453,7 @@ async function collectRegexMatchesFromFileEntry(
   }
 
   const command = buildUgrepCommand({
-    patternClassification: classifyPattern(pattern),
+    patternClassification,
     executionPolicy,
     candidatePath: candidateEntry.validPath,
     caseSensitive,
@@ -455,6 +472,15 @@ async function collectRegexMatchesFromFileEntry(
 
   if (executionResult.exitCode !== null && executionResult.exitCode > 1) {
     const runtimeError = executionResult.stderr.trim();
+
+    if (runtimeError !== "" && isNativeRegexBackendPatternSyntaxFailure(runtimeError)) {
+      throw createRegexBackendDialectRejectedError(
+        toolName,
+        pattern,
+        caseSensitive,
+        runtimeError,
+      );
+    }
 
     throw new Error(
       runtimeError === ""
@@ -583,7 +609,9 @@ export async function getSearchRegexPathResult(
     allowedDirectories,
   );
   const searchScopeEntry = traversalPreflightContext.rootEntry;
-  const regex = compileGuardrailedSearchRegex(toolName, pattern, caseSensitive);
+  const regexExecutionPlan = options.regexExecutionPlan
+    ?? createGuardrailedSearchRegexExecutionPlan(toolName, pattern, caseSensitive);
+  const regex = regexExecutionPlan.regex;
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(searchPath);
   const previewExecutionRuntimeBudgetLimits = {
@@ -682,6 +710,7 @@ export async function getSearchRegexPathResult(
       searchPath,
       explicitFileScopePatterns,
       regex,
+      regexExecutionPlan.patternClassification,
       pattern,
       caseSensitive,
       executionPolicy,
@@ -764,6 +793,7 @@ export async function getSearchRegexPathResult(
       activeFileRelativePath === "" ? searchPath : activeFileRelativePath,
       resumedFilePatterns,
       regex,
+      regexExecutionPlan.patternClassification,
       pattern,
       caseSensitive,
       executionPolicy,
@@ -930,6 +960,7 @@ export async function getSearchRegexPathResult(
         relativePath,
         filePatterns,
         regex,
+        regexExecutionPlan.patternClassification,
         pattern,
         caseSensitive,
         executionPolicy,

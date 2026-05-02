@@ -34,4 +34,24 @@ describe("classifyPattern", () => {
     expect(result.requiresPcre2).toBe(true);
     expect(result.supportsLiteralFastPath).toBe(false);
   });
+
+  it("classifies positive lookahead patterns as PCRE2-heavy regex", () => {
+    const result = classifyPattern("preview(?=-mode)");
+
+    expect(result.classification).toBe(
+      PATTERN_CLASSIFICATION_LITERALS.pcre2HeavyRegex,
+    );
+    expect(result.requiresPcre2).toBe(true);
+    expect(result.supportsLiteralFastPath).toBe(false);
+  });
+
+  it("classifies negative lookahead patterns as PCRE2-heavy regex", () => {
+    const result = classifyPattern("\\.(ts|js)(?!\\.)");
+
+    expect(result.classification).toBe(
+      PATTERN_CLASSIFICATION_LITERALS.pcre2HeavyRegex,
+    );
+    expect(result.requiresPcre2).toBe(true);
+    expect(result.supportsLiteralFastPath).toBe(false);
+  });
 });

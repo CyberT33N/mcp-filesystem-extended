@@ -2,25 +2,33 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockedAssertFormattedRegexResponseBudget,
-  mockedCompileGuardrailedSearchRegex,
+  mockedCreateGuardrailedSearchRegexExecutionPlan,
   mockedCreateRegexSearchAggregateBudgetState,
   mockedDetectIoCapabilityProfile,
-  mockedFormatSearchRegexPathOutput,
+  mockedFormatSearchRegexContinuationAwareTextOutput,
   mockedGetSearchRegexPathResult,
   mockedResolveSearchExecutionPolicy,
 } = vi.hoisted(() => ({
   mockedAssertFormattedRegexResponseBudget: vi.fn(),
-  mockedCompileGuardrailedSearchRegex: vi.fn(),
+  mockedCreateGuardrailedSearchRegexExecutionPlan: vi.fn(),
   mockedCreateRegexSearchAggregateBudgetState: vi.fn(),
   mockedDetectIoCapabilityProfile: vi.fn(),
-  mockedFormatSearchRegexPathOutput: vi.fn(),
+  mockedFormatSearchRegexContinuationAwareTextOutput: vi.fn(),
   mockedGetSearchRegexPathResult: vi.fn(),
   mockedResolveSearchExecutionPolicy: vi.fn(),
 }));
 
-vi.mock("@domain/shared/guardrails/regex-search-safety", () => ({
-  compileGuardrailedSearchRegex: mockedCompileGuardrailedSearchRegex,
-}));
+vi.mock("@domain/shared/guardrails/regex-search-safety", async () => {
+  const actual = await vi.importActual<
+    typeof import("@domain/shared/guardrails/regex-search-safety")
+  >("@domain/shared/guardrails/regex-search-safety");
+
+  return {
+    ...actual,
+    createGuardrailedSearchRegexExecutionPlan:
+      mockedCreateGuardrailedSearchRegexExecutionPlan,
+  };
+});
 
 vi.mock("@domain/shared/search/search-execution-policy", () => ({
   resolveSearchExecutionPolicy: mockedResolveSearchExecutionPolicy,
@@ -42,11 +50,14 @@ vi.mock(
   "@domain/inspection/search-file-contents-by-regex/search-regex-result",
   () => ({
     assertFormattedRegexResponseBudget: mockedAssertFormattedRegexResponseBudget,
-    formatSearchRegexPathOutput: mockedFormatSearchRegexPathOutput,
+    formatSearchRegexContinuationAwareTextOutput:
+      mockedFormatSearchRegexContinuationAwareTextOutput,
   }),
 );
 
 import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { RegexSearchPatternContractError } from "@domain/shared/guardrails/regex-search-safety";
+import { PATTERN_CLASSIFICATION_LITERALS } from "@domain/shared/search/pattern-classifier";
 import {
   CpuRegexTier,
   DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE,
@@ -71,6 +82,16 @@ const TEST_SEARCH_EXECUTION_POLICY = {
   taskRecommendedAfterSeconds: 60,
 };
 
+const TEST_REGEX_EXECUTION_PLAN = {
+  patternClassification: {
+    classification: PATTERN_CLASSIFICATION_LITERALS.literal,
+    originalPattern: "handleSearchRegex",
+    requiresPcre2: false,
+    supportsLiteralFastPath: true,
+  },
+  regex: /handleSearchRegex/gim,
+};
+
 describe("search_file_contents_by_regex", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -84,6 +105,9 @@ describe("search_file_contents_by_regex", () => {
     mockedCreateRegexSearchAggregateBudgetState.mockReturnValue({
       kind: "aggregate-budget-state",
     });
+    mockedCreateGuardrailedSearchRegexExecutionPlan.mockReturnValue(
+      TEST_REGEX_EXECUTION_PLAN,
+    );
     mockedAssertFormattedRegexResponseBudget.mockImplementation(
       (_toolName, formattedOutput) => formattedOutput,
     );
@@ -91,6 +115,7 @@ describe("search_file_contents_by_regex", () => {
 
   it("caps the caller result limit at the shared hard cap for single-root formatted search", async () => {
     const pathResult = {
+      admissionOutcome: "inline",
       error: null,
       filesSearched: 2,
       matches: [
@@ -101,50 +126,56 @@ describe("search_file_contents_by_regex", () => {
           match: "handleSearchRegex",
         },
       ],
+      nextContinuationState: null,
       root: "src",
       totalMatches: 1,
       truncated: false,
     };
 
     mockedGetSearchRegexPathResult.mockResolvedValue(pathResult);
-    mockedFormatSearchRegexPathOutput.mockReturnValue(
+    mockedFormatSearchRegexContinuationAwareTextOutput.mockReturnValue(
       "formatted regex search output",
     );
 
-    const result = await handleSearchRegex(
-      ["src"],
-      "handleSearchRegex",
-      ["*.ts"],
-      ["**/dist/**"],
-      [],
-      false,
-      REGEX_SEARCH_MAX_RESULTS_HARD_CAP + 25,
-      false,
-      ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
-    );
+    const result = await handleSearchRegex({
+      resumeToken: undefined,
+      resumeMode: undefined,
+      searchPaths: ["src"],
+      pattern: "handleSearchRegex",
+      filePatterns: ["*.ts"],
+      excludePatterns: ["**/dist/**"],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: REGEX_SEARCH_MAX_RESULTS_HARD_CAP + 25,
+      caseSensitive: false,
+      allowedDirectories: ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
+      inspectionResumeSessionStore: undefined,
+    });
 
-    expect(mockedCompileGuardrailedSearchRegex).toHaveBeenCalledWith(
+    expect(mockedCreateGuardrailedSearchRegexExecutionPlan).toHaveBeenCalledWith(
       "search_file_contents_by_regex",
       "handleSearchRegex",
       false,
     );
     expect(mockedGetSearchRegexPathResult).toHaveBeenCalledWith(
-      "search_file_contents_by_regex",
-      "src",
-      "handleSearchRegex",
-      ["*.ts"],
-      ["**/dist/**"],
-      [],
-      false,
-      REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
-      false,
-      ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
-      TEST_SEARCH_EXECUTION_POLICY,
-      { kind: "aggregate-budget-state" },
+      expect.objectContaining({
+        aggregateBudgetState: { kind: "aggregate-budget-state" },
+        allowedDirectories: [
+          "C:/Projects/mcp/server/system/files/mcp-filesystem-extended",
+        ],
+        caseSensitive: false,
+        executionPolicy: TEST_SEARCH_EXECUTION_POLICY,
+        maxResults: REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
+        pattern: "handleSearchRegex",
+        regexExecutionPlan: TEST_REGEX_EXECUTION_PLAN,
+        searchPath: "src",
+        toolName: "search_file_contents_by_regex",
+      }),
     );
     expect(mockedAssertFormattedRegexResponseBudget).toHaveBeenCalledWith(
       "search_file_contents_by_regex",
       "formatted regex search output",
+      null,
     );
     expect(result).toBe("formatted regex search output");
   });
@@ -152,6 +183,7 @@ describe("search_file_contents_by_regex", () => {
   it("preserves root-local failures in the structured multi-root result surface", async () => {
     mockedGetSearchRegexPathResult
       .mockResolvedValueOnce({
+        admissionOutcome: "inline",
         error: null,
         filesSearched: 3,
         matches: [
@@ -162,25 +194,29 @@ describe("search_file_contents_by_regex", () => {
             match: "SearchFileContentsByRegexArgsSchema",
           },
         ],
+        nextContinuationState: null,
         root: "src",
         totalMatches: 1,
         truncated: false,
       })
       .mockRejectedValueOnce(new Error("Native regex lane timed out."));
 
-    const result = await getSearchRegexResult(
-      ["src", "fixtures"],
-      "SearchFileContentsByRegexArgsSchema",
-      ["*.ts"],
-      [],
-      [],
-      false,
-      25,
-      true,
-      ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
-    );
+    const result = await getSearchRegexResult({
+      resumeToken: undefined,
+      resumeMode: undefined,
+      searchPaths: ["src", "fixtures"],
+      pattern: "SearchFileContentsByRegexArgsSchema",
+      filePatterns: ["*.ts"],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 25,
+      caseSensitive: true,
+      allowedDirectories: ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
+      inspectionResumeSessionStore: undefined,
+    });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       roots: [
         {
           error: null,
@@ -211,5 +247,34 @@ describe("search_file_contents_by_regex", () => {
       totalMatches: 1,
       truncated: false,
     });
+  });
+
+  it("rethrows request-wide pattern contract failures instead of degrading them into root-local errors", async () => {
+    mockedGetSearchRegexPathResult.mockRejectedValueOnce(
+      new RegexSearchPatternContractError(
+        "Pattern contract rejected for the selected execution lane.",
+      ),
+    );
+
+    await expect(
+      getSearchRegexResult({
+        resumeToken: undefined,
+        resumeMode: undefined,
+        searchPaths: ["src"],
+        pattern: "\\.(ts|js|tsx|jsx|mts|mjs|cts|cjs)(?!\\.)",
+        filePatterns: ["*.ts"],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 25,
+        caseSensitive: false,
+        allowedDirectories: [
+          "C:/Projects/mcp/server/system/files/mcp-filesystem-extended",
+        ],
+        inspectionResumeSessionStore: undefined,
+      }),
+    ).rejects.toThrow(
+      "Pattern contract rejected for the selected execution lane.",
+    );
   });
 });
