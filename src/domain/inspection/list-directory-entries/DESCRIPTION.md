@@ -75,11 +75,12 @@ The `path` field is relative to the requested root and is slash-normalized.
 The text surface is caller-visible convenience output.
 
 - inline responses may encode the full structured result
-- preview-first responses may emit a bounded entry payload in `content.text`
-- preview-first text may also surface the active `resumeToken`
-- the structured surfaces remain authoritative whenever `admission` and `resume` metadata are present
+- preview-first responses keep the current bounded directory-entry payload in `content.text`
+- preview-first text may also append the active `resumeToken` and continuation guidance after that payload
+- `structuredContent.admission` and `structuredContent.resume` remain the authoritative machine-readable envelope
+- any mirrored structured payload must not replace `content.text`
 
-This distinction matters because text-only consumers may rely on the bounded text payload, while structured consumers must use the authoritative `structuredContent` envelope.
+This distinction matters because text-only consumers must still receive the current primary result payload, while structured consumers additionally gain the machine-readable envelope and mirrored structured data.
 
 ---
 

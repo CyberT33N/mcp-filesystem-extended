@@ -109,11 +109,12 @@ Its caller-visible conventions are:
 
 When additive `admission` and `resume` metadata are present:
 
-- `structuredContent.admission` is authoritative
-- `structuredContent.resume` is authoritative
-- `content.text` may collapse to compact guidance only
+- `structuredContent.admission` is the authoritative machine-readable admission envelope
+- `structuredContent.resume` is the authoritative machine-readable resume envelope
+- the current bounded directory-entry payload remains complete in `content.text`
+- any mirrored structured result data must not replace `content.text`
 
-For preview-first directory-listing responses, `content.text` may additionally surface the current bounded directory-entry payload and the active `resumeToken` so text-only consumers still have a workable continuation path.
+For preview-first directory-listing responses, `content.text` may also append the active `resumeToken` and continuation guidance after the current bounded directory-entry payload so text-only consumers still have a workable continuation path.
 
 ### Additive `complete-result` rule
 

@@ -75,10 +75,11 @@ The text surface is caller-visible convenience output.
 
 - inline single-root output becomes a concise matched-path report for that root
 - inline multi-root output becomes a grouped batch text block per root
-- preview-first responses may collapse to bounded progress/guidance text with resume metadata
-- structured resume/admission surfaces remain authoritative whenever they are present
+- preview-first responses keep the current bounded match payload in `content.text` and may append resume metadata plus continuation guidance afterward
+- `structuredContent.admission` and `structuredContent.resume` remain the authoritative machine-readable envelope whenever they are present
+- any mirrored structured payload must not replace `content.text`
 
-This distinction matters because text-only consumers may use the preview text, while structured consumers must rely on the authoritative `structuredContent` envelope.
+This distinction matters because text-only consumers must still receive the current primary result payload, while structured consumers additionally rely on the machine-readable envelope and mirrored structured data.
 
 ---
 

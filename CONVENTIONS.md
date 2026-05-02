@@ -17,6 +17,7 @@ This document is the entry point for the architecture conventions of this projec
 | [Content Classification Overview](conventions/content-classification/overview.md) | Classifier states, decision tree, sampling strategy, endpoint integration, and invariants |
 | [Content Inspection Capability Matrix](conventions/content-classification/operation-capability-matrix.md) | Content-inspecting endpoint list, shared capability matrix, encoding-aware hybrid policy, and discovery-family exclusion |
 | [Schema Optionality Contract](conventions/content-classification/schema-optionality-contract.md) | Why optional string query fields must not carry `.default("")`, sentinel-check detection, and correct modeling |
+| [Structured Content Contract](conventions/mcp-response-contract/structured-content-contract.md) | Primary-result authority of `content.text`, additive structured mirroring, and continuation-guidance placement |
 | [Search Platform Overview](conventions/search-platform/overview.md) | Ugrep search architecture, endpoint-family search roles, explicit-file versus recursive lane model, and search/read/count boundaries |
 | [Search Platform Endpoint Lane Matrix](conventions/search-platform/endpoint-family-lane-matrix.md) | Complete affected endpoint matrix, lane capabilities, resume modes, refusal surfaces, and supported large-file behaviors |
 | [Search Platform Preflight and Hardgap Governance](conventions/search-platform/preflight-and-hardgap-governance.md) | Correct preflight ownership, recursive admission lanes, explicit-file search entry rules, and hardgap boundaries |
@@ -41,3 +42,5 @@ The following rules are non-negotiable across the entire codebase:
 6. **Scope reduction is always a first-class alternative.** Every affected endpoint family must surface scope reduction guidance alongside resume guidance.
 
 7. **`complete-result` responses are additive, not redundant.** When a caller resumes a preview-first session with `resumeMode = 'complete-result'`, the server continues traversal from the persisted frontier position and returns only entries not already delivered in the prior preview chunk. The `admission.guidanceText` field in every `complete-result` response must be a machine-readable statement that the caller must combine both payloads for the complete dataset.
+
+8. **`content.text` remains the complete primary result surface.** When a tool emits `structuredContent`, caller-visible primary result data must still remain complete in `content.text`; `structuredContent` mirrors that data additively, while `structuredContent.admission` and `structuredContent.resume` remain the authoritative machine-readable envelope fields.

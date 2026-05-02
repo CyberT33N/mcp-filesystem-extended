@@ -157,7 +157,7 @@ This is intentionally different from the preview-capable search and discovery fa
 
 ### Text-surface rule
 
-When the endpoint is still waiting for completion-backed continuation, `content.text` may collapse to guidance while `structuredContent.admission` and `structuredContent.resume` remain authoritative.
+While a completion-backed session remains active, `content.text` must preserve the caller-visible counting result for the current response. `structuredContent.admission` and `structuredContent.resume` remain the authoritative machine-readable continuation envelope, and any continuation guidance is appended after the current result surface rather than replacing it.
 
 Once the completion-backed result is finalized, the full bounded counting output returns through the normal text surface again.
 

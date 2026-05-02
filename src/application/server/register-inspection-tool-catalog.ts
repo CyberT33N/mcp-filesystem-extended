@@ -82,19 +82,19 @@ import type { RegisterToolCatalogContext } from "./register-tool-catalog";
 import { READ_ONLY_LOCAL_TOOL_ANNOTATIONS } from "./tool-registration-presets";
 
 const STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION =
-  "When additive `admission` and `resume` metadata are returned, `structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only.";
+  "When additive `admission` and `resume` metadata are returned, `structuredContent.admission` and `structuredContent.resume` remain the authoritative machine-readable envelope, while primary result data remains complete in `content.text` and any mirrored structured result data must not replace it.";
 
 const TOKEN_ONLY_RESUME_DESCRIPTION =
   "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`.";
 
 const FINAL_PREVIEW_FIRST_DESCRIPTION =
-  "A preview-first response may finalize without an active resume token only when the current bounded final payload is already present in `structuredContent` and no further resume step exists.";
+  "A preview-first response may finalize without an active resume token only when the current bounded final payload is already present in `content.text` and mirrored in `structuredContent`, and no further resume step exists.";
 
 const EXTERNAL_CONSUMER_BOUNDARY_DESCRIPTION =
-  "Consumers that expose only `content.text` while dropping `structuredContent` are outside this server-owned contract and are responsible for any apparent resumeToken or bounded-payload loss.";
+  "Consumers that expose only `content.text` while dropping `structuredContent` are outside this server-owned contract and may lose machine-readable envelope metadata or mirrored structured fields, even though primary result data remains available in `content.text`.";
 
 const LIST_DIRECTORY_ENTRIES_TEXT_SURFACING_DESCRIPTION =
-  "For `list_directory_entries`, preview-first responses may also surface the current bounded directory-entry chunk and any active `resumeToken` in `content.text` so text-only consumers keep a usable same-endpoint continuation path while `structuredContent` remains authoritative.";
+  "For `list_directory_entries`, preview-first responses may surface the current bounded directory-entry chunk in `content.text` and may append the active `resumeToken` plus continuation guidance afterward so text-only consumers keep a usable same-endpoint continuation path, while `structuredContent` mirrors the same primary data and carries the authoritative machine-readable envelope.";
 
 /**
  * Registers only the inspection tool family on the application-layer MCP server shell.
@@ -161,12 +161,12 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Lists structured directory entries for one or more directory roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly. " +
-        "Valid broad listing workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken`; no separate continuation endpoint exists. " +
-        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "Valid broad listing workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken`; no separate continuation endpoint exists. " +
+        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
         "Scope reduction remains a first-class alternative: narrow roots, choose a deeper root, or set `recursive = false` when a shallow listing is sufficient. " +
-        "For `list_directory_entries`, preview-first responses may also surface the current bounded directory-entry chunk and any active `resumeToken` in `content.text` so text-only consumers keep a usable same-endpoint continuation path while `structuredContent` remains authoritative. " +
+        `${LIST_DIRECTORY_ENTRIES_TEXT_SURFACING_DESCRIPTION} ` +
         "Preview-capable directory listing supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
-        "A preview-first response may finalize without an active resume token only when the current bounded final payload is already present in `structuredContent` and no further resume step exists. " +
+        `${FINAL_PREVIEW_FIRST_DESCRIPTION} ` +
         "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
         `${EXTERNAL_CONSUMER_BOUNDARY_DESCRIPTION}`,
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
@@ -218,8 +218,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Finds file and directory paths by case-insensitive name substring while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for path discovery, not for searching file contents. " +
-        "Valid broad discovery workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. " +
-        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "Valid broad discovery workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. " +
+        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
         "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
         "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
         "Scope reduction remains a first-class alternative: narrow roots or make `nameContains` more specific to stay inline or reduce payload size.",
@@ -275,8 +275,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Finds files by glob pattern under one or more roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool when the selection is expressed in glob syntax rather than plain name matching or regex content search. " +
-        "Valid broad discovery workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. " +
-        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "Valid broad discovery workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. " +
+        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
         "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
         "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
         "Scope reduction remains a first-class alternative: narrow roots, tighten `glob`, or reduce reopened descendants through `includeExcludedGlobs`.",
@@ -332,8 +332,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Searches text file contents with a regular expression while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for content matching, not for file-name or glob matching. " +
-        "Explicit large text-compatible file scopes may proceed to the shared regex-search lane after content-state eligibility succeeds, while broad recursive workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while structurally unsafe patterns, unsupported surfaces, and recursive workloads that still exceed the server-owned lane budgets continue to refuse. " +
-        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "Explicit large text-compatible file scopes may proceed to the shared regex-search lane after content-state eligibility succeeds, while broad recursive workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while structurally unsafe patterns, unsupported surfaces, and recursive workloads that still exceed the server-owned lane budgets continue to refuse. " +
+        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
         "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
         "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
         "Scope reduction remains a first-class alternative: narrow roots, add `includeGlobs`, or tighten the regex to the intended file set.",
@@ -404,8 +404,8 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
       description:
         "Searches text file contents with an exact fixed string while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for literal content matching, not for regex content matching, file-name matching, or glob matching. " +
-        "Explicit large text-compatible file scopes may proceed to the shared fixed-string-search lane after content-state eligibility succeeds, while broad recursive workloads may degrade into preview-first delivery that keeps `structuredContent` authoritative and may collapse caller-visible text to compact guidance. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while unsupported surfaces and recursive workloads that still exceed the server-owned lane budgets continue to refuse. " +
-        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        "Explicit large text-compatible file scopes may proceed to the shared fixed-string-search lane after content-state eligibility succeeds, while broad recursive workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while unsupported surfaces and recursive workloads that still exceed the server-owned lane budgets continue to refuse. " +
+        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
         "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
         "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
         "Scope reduction remains a first-class alternative: narrow roots, add `includeGlobs`, or reduce the search to the relevant subtree.",
@@ -477,7 +477,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         "Counts lines in files or traversed directory trees while broad directory roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
         "Use this tool for totals and filtered line counting, not for reading full file content. " +
         "Total-only counts use a large-file-safe streaming path, pattern-aware counts reuse the shared native-search lane, and broad workloads that leave the inline band return completion-backed `resumeToken` metadata on this same endpoint instead of partial preview totals. " +
-        "`structuredContent.admission` and `structuredContent.resume` remain authoritative while `content.text` may collapse to compact guidance only. " +
+        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
         "This family supports only `resumeMode = 'complete-result'`; preview-style partial totals and `next-chunk` are never exposed. " +
         "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus `resumeMode = 'complete-result'`. " +
         "Scope reduction remains a first-class alternative: narrow `paths`, reduce recursive breadth, or constrain files with `includeGlobs`.",

@@ -111,9 +111,10 @@ Its caller-visible conventions are:
 
 When additive `admission` and `resume` metadata are present:
 
-- `structuredContent.admission` is authoritative
-- `structuredContent.resume` is authoritative
-- `content.text` may collapse to compact guidance or bounded preview output only
+- `structuredContent.admission` is the authoritative machine-readable admission envelope
+- `structuredContent.resume` is the authoritative machine-readable resume envelope
+- the current bounded match payload remains complete in `content.text`
+- any mirrored structured result data must not replace `content.text`
 
 ### Additive `complete-result` rule
 

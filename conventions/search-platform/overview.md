@@ -3,6 +3,7 @@
 > **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the root conventions index.  
 > **Related guardrails:** See [`conventions/guardrails/overview.md`](../guardrails/overview.md) for the full guardrail stack.  
 > **Related resume model:** See [`conventions/resume-architecture/overview.md`](../resume-architecture/overview.md) for the shared resume-session architecture.
+> **Structured response authority:** See [`conventions/mcp-response-contract/structured-content-contract.md`](../mcp-response-contract/structured-content-contract.md) for the primary-result versus envelope contract.
 
 ---
 
@@ -117,10 +118,12 @@ That behavior is invalid for explicit-file search on supported text-compatible s
 
 When a preview-capable search family returns a resumable response:
 
-- `structuredContent.admission` and `structuredContent.resume` remain authoritative,
-- the preview payload remains authoritative in `structuredContent`,
-- `content.text` may be compact guidance only,
-- and caller-visible resume guidance appears only when the response is actually resumable and carries a non-null token.
+- `structuredContent.admission` and `structuredContent.resume` remain the authoritative machine-readable envelope metadata,
+- primary result data remains complete in `content.text`,
+- any structured primary-result payload mirrors the same underlying result objects instead of replacing `content.text`,
+- and continuation guidance may be appended in `content.text` after the primary data when the response is actually resumable and carries a non-null token.
+
+This authority split is owned centrally by [`structured-content-contract.md`](../mcp-response-contract/structured-content-contract.md) and must not be weakened locally into "compact guidance only" text surfaces.
 
 ---
 
