@@ -4,13 +4,13 @@ file_id: "8"
 unit_name: "Path Mutation Docs"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "in_progress"
+unit_status: "done"
 total_tasks: 4
-completed_tasks: 3
+completed_tasks: 4
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "8.4"
-next_frontier_task: "9.1"
+next_frontier_task: "8.4"
 todo_window_mode_override: "inherit"
 ---
 
@@ -20,8 +20,8 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/8-path-mutation-docs/`
 - **Hierarchy Level:** 1
-- **Unit Status:** in_progress
-- **Progress:** 2/4 tasks
+- **Unit Status:** done
+- **Progress:** 4/4 tasks
 
 ## Tasks
 - [x] **8.1 `create_directories` doc set** → [`8.1-create-directories-doc-set.md`](./8.1-create-directories-doc-set.md)
@@ -40,7 +40,7 @@ todo_window_mode_override: "inherit"
   - Files Modified: endpoint-local doc triplet
   - Blocked By: none
   - Summary: Document the copy surface and its non-destructive destination semantics.
-- [ ] **8.3 `move_paths` doc set** → [`8.3-move-paths-doc-set.md`](./8.3-move-paths-doc-set.md)
+- [x] **8.3 `move_paths` doc set** → [`8.3-move-paths-doc-set.md`](./8.3-move-paths-doc-set.md)
   - Classification: ISOLATED
   - Status: done
   - Complexity: MEDIUM
@@ -48,9 +48,9 @@ todo_window_mode_override: "inherit"
   - Files Modified: endpoint-local doc triplet
   - Blocked By: none
   - Summary: Document the move/rename surface and its overwrite semantics.
-- [ ] **8.4 `delete_paths` doc set** → [`8.4-delete-paths-doc-set.md`](./8.4-delete-paths-doc-set.md)
+- [x] **8.4 `delete_paths` doc set** → [`8.4-delete-paths-doc-set.md`](./8.4-delete-paths-doc-set.md)
   - Classification: SEQUENTIAL
-  - Status: pending
+  - Status: done
   - Complexity: MEDIUM
   - Execution Surface Band: GREEN
   - Files Modified: endpoint-local doc triplet

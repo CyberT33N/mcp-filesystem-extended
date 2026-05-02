@@ -6,15 +6,15 @@ created: "2026-04-18T00:00:00Z"
   last_updated: "2026-04-26T00:00:00Z"
     status: "in_progress"
   total_units: 11
-    completed_units: 7
-  total_tasks_all_levels: 38
-    completed_tasks_all_levels: 36
+    completed_units: 8
+  total_tasks_all_levels: 44
+    completed_tasks_all_levels: 37
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-    resume_frontier_unit: "8"
-    resume_frontier_task: "8.4"
-    next_frontier_task: "9.1"
+    resume_frontier_unit: "9"
+    resume_frontier_task: "9.1"
+    next_frontier_task: "10.1"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -42,17 +42,17 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
 - **Total Units:** 11
 - **Hierarchy Depth:** 2 levels
 - **Overall Status:** in_progress
-- **Progress:** 35/38 tasks completed
+- **Progress:** 37/44 tasks completed
 - **Historical Backup Plan:** [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md)
 
 ## Execution Frontier
 [INTENT: REFERENCE]
 
-- **Resume Frontier Unit:** `8`
-- **Resume Frontier Task:** `8.3`
-- **Next Frontier Task:** `8.4`
+- **Resume Frontier Unit:** `9`
+- **Resume Frontier Task:** `9.1`
+- **Next Frontier Task:** `10.1`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
-- **Frontier Rule:** Units `1` through `7` are fully complete. Unit `8` is the active documentation frontier, task `8.3` is the next operative endpoint-local documentation task, and task `8.4` remains the direct successor inside the same unit.
+- **Frontier Rule:** Units `1` through `8` are fully complete. Unit `9` is now the active documentation frontier, task `9.1` is the next operative endpoint-local documentation task, and task `10.1` is the direct successor after the server-scope unit completes.
 
 ## Units
 [INTENT: REFERENCE]
@@ -85,9 +85,9 @@ The backup plan at [`__bak__/plan-ugrep/PLAN.md`](__bak__/plan-ugrep/PLAN.md) re
   - Classification: Mixed
   - Status: done | Tasks: 3 | Completed: 3
   - Summary: Create endpoint-local documentation sets for content-bearing mutation endpoints.
-- [ ] **8. Path Mutation Docs** → [`.plan/8-path-mutation-docs/orchestration.md`](.plan/8-path-mutation-docs/orchestration.md)
+- [x] **8. Path Mutation Docs** → [`.plan/8-path-mutation-docs/orchestration.md`](.plan/8-path-mutation-docs/orchestration.md)
   - Classification: Mixed
-  - Status: in_progress | Tasks: 4 | Completed: 2
+  - Status: done | Tasks: 4 | Completed: 4
   - Summary: Create endpoint-local documentation sets for path-oriented mutation endpoints.
 - [ ] **9. Server-Scope Docs** → [`.plan/9-server-scope-docs/orchestration.md`](.plan/9-server-scope-docs/orchestration.md)
   - Classification: Mixed
