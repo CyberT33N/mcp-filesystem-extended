@@ -4,9 +4,9 @@ file_id: "9"
 unit_name: "Server-Scope Docs"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "done"
 total_tasks: 1
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "9.1"
@@ -20,13 +20,13 @@ todo_window_mode_override: "inherit"
 - **Parent Orchestration:** [`PLAN.md`](../../PLAN.md)
 - **This Unit:** `.plan/9-server-scope-docs/`
 - **Hierarchy Level:** 1
-- **Unit Status:** pending
-- **Progress:** 0/1 tasks
+- **Unit Status:** done
+- **Progress:** 1/1 tasks
 
 ## Tasks
-- [ ] **9.1 `list_allowed_directories` doc set** → [`9.1-list-allowed-directories-doc-set.md`](./9.1-list-allowed-directories-doc-set.md)
+- [x] **9.1 `list_allowed_directories` doc set** → [`9.1-list-allowed-directories-doc-set.md`](./9.1-list-allowed-directories-doc-set.md)
   - Classification: ISOLATED
-  - Status: pending
+  - Status: done
   - Complexity: MEDIUM
   - Execution Surface Band: GREEN
   - Files Modified: docs-only endpoint folder under `src/application/server/list-allowed-directories/`
@@ -43,4 +43,3 @@ todo_window_mode_override: "inherit"
 
 ## Notes for Orchestrating Agent
 - The documentation lives in a docs-only endpoint folder because this server-scope tool does not currently have its own code directory.
-
