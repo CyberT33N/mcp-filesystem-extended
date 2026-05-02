@@ -6,15 +6,15 @@ created: "2026-04-18T00:00:00Z"
   last_updated: "2026-04-26T00:00:00Z"
     status: "in_progress"
   total_units: 11
-    completed_units: 9
+    completed_units: 10
   total_tasks_all_levels: 44
-    completed_tasks_all_levels: 38
+    completed_tasks_all_levels: 42
 hierarchy_depth: 2
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-    resume_frontier_unit: "10"
-    resume_frontier_task: "10.1"
-    next_frontier_task: "10.2"
+    resume_frontier_unit: "11"
+    resume_frontier_task: "11.2"
+    next_frontier_task: "11.3"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
