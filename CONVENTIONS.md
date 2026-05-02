@@ -25,6 +25,58 @@ This document is the entry point for the architecture conventions of this projec
 
 ---
 
+## Endpoint-Local Conventions Index
+
+This root conventions file routes both shared convention leaveslices under [`conventions/`](conventions/) and endpoint-local [`CONVENTIONS.md`](src/domain/inspection/list-directory-entries/CONVENTIONS.md) surfaces.
+
+Shared cross-endpoint policy stays in the linked convention leaveslices above.
+Endpoint-specific policy stays in the linked endpoint-local convention files below.
+
+### Application/server scope
+
+- [`list_allowed_directories`](src/application/server/list-allowed-directories/CONVENTIONS.md)
+
+### Inspection — discovery
+
+- [`list_directory_entries`](src/domain/inspection/list-directory-entries/CONVENTIONS.md)
+- [`find_paths_by_name`](src/domain/inspection/find-paths-by-name/CONVENTIONS.md)
+- [`find_files_by_glob`](src/domain/inspection/find-files-by-glob/CONVENTIONS.md)
+
+### Inspection — metadata and integrity
+
+- [`get_path_metadata`](src/domain/inspection/get-path-metadata/CONVENTIONS.md)
+- [`get_file_checksums`](src/domain/inspection/get-file-checksums/CONVENTIONS.md)
+- [`verify_file_checksums`](src/domain/inspection/verify-file-checksums/CONVENTIONS.md)
+
+### Inspection — search and count
+
+- [`search_file_contents_by_regex`](src/domain/inspection/search-file-contents-by-regex/CONVENTIONS.md)
+- [`search_file_contents_by_fixed_string`](src/domain/inspection/search-file-contents-by-fixed-string/CONVENTIONS.md)
+- [`count_lines`](src/domain/inspection/count-lines/CONVENTIONS.md)
+
+### Inspection — read
+
+- [`read_files_with_line_numbers`](src/domain/inspection/read-files-with-line-numbers/CONVENTIONS.md)
+- [`read_file_content`](src/domain/inspection/read-file-content/CONVENTIONS.md)
+
+### Comparison
+
+- [`diff_files`](src/domain/comparison/diff-files/CONVENTIONS.md)
+- [`diff_text_content`](src/domain/comparison/diff-text-content/CONVENTIONS.md)
+
+### Mutation — content
+
+- [`create_files`](src/domain/mutation/create-files/CONVENTIONS.md)
+- [`append_files`](src/domain/mutation/append-files/CONVENTIONS.md)
+- [`replace_file_line_ranges`](src/domain/mutation/replace-file-line-ranges/CONVENTIONS.md)
+
+### Mutation — path
+
+- [`create_directories`](src/domain/mutation/create-directories/CONVENTIONS.md)
+- [`copy_paths`](src/domain/mutation/copy-paths/CONVENTIONS.md)
+- [`move_paths`](src/domain/mutation/move-paths/CONVENTIONS.md)
+- [`delete_paths`](src/domain/mutation/delete-paths/CONVENTIONS.md)
+
 ## Core Invariants
 
 The following rules are non-negotiable across the entire codebase:
