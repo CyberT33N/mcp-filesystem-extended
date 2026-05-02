@@ -388,6 +388,34 @@ export function createRegexRuntimeRejectedFailure(params: {
 }
 
 /**
+ * Creates the canonical refusal payload for regex patterns that are out of contract for
+ * content-match search because they can only produce zero-length or other non-content-bearing
+ * matches.
+ *
+ * @param params - Describes the rejected content-search pattern and the contract reason.
+ * @returns A deterministic regex contract refusal payload.
+ */
+export function createRegexContentMatchContractRejectedFailure(params: {
+  toolName: string;
+  patternSummary: string;
+  reason: string;
+  candidateBytes: ToolGuardrailValue;
+}): ToolGuardrailFailure {
+  return createToolGuardrailFailure(
+    "regex_runtime_rejected",
+    params.toolName,
+    "Regex execution rejected because the pattern is out of contract for this content-search endpoint.",
+    [
+      `Pattern summary: ${params.patternSummary}.`,
+      `Runtime reason: ${params.reason}.`,
+      "Contract boundary: This endpoint accepts only patterns that produce content-bearing matches and does not allow anchor-only or other zero-length matching patterns.",
+      `Candidate bytes considered before refusal: ${formatToolGuardrailValue(params.candidateBytes, "bytes")}.`,
+    ],
+    "Use a regex that consumes content characters for this endpoint, or switch to a dedicated anchor/position search surface for zero-width matching.",
+  );
+}
+
+/**
  * Creates the canonical refusal payload for family-specific runtime budget overruns.
  *
  * @param params - Describes the budget surface that exceeded its configured runtime ceiling.

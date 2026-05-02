@@ -277,4 +277,76 @@ describe("search_file_contents_by_regex", () => {
       "Pattern contract rejected for the selected execution lane.",
     );
   });
+
+  it("rejects zero-length anchor patterns with a content-search contract response", async () => {
+    const actualModule = await vi.importActual<
+      typeof import("@domain/shared/guardrails/regex-search-safety")
+    >("@domain/shared/guardrails/regex-search-safety");
+
+    expect.assertions(5);
+
+    try {
+      actualModule.createGuardrailedSearchRegexExecutionPlan(
+        "search_file_contents_by_regex",
+        "^",
+        true,
+      );
+    } catch (error) {
+      expect(error).toBeInstanceOf(RegexSearchPatternContractError);
+
+      if (!(error instanceof RegexSearchPatternContractError)) {
+        return;
+      }
+
+      expect(error.message).toContain(
+        "Regex execution rejected because the pattern is out of contract for this content-search endpoint.",
+      );
+      expect(error.message).toContain(
+        "The pattern can produce a zero-length match on sentinel input \"\".",
+      );
+      expect(error.message).toContain(
+        "Contract boundary: This endpoint accepts only patterns that produce content-bearing matches and does not allow anchor-only or other zero-length matching patterns.",
+      );
+      expect(error.message).toContain(
+        "Use a regex that consumes content characters for this endpoint, or switch to a dedicated anchor/position search surface for zero-width matching.",
+      );
+    }
+  });
+
+  it("surfaces zero-length contract rejections before root execution begins", async () => {
+    const actualModule = await vi.importActual<
+      typeof import("@domain/shared/guardrails/regex-search-safety")
+    >("@domain/shared/guardrails/regex-search-safety");
+
+    mockedCreateGuardrailedSearchRegexExecutionPlan.mockImplementation(
+      (toolName: string, pattern: string, caseSensitive: boolean) =>
+        actualModule.createGuardrailedSearchRegexExecutionPlan(
+          toolName,
+          pattern,
+          caseSensitive,
+        ),
+    );
+
+    await expect(
+      getSearchRegexResult({
+        resumeToken: undefined,
+        resumeMode: undefined,
+        searchPaths: ["src"],
+        pattern: "^",
+        filePatterns: ["*.ts"],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 25,
+        caseSensitive: true,
+        allowedDirectories: [
+          "C:/Projects/mcp/server/system/files/mcp-filesystem-extended",
+        ],
+        inspectionResumeSessionStore: undefined,
+      }),
+    ).rejects.toThrow(
+      "Regex execution rejected because the pattern is out of contract for this content-search endpoint.",
+    );
+    expect(mockedGetSearchRegexPathResult).not.toHaveBeenCalled();
+  });
 });

@@ -18,6 +18,7 @@ import {
   type PatternClassification,
 } from "@domain/shared/search/pattern-classifier";
 import {
+  createRegexContentMatchContractRejectedFailure,
   createRegexRuntimeRejectedFailure,
   createRuntimeBudgetExceededFailure,
   formatToolGuardrailFailureAsText,
@@ -91,12 +92,37 @@ function createRegexSearchPatternContractError(
   );
 }
 
+function createRegexContentMatchPatternContractError(
+  toolName: string,
+  patternSummary: string,
+  reason: string,
+): RegexSearchPatternContractError {
+  return new RegexSearchPatternContractError(
+    formatToolGuardrailFailureAsText(
+      createRegexContentMatchContractRejectedFailure({
+        toolName,
+        patternSummary,
+        reason,
+        candidateBytes: 0,
+      }),
+    ),
+  );
+}
+
 function throwRegexRuntimeRejected(
   toolName: string,
   patternSummary: string,
   reason: string,
 ): never {
   throw createRegexSearchPatternContractError(toolName, patternSummary, reason);
+}
+
+function throwRegexContentMatchContractRejected(
+  toolName: string,
+  patternSummary: string,
+  reason: string,
+): never {
+  throw createRegexContentMatchPatternContractError(toolName, patternSummary, reason);
 }
 
 function assertRegexDoesNotProduceZeroLengthMatches(
@@ -110,7 +136,7 @@ function assertRegexDoesNotProduceZeroLengthMatches(
     const match = regex.exec(sentinelInput);
 
     if (match !== null && match[0].length === 0) {
-      throwRegexRuntimeRejected(
+      throwRegexContentMatchContractRejected(
         toolName,
         patternSummary,
         `The pattern can produce a zero-length match on sentinel input ${JSON.stringify(
@@ -137,10 +163,10 @@ export function createGuardrailedSearchRegexExecutionPlan(
   caseSensitive: boolean,
 ): GuardrailedSearchRegexExecutionPlan {
   if (pattern.length === 0) {
-    throwRegexRuntimeRejected(
+    throwRegexContentMatchContractRejected(
       toolName,
       "(empty pattern)",
-      "Empty regex patterns are not allowed for regex content search.",
+      "Empty regex patterns do not produce content-bearing matches for this endpoint.",
     );
   }
 
