@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockedAssertFormattedRegexResponseBudget,
@@ -68,6 +72,15 @@ import {
   getSearchRegexResult,
   handleSearchRegex,
 } from "@domain/inspection/search-file-contents-by-regex/handler";
+import {
+  resolveExplicitFileScopeCsvFixturePaths,
+  type ResolvedInspectionSearchFixturePaths,
+} from "@test/shared/utils/inspection/search-fixture-loader";
+import {
+  createExplicitFileScopeHeaderMatchContract,
+  createExpectedInspectionSearchMatch,
+  type ExpectedInspectionSearchMatchContract,
+} from "@test/shared/utils/inspection/search-result-assertions";
 
 const TEST_SEARCH_EXECUTION_POLICY = {
   effectiveCpuRegexTier: CpuRegexTier.B,
@@ -92,7 +105,33 @@ const TEST_REGEX_EXECUTION_PLAN = {
   regex: /handleSearchRegex/gim,
 };
 
+const workspaceRootPath = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../../",
+);
+
+let explicitFileScopeFixturePaths: ResolvedInspectionSearchFixturePaths | undefined;
+let explicitFileScopeMatchContract: ExpectedInspectionSearchMatchContract | undefined;
+
 describe("search_file_contents_by_regex", () => {
+  beforeAll(async () => {
+    const fixturePaths = resolveExplicitFileScopeCsvFixturePaths(workspaceRootPath);
+    const fixtureContent = await readFile(fixturePaths.fileAbsolutePath, "utf8");
+    const [headerLine] = fixtureContent.split(/\r?\n/u);
+
+    if (headerLine === undefined || headerLine === "") {
+      throw new Error(
+        `Fixture '${fixturePaths.fileRelativePath}' must contain a non-empty CSV header line.`,
+      );
+    }
+
+    explicitFileScopeFixturePaths = fixturePaths;
+    explicitFileScopeMatchContract = createExplicitFileScopeHeaderMatchContract(
+      fixturePaths,
+      headerLine,
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -181,21 +220,21 @@ describe("search_file_contents_by_regex", () => {
   });
 
   it("preserves root-local failures in the structured multi-root result surface", async () => {
+    const fixturePaths = explicitFileScopeFixturePaths;
+    const matchContract = explicitFileScopeMatchContract;
+
+    if (fixturePaths === undefined || matchContract === undefined) {
+      throw new Error("Expected shared explicit file-scope fixture state to be initialized.");
+    }
+
     mockedGetSearchRegexPathResult
       .mockResolvedValueOnce({
         admissionOutcome: "inline",
         error: null,
-        filesSearched: 3,
-        matches: [
-          {
-            content: "export const SearchFileContentsByRegexArgsSchema = z.object({",
-            file: "src/domain/inspection/search-file-contents-by-regex/schema.ts",
-            line: 22,
-            match: "SearchFileContentsByRegexArgsSchema",
-          },
-        ],
+        filesSearched: 1,
+        matches: [createExpectedInspectionSearchMatch(matchContract)],
         nextContinuationState: null,
-        root: "src",
+        root: fixturePaths.fileRelativePath,
         totalMatches: 1,
         truncated: false,
       })
@@ -204,33 +243,46 @@ describe("search_file_contents_by_regex", () => {
     const result = await getSearchRegexResult({
       resumeToken: undefined,
       resumeMode: undefined,
-      searchPaths: ["src", "fixtures"],
-      pattern: "SearchFileContentsByRegexArgsSchema",
-      filePatterns: ["*.ts"],
+      searchPaths: [fixturePaths.fileRelativePath, "fixtures"],
+      pattern: matchContract.expectedMatch,
+      filePatterns: ["**/*.json"],
       excludePatterns: [],
       includeExcludedGlobs: [],
       respectGitIgnore: false,
       maxResults: 25,
       caseSensitive: true,
-      allowedDirectories: ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
+      allowedDirectories: [workspaceRootPath],
       inspectionResumeSessionStore: undefined,
     });
+
+    expect(mockedGetSearchRegexPathResult).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        searchPath: fixturePaths.fileRelativePath,
+        pattern: matchContract.expectedMatch,
+        filePatterns: ["**/*.json"],
+        allowedDirectories: [workspaceRootPath],
+        batchRootCount: 2,
+      }),
+    );
+    expect(mockedGetSearchRegexPathResult).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        searchPath: "fixtures",
+        pattern: matchContract.expectedMatch,
+        filePatterns: ["**/*.json"],
+        allowedDirectories: [workspaceRootPath],
+        batchRootCount: 2,
+      }),
+    );
 
     expect(result).toMatchObject({
       roots: [
         {
           error: null,
-          filesSearched: 3,
-          matches: [
-            {
-              content:
-                "export const SearchFileContentsByRegexArgsSchema = z.object({",
-              file: "src/domain/inspection/search-file-contents-by-regex/schema.ts",
-              line: 22,
-              match: "SearchFileContentsByRegexArgsSchema",
-            },
-          ],
-          root: "src",
+          filesSearched: 1,
+          matches: [createExpectedInspectionSearchMatch(matchContract)],
+          root: fixturePaths.fileRelativePath,
           totalMatches: 1,
           truncated: false,
         },

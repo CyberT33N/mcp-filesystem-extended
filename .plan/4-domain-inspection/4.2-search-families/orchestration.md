@@ -4,12 +4,12 @@ file_id: "4.2"
 unit_name: "Search Families"
 parent_orchestration: ".plan/4-domain-inspection/orchestration.md"
 hierarchy_level: 2
-unit_status: "pending"
+unit_status: "in_progress"
 total_tasks: 2
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "4.2.1"
+resume_frontier_task: "4.2.2"
 next_frontier_task: "4.2.2"
 todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 ---
@@ -17,7 +17,7 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 # Unit 4.2: Search Families
 
 ## Tasks
-- [ ] **4.2.1 Fixed-string search family tests** → `4.2.1-fixed-string-search-family-tests.md`
+- [x] **4.2.1 Fixed-string search family tests** → `4.2.1-fixed-string-search-family-tests.md`
   - Classification: `ISOLATED`
   - Blocked By: `none`
   - Summary: Extends the fixed-string endpoint test and adds mirrored support-surface tests that consume the shared fixture foundation.
