@@ -6,15 +6,15 @@ created: "2026-01-05T20:22:00Z"
 last_updated: "2026-01-05T20:22:00Z"
 status: "in_progress"
 total_units: 9
-completed_units: 1
-total_tasks_all_levels: 22
-completed_tasks_all_levels: 1
+ completed_units: 2
+ total_tasks_all_levels: 22
+ completed_tasks_all_levels: 6
 hierarchy_depth: 3
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-resume_frontier_unit: "4"
-resume_frontier_task: "4.2.1"
-next_frontier_task: "4.2.2"
+ resume_frontier_unit: "5"
+ resume_frontier_task: "5.1"
+ next_frontier_task: "5.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -25,12 +25,12 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
 - **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
 - **Overall Status:** in_progress
-- **Progress:** 1/22 tasks completed
+- **Progress:** 6/22 tasks completed
 
 ## Execution Frontier
-- **Resume Frontier Unit:** `4`
-- **Resume Frontier Task:** `4.2.1`
-- **Next Frontier Task:** `4.2.2`
+- **Resume Frontier Unit:** `5`
+- **Resume Frontier Task:** `5.1`
+- **Next Frontier Task:** `5.2`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
 - **Frontier Rule:** First establish the shared inspection fixture foundation, then advance into the application and domain coverage slices.
 
@@ -54,9 +54,9 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
   - Classification: `ISOLATED`
   - Status: `pending` | Tasks: 1 | Completed: 0
   - Summary: Adds unit coverage for diff endpoint families and their request/response schema semantics.
-- [ ] **4. Domain Inspection** → `.plan/4-domain-inspection/orchestration.md`
+- [x] **4. Domain Inspection** → `.plan/4-domain-inspection/orchestration.md`
   - Classification: `MIXED`
-  - Status: `pending` | Tasks: 5 | Completed: 0
+  - Status: `done` | Tasks: 5 | Completed: 5
   - Summary: Covers the inspection endpoint families, including filesystem discovery, count/checksum, read surfaces, and the two search families.
 - [ ] **5. Domain Mutation** → `.plan/5-domain-mutation/orchestration.md`
   - Classification: `ISOLATED`
