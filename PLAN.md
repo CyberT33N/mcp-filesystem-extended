@@ -1,13 +1,13 @@
 ---
 file_type: "master"
 file_id: "mcp-filesystem-extended-unit-test-coverage-plan"
-plan_version: 1
+plan_version: 2
 created: "2026-01-05T20:22:00Z"
 last_updated: "2026-01-05T20:22:00Z"
 status: "pending"
-total_units: 8
+total_units: 9
 completed_units: 0
-total_tasks_all_levels: 21
+total_tasks_all_levels: 22
 completed_tasks_all_levels: 0
 hierarchy_depth: 3
 max_hierarchy_depth: 4
@@ -74,18 +74,24 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
   - Classification: `ISOLATED`
   - Status: `pending` | Tasks: 1 | Completed: 0
   - Summary: Covers error export aggregation, abort classification, normalization surfaces, and the public root entrypoint.
+- [ ] **9. Build Gating** → `.plan/9-build-gating/orchestration.md`
+  - Classification: `WAITING`
+  - Status: `pending` | Tasks: 1 | Completed: 0
+  - Summary: Gates the package build lifecycle so deterministic tests run before `build` and the build continues only on test success.
 
 ## Cross-Unit Dependencies
 | ID | Source | Target | Type | Status | Description | Shared Files |
 |----|--------|--------|------|--------|-------------|--------------|
 | D1 | `1.1` | `4.2.1` | `WAITING` | `UNRESOLVED` | The fixed-string search family must consume the shared fixture registry, fixture loader, and result assertions from the shared test foundation before final endpoint-family coverage is added. | `test/shared/utils/inspection/search-fixture-registry.ts`, `test/shared/utils/inspection/search-fixture-loader.ts`, `test/shared/utils/inspection/search-result-assertions.ts` |
 | D2 | `1.1` | `4.2.2` | `WAITING` | `UNRESOLVED` | The regex search family must consume the same shared inspection fixture foundation to avoid inline duplicated search fixtures and assertion helpers. | `test/shared/utils/inspection/search-fixture-registry.ts`, `test/shared/utils/inspection/search-fixture-loader.ts`, `test/shared/utils/inspection/search-result-assertions.ts` |
+| D3 | `8.1` | `9.1` | `WAITING` | `UNRESOLVED` | The build-gating manifest change must follow the main test-coverage rollout so the new build precondition references the intended deterministic suite surface. | `package.json` |
 
 ## Notes for Orchestrating Agent
 - Ignore config, bootstrap, and boilerplate surfaces as requested by the user.
 - Preserve and extend existing tests instead of replacing them where a mirrored test surface already exists.
 - Keep the runtime unit-test tree in `test/unit/**`; use selective `test/fixtures/**` and `test/shared/utils/**` only when multiple tests truly share the same reusable data or assertion logic.
 - For schema-heavy endpoint folders, use a hybrid approach: runtime unit tests for project-owned handler logic and schema semantics tests for the exported Zod contracts; snapshots are not the primary unit-test regression tool.
+- Keep the package build tool binding `build: tsup` unchanged; enforce build gating through a deterministic package lifecycle test gate in Unit 9 instead of through a watch-mode test script.
 
 ## Legend
 
@@ -103,4 +109,3 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
 |----------------|-------------|
 | ISOLATED | No blocking dependency on siblings or other units |
 | WAITING | Cross-unit blocker must complete first |
-
