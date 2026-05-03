@@ -221,6 +221,62 @@ describe("read_file_content", () => {
     });
   });
 
+  it("returns the structured byte-range result with explicit continuation offsets", async () => {
+    const result = await getReadFileContentResult(
+      {
+        byteCount: 12,
+        mode: "byte_range",
+        path: "docs/notes.txt",
+        startByte: 0,
+      },
+      ["C:/allowed"],
+    );
+
+    expect(mockedReadFileContentByteRange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        byteCount: 12,
+        startByte: 0,
+        totalFileBytes: 13,
+        validPath: "C:/allowed/docs/notes.txt",
+      }),
+    );
+    expect(result).toEqual({
+      content: "hello world!",
+      endByteExclusive: 12,
+      hasMore: true,
+      mode: "byte_range",
+      nextByteOffset: 12,
+      path: "docs/notes.txt",
+      returnedByteCount: 12,
+      startByte: 0,
+      totalFileBytes: 13,
+    });
+  });
+
+  it("formats line-range reads with explicit continuation metadata", async () => {
+    const output = await handleReadFileContent(
+      {
+        lineCount: 2,
+        mode: "line_range",
+        path: "docs/notes.txt",
+        startLine: 1,
+      },
+      ["C:/allowed"],
+    );
+
+    expect(mockedReadFileContentLineRange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lineCount: 2,
+        startLine: 1,
+        validPath: "C:/allowed/docs/notes.txt",
+      }),
+    );
+    expect(output).toContain("mode: line_range");
+    expect(output).toContain("returnedLineCount: 2");
+    expect(output).toContain("nextLine: 3");
+    expect(output).toContain("1: line one");
+  });
+
   it("formats cursor-based reads with explicit continuation metadata", async () => {
     const output = await handleReadFileContent(
       {
