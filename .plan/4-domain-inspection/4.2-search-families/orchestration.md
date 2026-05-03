@@ -18,16 +18,15 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 
 ## Tasks
 - [ ] **4.2.1 Fixed-string search family tests** → `4.2.1-fixed-string-search-family-tests.md`
-  - Classification: `WAITING`
-  - Blocked By: `1.1`
+  - Classification: `ISOLATED`
+  - Blocked By: `none`
   - Summary: Extends the fixed-string endpoint test and adds mirrored support-surface tests that consume the shared fixture foundation.
 - [ ] **4.2.2 Regex search family tests** → `4.2.2-regex-search-family-tests.md`
-  - Classification: `WAITING`
-  - Blocked By: `1.1`
+  - Classification: `ISOLATED`
+  - Blocked By: `none`
   - Summary: Extends the regex endpoint test and adds mirrored support-surface tests that consume the shared fixture foundation.
 
 ## Internal Dependencies
 | ID | Source Task | Target Task | Type | Status | Description |
 |----|------------|-------------|------|--------|-------------|
-| — | — | — | — | — | No internal sibling dependency; both tasks wait only on the shared fixture foundation. |
-
+| — | — | — | — | — | No internal sibling dependency; both tasks are unblocked now that the shared fixture foundation is done. |

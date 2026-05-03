@@ -4,17 +4,17 @@ file_id: "mcp-filesystem-extended-unit-test-coverage-plan"
 plan_version: 2
 created: "2026-01-05T20:22:00Z"
 last_updated: "2026-01-05T20:22:00Z"
-status: "pending"
+status: "in_progress"
 total_units: 9
-completed_units: 0
+completed_units: 1
 total_tasks_all_levels: 22
-completed_tasks_all_levels: 0
+completed_tasks_all_levels: 1
 hierarchy_depth: 3
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
-resume_frontier_unit: "1"
-resume_frontier_task: "1.1"
-next_frontier_task: "2.1"
+resume_frontier_unit: "4"
+resume_frontier_task: "4.2.1"
+next_frontier_task: "4.2.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -22,15 +22,15 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
 
 ## Navigation
 - **Plan Directory:** `.plan/`
-- **Total Units:** 8
+- **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
-- **Overall Status:** pending
-- **Progress:** 0/21 tasks completed
+- **Overall Status:** in_progress
+- **Progress:** 1/22 tasks completed
 
 ## Execution Frontier
-- **Resume Frontier Unit:** `1`
-- **Resume Frontier Task:** `1.1`
-- **Next Frontier Task:** `2.1`
+- **Resume Frontier Unit:** `4`
+- **Resume Frontier Task:** `4.2.1`
+- **Next Frontier Task:** `4.2.2`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
 - **Frontier Rule:** First establish the shared inspection fixture foundation, then advance into the application and domain coverage slices.
 
@@ -42,9 +42,9 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
 - **Snapshot policy:** No unit-test snapshots as the primary regression mechanism for schema or handler surfaces. Use snapshots only for explicit regression artifacts such as governed fixtures; the REST/OpenAPI snapshot rules are informative only and are not a primary contract surface for this MCP server.
 
 ## Units
-- [ ] **1. Shared Test Foundation** → `.plan/1-shared-test-foundation/orchestration.md`
+- [x] **1. Shared Test Foundation** → `.plan/1-shared-test-foundation/orchestration.md`
   - Classification: `ISOLATED`
-  - Status: `pending` | Tasks: 1 | Completed: 0
+  - Status: `done` | Tasks: 1 | Completed: 1
   - Summary: Establishes shared search-fixture and assertion infrastructure so the inspection search families do not duplicate inline test data.
 - [ ] **2. Application and Entry Composition** → `.plan/2-application-and-entrypoints/orchestration.md`
   - Classification: `ISOLATED`
@@ -82,8 +82,8 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
 ## Cross-Unit Dependencies
 | ID | Source | Target | Type | Status | Description | Shared Files |
 |----|--------|--------|------|--------|-------------|--------------|
-| D1 | `1.1` | `4.2.1` | `WAITING` | `UNRESOLVED` | The fixed-string search family must consume the shared fixture registry, fixture loader, and result assertions from the shared test foundation before final endpoint-family coverage is added. | `test/shared/utils/inspection/search-fixture-registry.ts`, `test/shared/utils/inspection/search-fixture-loader.ts`, `test/shared/utils/inspection/search-result-assertions.ts` |
-| D2 | `1.1` | `4.2.2` | `WAITING` | `UNRESOLVED` | The regex search family must consume the same shared inspection fixture foundation to avoid inline duplicated search fixtures and assertion helpers. | `test/shared/utils/inspection/search-fixture-registry.ts`, `test/shared/utils/inspection/search-fixture-loader.ts`, `test/shared/utils/inspection/search-result-assertions.ts` |
+| D1 | `1.1` | `4.2.1` | `WAITING` | `RESOLVED` | The fixed-string search family must consume the shared fixture registry, fixture loader, and result assertions from the shared test foundation before final endpoint-family coverage is added. | `test/shared/utils/inspection/search-fixture-registry.ts`, `test/shared/utils/inspection/search-fixture-loader.ts`, `test/shared/utils/inspection/search-result-assertions.ts` |
+| D2 | `1.1` | `4.2.2` | `WAITING` | `RESOLVED` | The regex search family must consume the same shared inspection fixture foundation to avoid inline duplicated search fixtures and assertion helpers. | `test/shared/utils/inspection/search-fixture-registry.ts`, `test/shared/utils/inspection/search-fixture-loader.ts`, `test/shared/utils/inspection/search-result-assertions.ts` |
 | D3 | `8.1` | `9.1` | `WAITING` | `UNRESOLVED` | The build-gating manifest change must follow the main test-coverage rollout so the new build precondition references the intended deterministic suite surface. | `package.json` |
 
 ## Notes for Orchestrating Agent

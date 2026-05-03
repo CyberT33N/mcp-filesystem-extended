@@ -4,9 +4,9 @@ file_id: "1"
 unit_name: "Shared Test Foundation"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+ unit_status: "done"
 total_tasks: 1
-completed_tasks: 0
+ completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "1.1"
@@ -18,8 +18,8 @@ todo_window_mode_override: "ACTIVE_ONLY"
 
 ## Navigation
 - **Parent Orchestration:** `PLAN.md`
-- **Unit Status:** pending
-- **Progress:** 0/1 tasks
+- **Unit Status:** done
+- **Progress:** 1/1 tasks
 
 ## Execution Frontier
 - **Resume Frontier Task:** `1.1`
@@ -27,9 +27,9 @@ todo_window_mode_override: "ACTIVE_ONLY"
 - **Todo Window Mode:** `ACTIVE_ONLY`
 
 ## Tasks
-- [ ] **1.1 Shared inspection fixture foundation** → `1.1-shared-inspection-fixture-foundation.md`
+- [x] **1.1 Shared inspection fixture foundation** → `1.1-shared-inspection-fixture-foundation.md`
   - Classification: `ISOLATED`
-  - Status: `pending`
+  - Status: `done`
   - Complexity: `MEDIUM`
   - Execution Surface Band: `GREEN`
   - Primary Split Axis: `artifact_family`
@@ -44,4 +44,3 @@ todo_window_mode_override: "ACTIVE_ONLY"
 
 ## Notes for Orchestrating Agent
 - This unit must complete before the fixed-string and regex search family units start modifying shared inspection fixture paths.
-

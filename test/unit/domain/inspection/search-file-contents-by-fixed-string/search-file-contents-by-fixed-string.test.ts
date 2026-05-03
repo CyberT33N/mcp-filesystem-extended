@@ -1,17 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockedAssertFormattedFixedStringResponseBudget,
   mockedCreateFixedStringSearchAggregateBudgetState,
   mockedDetectIoCapabilityProfile,
-  mockedFormatSearchFixedStringPathOutput,
+  mockedFormatSearchFixedStringContinuationAwareTextOutput,
   mockedGetSearchFixedStringPathResult,
   mockedResolveSearchExecutionPolicy,
 } = vi.hoisted(() => ({
   mockedAssertFormattedFixedStringResponseBudget: vi.fn(),
   mockedCreateFixedStringSearchAggregateBudgetState: vi.fn(),
   mockedDetectIoCapabilityProfile: vi.fn(),
-  mockedFormatSearchFixedStringPathOutput: vi.fn(),
+  mockedFormatSearchFixedStringContinuationAwareTextOutput: vi.fn(),
   mockedGetSearchFixedStringPathResult: vi.fn(),
   mockedResolveSearchExecutionPolicy: vi.fn(),
 }));
@@ -38,7 +42,8 @@ vi.mock(
   () => ({
     assertFormattedFixedStringResponseBudget:
       mockedAssertFormattedFixedStringResponseBudget,
-    formatSearchFixedStringPathOutput: mockedFormatSearchFixedStringPathOutput,
+    formatSearchFixedStringContinuationAwareTextOutput:
+      mockedFormatSearchFixedStringContinuationAwareTextOutput,
   }),
 );
 
@@ -53,6 +58,15 @@ import {
   getSearchFixedStringResult,
   handleSearchFixedString,
 } from "@domain/inspection/search-file-contents-by-fixed-string/handler";
+import {
+  resolveExplicitFileScopeCsvFixturePaths,
+  type ResolvedInspectionSearchFixturePaths,
+} from "@test/shared/utils/inspection/search-fixture-loader";
+import {
+  createExplicitFileScopeHeaderMatchContract,
+  createExpectedInspectionSearchMatch,
+  type ExpectedInspectionSearchMatchContract,
+} from "@test/shared/utils/inspection/search-result-assertions";
 
 const TEST_SEARCH_EXECUTION_POLICY = {
   effectiveCpuRegexTier: CpuRegexTier.B,
@@ -67,7 +81,33 @@ const TEST_SEARCH_EXECUTION_POLICY = {
   taskRecommendedAfterSeconds: 60,
 };
 
+const workspaceRootPath = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../../",
+);
+
+let explicitFileScopeFixturePaths: ResolvedInspectionSearchFixturePaths | undefined;
+let explicitFileScopeMatchContract: ExpectedInspectionSearchMatchContract | undefined;
+
 describe("search_file_contents_by_fixed_string", () => {
+  beforeAll(async () => {
+    const fixturePaths = resolveExplicitFileScopeCsvFixturePaths(workspaceRootPath);
+    const fixtureContent = await readFile(fixturePaths.fileAbsolutePath, "utf8");
+    const [headerLine] = fixtureContent.split(/\r?\n/u);
+
+    if (headerLine === undefined || headerLine === "") {
+      throw new Error(
+        `Fixture '${fixturePaths.fileRelativePath}' must contain a non-empty CSV header line.`,
+      );
+    }
+
+    explicitFileScopeFixturePaths = fixturePaths;
+    explicitFileScopeMatchContract = createExplicitFileScopeHeaderMatchContract(
+      fixturePaths,
+      headerLine,
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -87,6 +127,7 @@ describe("search_file_contents_by_fixed_string", () => {
 
   it("caps the caller result limit at the shared hard cap for single-root fixed-string search", async () => {
     const pathResult = {
+      admissionOutcome: "inline",
       error: null,
       filesSearched: 2,
       matches: [
@@ -99,98 +140,142 @@ describe("search_file_contents_by_fixed_string", () => {
           match: "search_file_contents_by_fixed_string",
         },
       ],
+      nextContinuationState: null,
       root: "src",
       totalMatches: 1,
       truncated: false,
     };
 
     mockedGetSearchFixedStringPathResult.mockResolvedValue(pathResult);
-    mockedFormatSearchFixedStringPathOutput.mockReturnValue(
+    mockedFormatSearchFixedStringContinuationAwareTextOutput.mockReturnValue(
       "formatted fixed-string search output",
     );
 
-    const result = await handleSearchFixedString(
-      ["src"],
-      "search_file_contents_by_fixed_string",
-      ["*.ts"],
-      ["**/dist/**"],
-      [],
-      false,
-      REGEX_SEARCH_MAX_RESULTS_HARD_CAP + 25,
-      true,
-      ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
-    );
+    const result = await handleSearchFixedString({
+      resumeToken: undefined,
+      resumeMode: undefined,
+      searchPaths: ["src"],
+      fixedString: "search_file_contents_by_fixed_string",
+      filePatterns: ["*.ts"],
+      excludePatterns: ["**/dist/**"],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: REGEX_SEARCH_MAX_RESULTS_HARD_CAP + 25,
+      caseSensitive: true,
+      allowedDirectories: ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
+      inspectionResumeSessionStore: undefined,
+    });
 
     expect(mockedGetSearchFixedStringPathResult).toHaveBeenCalledWith(
-      "src",
+      expect.objectContaining({
+        searchPath: "src",
+        fixedString: "search_file_contents_by_fixed_string",
+        filePatterns: ["*.ts"],
+        excludePatterns: ["**/dist/**"],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
+        caseSensitive: true,
+        allowedDirectories: ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
+        executionPolicy: TEST_SEARCH_EXECUTION_POLICY,
+        aggregateBudgetState: { kind: "aggregate-budget-state" },
+        batchRootCount: 1,
+        continuationState: null,
+        requestedResumeMode: null,
+      }),
+    );
+    expect(
+      mockedFormatSearchFixedStringContinuationAwareTextOutput,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roots: [
+          expect.objectContaining({
+            root: "src",
+            totalMatches: 1,
+            truncated: false,
+          }),
+        ],
+        totalLocations: 1,
+        totalMatches: 1,
+        truncated: false,
+      }),
       "search_file_contents_by_fixed_string",
-      ["*.ts"],
-      ["**/dist/**"],
-      [],
-      false,
       REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
-      true,
-      ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
-      TEST_SEARCH_EXECUTION_POLICY,
-      { kind: "aggregate-budget-state" },
     );
     expect(
       mockedAssertFormattedFixedStringResponseBudget,
     ).toHaveBeenCalledWith(
       "search_file_contents_by_fixed_string",
       "formatted fixed-string search output",
+      null,
     );
     expect(result).toBe("formatted fixed-string search output");
   });
 
-  it("preserves root-local failures in the structured multi-root fixed-string result", async () => {
+  it("reuses the shared explicit file-scope fixture in the structured multi-root fixed-string result", async () => {
+    const fixturePaths = explicitFileScopeFixturePaths;
+    const matchContract = explicitFileScopeMatchContract;
+
+    if (fixturePaths === undefined || matchContract === undefined) {
+      throw new Error("Expected shared explicit file-scope fixture state to be initialized.");
+    }
+
     mockedGetSearchFixedStringPathResult
       .mockResolvedValueOnce({
+        admissionOutcome: "inline",
         error: null,
-        filesSearched: 4,
-        matches: [
-          {
-            content: "export const SearchFileContentsByFixedStringArgsSchema = z.object({",
-            file:
-              "src/domain/inspection/search-file-contents-by-fixed-string/schema.ts",
-            line: 20,
-            match: "SearchFileContentsByFixedStringArgsSchema",
-          },
-        ],
-        root: "src",
+        filesSearched: 1,
+        matches: [createExpectedInspectionSearchMatch(matchContract)],
+        nextContinuationState: null,
+        root: fixturePaths.fileRelativePath,
         totalMatches: 1,
         truncated: false,
       })
       .mockRejectedValueOnce(new Error("Fixed-string native lane timed out."));
 
-    const result = await getSearchFixedStringResult(
-      ["src", "fixtures"],
-      "SearchFileContentsByFixedStringArgsSchema",
-      ["*.ts"],
-      [],
-      [],
-      false,
-      25,
-      false,
-      ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
+    const result = await getSearchFixedStringResult({
+      resumeToken: undefined,
+      resumeMode: undefined,
+      searchPaths: [fixturePaths.fileRelativePath, "fixtures"],
+      fixedString: matchContract.expectedMatch,
+      filePatterns: ["**/*.json"],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 25,
+      caseSensitive: true,
+      allowedDirectories: [workspaceRootPath],
+      inspectionResumeSessionStore: undefined,
+    });
+
+    expect(mockedGetSearchFixedStringPathResult).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        searchPath: fixturePaths.fileRelativePath,
+        fixedString: matchContract.expectedMatch,
+        filePatterns: ["**/*.json"],
+        allowedDirectories: [workspaceRootPath],
+        batchRootCount: 2,
+      }),
+    );
+    expect(mockedGetSearchFixedStringPathResult).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        searchPath: "fixtures",
+        fixedString: matchContract.expectedMatch,
+        filePatterns: ["**/*.json"],
+        allowedDirectories: [workspaceRootPath],
+        batchRootCount: 2,
+      }),
     );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       roots: [
         {
           error: null,
-          filesSearched: 4,
-          matches: [
-            {
-              content:
-                "export const SearchFileContentsByFixedStringArgsSchema = z.object({",
-              file:
-                "src/domain/inspection/search-file-contents-by-fixed-string/schema.ts",
-              line: 20,
-              match: "SearchFileContentsByFixedStringArgsSchema",
-            },
-          ],
-          root: "src",
+          filesSearched: 1,
+          matches: [createExpectedInspectionSearchMatch(matchContract)],
+          root: fixturePaths.fileRelativePath,
           totalMatches: 1,
           truncated: false,
         },
