@@ -20,7 +20,7 @@ next_frontier_task: "4.1.3"
 - [x] **4.1.1 Discovery and metadata endpoint tests** → `4.1.1-discovery-and-metadata-endpoint-tests.md`
   - Classification: `ISOLATED`
   - Complexity: `MEDIUM`
-- [ ] **4.1.2 Count and checksum endpoint tests** → `4.1.2-count-and-checksum-endpoint-tests.md`
+- [~] **4.1.2 Count and checksum endpoint tests** → `4.1.2-count-and-checksum-endpoint-tests.md`
   - Classification: `ISOLATED`
   - Complexity: `MEDIUM`
 - [ ] **4.1.3 Read and directory surface tests** → `4.1.3-read-and-directory-surface-tests.md`
