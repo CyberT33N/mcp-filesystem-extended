@@ -4,9 +4,9 @@ file_id: "4.2"
 unit_name: "Search Families"
 parent_orchestration: ".plan/4-domain-inspection/orchestration.md"
 hierarchy_level: 2
-unit_status: "in_progress"
+unit_status: "done"
 total_tasks: 2
-completed_tasks: 1
+completed_tasks: 2
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "4.2.2"
@@ -21,7 +21,7 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
   - Classification: `ISOLATED`
   - Blocked By: `none`
   - Summary: Extends the fixed-string endpoint test and adds mirrored support-surface tests that consume the shared fixture foundation.
-- [ ] **4.2.2 Regex search family tests** → `4.2.2-regex-search-family-tests.md`
+- [x] **4.2.2 Regex search family tests** → `4.2.2-regex-search-family-tests.md`
   - Classification: `ISOLATED`
   - Blocked By: `none`
   - Summary: Extends the regex endpoint test and adds mirrored support-surface tests that consume the shared fixture foundation.
