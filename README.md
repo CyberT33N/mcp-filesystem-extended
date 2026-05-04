@@ -42,6 +42,27 @@ Common installation examples:
 
 After installation, verify with `ugrep --version`.
 
+### Windows permanent fix when `ugrep --version` is not available
+
+If `ugrep` is installed on Windows but `ugrep --version` still cannot be executed, you **MUST** apply the permanent Chocolatey fix below.
+
+This usually means `ChocolateyInstall` is set incorrectly and Chocolatey created the package under the wrong root.
+
+Run:
+
+```powershell
+[Environment]::SetEnvironmentVariable('ChocolateyInstall','C:\ProgramData\chocolatey','Machine')
+$env:ChocolateyInstall = 'C:\ProgramData\chocolatey'
+$env:Path = "C:\ProgramData\chocolatey\bin;$env:Path"
+choco install ugrep --force -y
+```
+
+Then open a **new PowerShell window** and verify again:
+
+```powershell
+ugrep --version
+```
+
 ## Endpoint README TOC
 
 ### Application/server scope
