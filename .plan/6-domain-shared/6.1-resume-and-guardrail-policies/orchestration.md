@@ -18,6 +18,14 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 
 ## Tasks
 - [ ] **6.1.1 Continuation and resume contract tests** → `6.1.1-continuation-and-resume-contract-tests.md`
+  - Classification: `ISOLATED`
+  - Status: `pending`
+  - Summary: Covers continuation admission envelopes, resume-only request validation, and traversal-frame helper behavior for the shared continuation and resume contract family.
 - [ ] **6.1.2 Guardrail policy surface tests** → `6.1.2-guardrail-policy-surface-tests.md`
+  - Classification: `ISOLATED`
+  - Status: `pending`
+  - Summary: Covers filesystem preflight, regex-search safety, text response budgets, tool guardrail error contracts, limit contracts, and gitignore traversal enrichment.
 - [ ] **6.1.3 Traversal policy surface tests** → `6.1.3-traversal-policy-surface-tests.md`
-
+  - Classification: `ISOLATED`
+  - Status: `pending`
+  - Summary: Covers traversal workload sizing, preview-lane behavior, runtime budget shaping, scope policy rules, and workload admission decisions.
