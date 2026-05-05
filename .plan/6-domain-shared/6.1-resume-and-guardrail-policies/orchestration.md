@@ -6,11 +6,11 @@ parent_orchestration: ".plan/6-domain-shared/orchestration.md"
 hierarchy_level: 2
 unit_status: "in_progress"
 total_tasks: 3
-completed_tasks: 1
+completed_tasks: 2
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "6.1.2"
-next_frontier_task: "6.1.3"
+resume_frontier_task: "6.1.3"
+next_frontier_task: "6.2.1"
 todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -21,9 +21,9 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
   - Classification: `ISOLATED`
   - Status: `done`
   - Summary: Covers continuation admission envelopes, resume-only request validation, and traversal-frame helper behavior for the shared continuation and resume contract family.
-- [ ] **6.1.2 Guardrail policy surface tests** → `6.1.2-guardrail-policy-surface-tests.md`
+- [x] **6.1.2 Guardrail policy surface tests** → `6.1.2-guardrail-policy-surface-tests.md`
   - Classification: `ISOLATED`
-  - Status: `pending`
+  - Status: `done`
   - Summary: Covers filesystem preflight, regex-search safety, text response budgets, tool guardrail error contracts, limit contracts, and gitignore traversal enrichment.
 - [ ] **6.1.3 Traversal policy surface tests** → `6.1.3-traversal-policy-surface-tests.md`
   - Classification: `ISOLATED`
