@@ -4,12 +4,12 @@ file_id: "2"
 unit_name: "Application and Entry Composition"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "in_progress"
 total_tasks: 2
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "2.1"
+resume_frontier_task: "2.2"
 next_frontier_task: "2.2"
 todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 ---
@@ -17,7 +17,7 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 # Unit 2: Application and Entry Composition
 
 ## Tasks
-- [ ] **2.1 Server composition and root registration tests** → `2.1-server-composition-and-root-registration-tests.md`
+- [x] **2.1 Server composition and root registration tests** → `2.1-server-composition-and-root-registration-tests.md`
   - Classification: `ISOLATED`
   - Complexity: `MEDIUM`
   - Summary: Covers the composition surfaces that expose the server root, tool catalog root, and server-scope registration.
