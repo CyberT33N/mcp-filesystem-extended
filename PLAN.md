@@ -6,16 +6,16 @@ created: "2026-01-05T20:22:00Z"
 last_updated: "2026-01-05T20:22:00Z"
 status: "in_progress"
 total_units: 9
- completed_units: 3
+ completed_units: 4
  total_tasks_all_levels: 22
- completed_tasks_all_levels: 9
+ completed_tasks_all_levels: 10
 hierarchy_depth: 3
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
- resume_frontier_unit: "2"
- resume_frontier_task: "2.2"
- next_frontier_task: "2.2"
-todo_window_default: "ACTIVE_PLUS_NEXT"
+ resume_frontier_unit: "3"
+ resume_frontier_task: "3.1"
+ next_frontier_task: "3.1"
+todo_window_default: "ACTIVE_ONLY"
 ---
 
 # MCP Filesystem Extended - Unit-Test Coverage Plan
@@ -25,13 +25,13 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
 - **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
 - **Overall Status:** in_progress
-- **Progress:** 9/22 tasks completed
+- **Progress:** 10/22 tasks completed
 
 ## Execution Frontier
-- **Resume Frontier Unit:** `2`
-- **Resume Frontier Task:** `2.2`
-- **Next Frontier Task:** `2.2`
-- **Todo Window Default:** `ACTIVE_PLUS_NEXT`
+- **Resume Frontier Unit:** `3`
+- **Resume Frontier Task:** `3.1`
+- **Next Frontier Task:** `3.1`
+- **Todo Window Default:** `ACTIVE_ONLY`
 - **Frontier Rule:** First establish the shared inspection fixture foundation, then advance into the application and domain coverage slices.
 
 ## Testing Governance Anchors
@@ -46,13 +46,13 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
   - Classification: `ISOLATED`
   - Status: `done` | Tasks: 1 | Completed: 1
   - Summary: Establishes shared search-fixture and assertion infrastructure so the inspection search families do not duplicate inline test data.
-- [ ] **2. Application and Entry Composition** → `.plan/2-application-and-entrypoints/orchestration.md`
+- [x] **2. Application and Entry Composition** → `.plan/2-application-and-entrypoints/orchestration.md`
   - Classification: `ISOLATED`
-  - Status: `in_progress` | Tasks: 2 | Completed: 1
+  - Status: `done` | Tasks: 2 | Completed: 2
   - Summary: Covers server composition, tool registration, public entry wiring, and instruction/description surfaces without touching config or bootstrap.
 - [ ] **3. Domain Comparison** → `.plan/3-domain-comparison/orchestration.md`
   - Classification: `ISOLATED`
-  - Status: `pending` | Tasks: 1 | Completed: 0
+  - Status: `in_progress` | Tasks: 1 | Completed: 0
   - Summary: Adds unit coverage for diff endpoint families and their request/response schema semantics.
 - [x] **4. Domain Inspection** → `.plan/4-domain-inspection/orchestration.md`
   - Classification: `MIXED`
