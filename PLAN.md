@@ -6,15 +6,15 @@ created: "2026-01-05T20:22:00Z"
 last_updated: "2026-01-05T20:22:00Z"
 status: "in_progress"
 total_units: 9
- completed_units: 2
+ completed_units: 3
  total_tasks_all_levels: 22
- completed_tasks_all_levels: 6
+ completed_tasks_all_levels: 8
 hierarchy_depth: 3
 max_hierarchy_depth: 4
 plan_directory: ".plan/"
- resume_frontier_unit: "5"
- resume_frontier_task: "5.1"
- next_frontier_task: "5.2"
+ resume_frontier_unit: "2"
+ resume_frontier_task: "2.1"
+ next_frontier_task: "2.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -25,12 +25,12 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
 - **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
 - **Overall Status:** in_progress
-- **Progress:** 6/22 tasks completed
+- **Progress:** 8/22 tasks completed
 
 ## Execution Frontier
-- **Resume Frontier Unit:** `5`
-- **Resume Frontier Task:** `5.1`
-- **Next Frontier Task:** `5.2`
+- **Resume Frontier Unit:** `2`
+- **Resume Frontier Task:** `2.1`
+- **Next Frontier Task:** `2.2`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
 - **Frontier Rule:** First establish the shared inspection fixture foundation, then advance into the application and domain coverage slices.
 
@@ -58,9 +58,9 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
   - Classification: `MIXED`
   - Status: `done` | Tasks: 5 | Completed: 5
   - Summary: Covers the inspection endpoint families, including filesystem discovery, count/checksum, read surfaces, and the two search families.
-- [ ] **5. Domain Mutation** → `.plan/5-domain-mutation/orchestration.md`
+- [x] **5. Domain Mutation** → `.plan/5-domain-mutation/orchestration.md`
   - Classification: `ISOLATED`
-  - Status: `pending` | Tasks: 2 | Completed: 0
+  - Status: `done` | Tasks: 2 | Completed: 2
   - Summary: Covers mutation endpoint families and the shared mutation guardrails surface.
 - [ ] **6. Domain Shared** → `.plan/6-domain-shared/orchestration.md`
   - Classification: `MIXED`
