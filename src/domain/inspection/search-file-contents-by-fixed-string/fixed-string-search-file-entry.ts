@@ -7,7 +7,7 @@ import {
 import { type SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { readDecodedInspectionTextFile } from "@infrastructure/filesystem/text-read-core";
 import { buildUgrepCommand } from "@infrastructure/search/ugrep-command-builder";
-import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
+import { formatUgrepSpawnFailure, runUgrepSearch } from "@infrastructure/search/ugrep-runner";
 
 import { type FixedStringSearchAggregateBudgetState } from "./fixed-string-search-aggregate-budget-state";
 import {
@@ -218,7 +218,7 @@ export async function collectFixedStringMatchesFromFileEntry(
   const executionResult = await runUgrepSearch(command);
 
   if (executionResult.spawnErrorMessage !== null) {
-    throw new Error(`Native search runner failed to start: ${executionResult.spawnErrorMessage}`);
+    throw new Error(formatUgrepSpawnFailure(executionResult));
   }
 
   if (executionResult.timedOut) {

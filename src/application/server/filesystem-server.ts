@@ -13,6 +13,7 @@ import {
 import { GLOBAL_RESPONSE_HARD_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
+import { getUgrepRuntimeDependency } from "@infrastructure/runtime/ugrep-runtime-dependency";
 
 import { registerToolCatalog } from "./register-tool-catalog";
 import { SERVER_DESCRIPTION } from "./server-description";
@@ -51,12 +52,18 @@ export class FilesystemServer {
   /**
    * Creates the filesystem MCP server for one allowed-directory scope set.
    *
+   * @remarks
+   * Startup preflight must already have resolved the shell-free native `ugrep` dependency before
+   * tool registration begins so content-search lanes never discover missing runtime state only after
+   * request execution has started.
+   *
    * @param allowedDirectories - Filesystem roots that bound all tool access.
    */
   constructor(allowedDirectories: string[]) {
     this.allowedDirectories = allowedDirectories;
     this.inspectionResumeSessionStore = new InspectionResumeSessionSqliteStore();
     this.inspectionResumeSessionStore.cleanupExpiredSessions();
+    getUgrepRuntimeDependency();
 
     this.server = new McpServer(
       {

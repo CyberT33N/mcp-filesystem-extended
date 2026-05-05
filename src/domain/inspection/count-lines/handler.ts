@@ -67,7 +67,7 @@ import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
-import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
+import { formatUgrepSpawnFailure, runUgrepSearch } from "@infrastructure/search/ugrep-runner";
 
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 
@@ -903,7 +903,7 @@ async function countLinesInFile(
   const result = await runUgrepSearch(command);
 
   if (result.spawnErrorMessage !== null) {
-    throw new Error(`Failed to start native pattern-aware line counting: ${result.spawnErrorMessage}`);
+    throw new Error(formatUgrepSpawnFailure(result));
   }
 
   if (result.timedOut) {

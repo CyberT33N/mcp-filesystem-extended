@@ -60,7 +60,7 @@ import {
   REGEX_SEARCH_RESPONSE_CAP_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { buildUgrepCommand } from "@infrastructure/search/ugrep-command-builder";
-import { runUgrepSearch } from "@infrastructure/search/ugrep-runner";
+import { formatUgrepSpawnFailure, runUgrepSearch } from "@infrastructure/search/ugrep-runner";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import { minimatch } from "minimatch";
 
@@ -463,7 +463,7 @@ async function collectRegexMatchesFromFileEntry(
   const executionResult = await runUgrepSearch(command);
 
   if (executionResult.spawnErrorMessage !== null) {
-    throw new Error(`Native search runner failed to start: ${executionResult.spawnErrorMessage}`);
+    throw new Error(formatUgrepSpawnFailure(executionResult));
   }
 
   if (executionResult.timedOut) {

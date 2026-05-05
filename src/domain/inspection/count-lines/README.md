@@ -40,9 +40,11 @@ Do **not** use it as a replacement for:
 
 - total-only counting uses a large-file-safe streaming path,
 - pattern-aware counting stays a counting surface and does not expose match locations,
+- the native pattern-aware lane depends on shell-free `ugrep` runtime state that MCP server startup resolves before request handling begins,
 - broad recursive workloads may move into completion-backed same-endpoint resume,
 - preview-style partial totals are intentionally unsupported,
-- unsupported non-text states must surface explicit unsupported or reroute behavior rather than ambiguous ordinary totals.
+- unsupported non-text states must surface explicit unsupported or reroute behavior rather than ambiguous ordinary totals,
+- native launch failures now include the startup-resolved executable path so runtime dependency issues stay diagnosable.
 
 ---
 

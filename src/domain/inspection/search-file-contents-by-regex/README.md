@@ -45,9 +45,11 @@ Do **not** use it as a replacement for:
 - explicit large text-compatible files may still proceed through the shared regex lane
 - directory-root workloads use the shared traversal admission planner first
 - request-wide regex validation is lane-aware and resolves backend requirements such as lookahead or lookbehind before root execution begins
+- shell-free native `ugrep` dependency resolution is owned by MCP server startup preflight instead of first request execution
 - regex remains text-first and does not imply unrestricted hybrid support
 - per-root `error` surfaces preserve local failures without collapsing sibling roots
 - request-wide regex contract failures do not degrade into per-root `error` payloads
+- launch failures now include the startup-resolved executable path so runtime dependency issues stay diagnosable
 - resumable responses keep full primary data in `content.text` and append continuation guidance afterward
 - `complete-result` uses the global fuse as the final ceiling instead of the regex-family cap
 

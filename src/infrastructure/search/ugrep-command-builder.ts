@@ -1,5 +1,6 @@
 import type { SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import type { PatternClassification } from "@domain/shared/search/pattern-classifier";
+import { getRequiredUgrepExecutablePath } from "@infrastructure/runtime/ugrep-runtime-dependency";
 
 /**
  * Input contract for deterministic `ugrep` command construction.
@@ -132,7 +133,7 @@ export function buildUgrepCommand(input: BuildUgrepCommandInput): UgrepCommand {
 
   return {
     args,
-    executable: "ugrep",
+    executable: getRequiredUgrepExecutablePath(),
     fixedStringMode: input.patternClassification.supportsLiteralFastPath,
     hybridLiteralSearchLane,
     requiresPcre2: input.patternClassification.requiresPcre2,

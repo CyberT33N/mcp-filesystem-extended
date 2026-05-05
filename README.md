@@ -30,7 +30,15 @@ This root README is the DX-first entrypoint. It keeps only shared orientation an
 
 ## External dependency for content search
 
-The regex and fixed-string search lanes depend on `ugrep`.
+The regex, fixed-string, and native pattern-aware count lanes depend on the native `ugrep` executable.
+
+This dependency is now resolved during **MCP server startup preflight**, not lazily during request execution.
+The server expects one of these runtime conditions:
+
+- `UGREP_EXECUTABLE_PATH` points to the native shell-free `ugrep` binary, or
+- the MCP server process `PATH` already contains the directory that holds the native `ugrep` executable.
+
+A successful `ugrep --version` check in an interactive shell is helpful, but it is **not** sufficient by itself. The decisive environment is the **Node.js process that runs the MCP server**.
 
 Common installation examples:
 
@@ -40,7 +48,7 @@ Common installation examples:
 - macOS: `brew install ugrep`
 - Windows: `winget install Genivia.ugrep` or `choco install ugrep`
 
-After installation, verify with `ugrep --version`.
+After installation, verify with `ugrep --version` and then restart the MCP client or IDE process that launches the server so the server runtime can inherit the updated environment.
 
 ### Windows permanent fix when `ugrep --version` is not available
 
@@ -62,6 +70,8 @@ Then open a **new PowerShell window** and verify again:
 ```powershell
 ugrep --version
 ```
+
+If the MCP server still cannot start native search afterward, configure `UGREP_EXECUTABLE_PATH` with the absolute path to `ugrep.exe` for the process that launches the MCP server.
 
 ## Endpoint README TOC
 

@@ -176,6 +176,22 @@ export class UgrepRunner {
 }
 
 /**
+ * Formats the canonical caller-visible failure text for `ugrep` process-start errors.
+ *
+ * @param result - Structured native-search execution result that captured the launch failure.
+ * @returns Caller-visible launch-failure text that includes the resolved executable path.
+ */
+export function formatUgrepSpawnFailure(
+  result: Pick<UgrepSearchExecutionResult, "executable" | "spawnErrorMessage">,
+): string {
+  if (result.spawnErrorMessage === null) {
+    throw new Error("formatUgrepSpawnFailure requires a captured spawnErrorMessage.");
+  }
+
+  return `Native search runner failed to start for executable '${result.executable}': ${result.spawnErrorMessage}`;
+}
+
+/**
  * Executes one structured `ugrep` command plan through the shared runner.
  *
  * @param command - Structured native-search command plan produced by `buildUgrepCommand`.

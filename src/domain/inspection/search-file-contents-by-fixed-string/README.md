@@ -41,8 +41,10 @@ Do **not** use it as a replacement for:
 - explicit large text-compatible files may still proceed through the shared fixed-string lane,
 - directory-root workloads use the shared traversal admission planner first,
 - this endpoint is the preferred literal lane for supported text-compatible and text-dominant hybrid-searchable workloads,
+- shell-free native `ugrep` dependency resolution is owned by MCP server startup preflight instead of first request execution,
 - unsupported pure-binary or binary-dominant surfaces still refuse,
 - per-root `error` surfaces preserve local failures without collapsing sibling roots,
+- launch failures now include the startup-resolved executable path so runtime dependency issues stay diagnosable,
 - resumable responses keep full primary data in `content.text` and append continuation guidance afterward,
 - `complete-result` uses the global fuse as the final ceiling instead of the family cap.
 
