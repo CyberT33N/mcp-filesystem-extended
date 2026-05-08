@@ -8,7 +8,7 @@ status: "in_progress"
 total_units: 9
  completed_units: 6
  total_tasks_all_levels: 22
- completed_tasks_all_levels: 18
+ completed_tasks_all_levels: 19
   hierarchy_depth: 3
   max_hierarchy_depth: 4
   plan_directory: ".plan/"
@@ -25,7 +25,7 @@ total_units: 9
 - **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
 - **Overall Status:** in_progress
-- **Progress:** 18/22 tasks completed
+- **Progress:** 19/22 tasks completed
 
 ## Execution Frontier
 - **Resume Frontier Unit:** `7`
@@ -68,7 +68,7 @@ total_units: 9
   - Summary: Covers continuation/resume contracts, shared guardrail policies, traversal policy surfaces, shared search policy kernels, and the runtime capability profile contract.
 - [ ] **7. Infrastructure** → `.plan/7-infrastructure/orchestration.md`
   - Classification: `MIXED`
-  - Status: `in_progress` | Tasks: 4 | Completed: 2
+  - Status: `in_progress` | Tasks: 4 | Completed: 3
   - Summary: Covers filesystem helpers, streaming read cores, persistence stores, runtime detectors, formatters, loggers, and native search adapters.
 - [ ] **8. Shared Errors** → `.plan/8-shared-errors/orchestration.md`
   - Classification: `ISOLATED`
