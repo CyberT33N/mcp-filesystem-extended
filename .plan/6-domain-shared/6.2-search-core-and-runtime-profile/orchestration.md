@@ -18,5 +18,5 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 
 ## Tasks
 - [x] **6.2.1 Shared search core tests** → `6.2.1-shared-search-core-tests.md`
-- [ ] **6.2.2 Runtime IO capability profile tests** → `6.2.2-runtime-io-capability-profile-tests.md`
+- [~] **6.2.2 Runtime IO capability profile tests** → `6.2.2-runtime-io-capability-profile-tests.md`
 
