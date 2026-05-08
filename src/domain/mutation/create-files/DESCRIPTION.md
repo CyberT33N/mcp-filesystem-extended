@@ -21,6 +21,39 @@ The public registration surface exposes `create_files` as the new-file creation 
 
 ---
 
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits
+- per-file content length limits
+- maximum file-entry count
+- cumulative content-bearing mutation budgeting where the request contract surfaces it
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- successful output remains a concise mutation summary rather than an echoed payload
+- oversized creation payloads are refused rather than truncated
+- existing targets are refused instead of being overwritten in place
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- internal file-materialization implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
+
+---
+
 ## Execution Pipeline
 
 The current additive creation flow is:

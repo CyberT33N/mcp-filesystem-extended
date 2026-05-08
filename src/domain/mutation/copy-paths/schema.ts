@@ -36,7 +36,7 @@ export const CopyPathsArgsSchema = z.object({
          * }
          * ```
          */
-        sourcePath: z.string().max(PATH_MAX_CHARS).describe("Path to the source file or directory"),
+        sourcePath: z.string().max(PATH_MAX_CHARS).describe(`Path to the source file or directory. Each path is capped at ${PATH_MAX_CHARS} characters.`),
         /**
          * Destination path.
          *
@@ -51,7 +51,7 @@ export const CopyPathsArgsSchema = z.object({
          * }
          * ```
          */
-        destinationPath: z.string().max(PATH_MAX_CHARS).describe("Path to the destination file or directory. Missing parent directories are created recursively by this tool."),
+        destinationPath: z.string().max(PATH_MAX_CHARS).describe(`Path to the destination file or directory. Each path is capped at ${PATH_MAX_CHARS} characters. Missing parent directories are created recursively by this tool.`),
         /**
          * Recursive copy flag.
          *
@@ -86,5 +86,5 @@ export const CopyPathsArgsSchema = z.object({
     )
     .min(1)
     .max(MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST)
-    .describe("Copy operations. Pass one operation for a single copy or multiple operations for a batch copy. The tool creates missing destination parent directories recursively, so a separate create_directories call is unnecessary."),
+    .describe(`Copy operations. Pass one operation for a single copy or multiple operations for a batch copy. The tool creates missing destination parent directories recursively, so a separate create_directories call is unnecessary. The request accepts at most ${MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST} operations.`),
 });

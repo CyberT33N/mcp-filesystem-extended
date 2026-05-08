@@ -18,6 +18,8 @@ It owns the rules for:
 
 The endpoint-local architecture description lives in [`DESCRIPTION.md`](./DESCRIPTION.md), and the concise developer-facing summary lives in [`README.md`](./README.md).
 
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+
 ---
 
 ## 2. Canonical Request Surface
@@ -72,6 +74,45 @@ If a requested directory already exists, the runtime does not need a second dest
 ### 3.4 Path validation
 
 Every requested path is validated for safe creation inside the allowed-directory scope before the filesystem mutation begins.
+
+---
+
+## 3A. Public Limit Disclosure Placement
+[INTENT: CONSTRAINT]
+
+`create_directories` belongs to the mutation family and follows the global public-limit-disclosure policy with a request-shape-first emphasis.
+
+### 3A.1 Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the directory-creation request.
+
+For `create_directories`, that includes:
+
+- path-length limits via `PATH_MAX_CHARS`
+- path-count and batch breadth via `MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST`
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### 3A.2 Tool-description disclosure (selective)
+
+Stable operation-wide delivery rules may appear in the runtime tool description, but this family prioritizes concise request-shape communication over aggressive numeric tool-description disclosure.
+
+For `create_directories`, the important runtime rule is that:
+
+- successful output remains a concise path-mutation summary
+- oversized path batches are refused rather than widened into broader mutation behavior
+
+### 3A.3 Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- internal directory-creation implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

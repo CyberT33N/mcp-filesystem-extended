@@ -46,7 +46,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  paths: z.array(z.string().max(PATH_MAX_CHARS)).max(MAX_GENERIC_PATHS_PER_REQUEST).optional().default([]).describe("Paths to files or directories to count. Broad directory roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single count scope or multiple paths for batch line counting; continuation-only requests omit this field and reload the persisted request context."),
+  paths: z.array(z.string().max(PATH_MAX_CHARS)).max(MAX_GENERIC_PATHS_PER_REQUEST).optional().default([]).describe(`Paths to files or directories to count. Broad directory roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single count scope or multiple paths for batch line counting; continuation-only requests omit this field and reload the persisted request context. Each path is capped at ${PATH_MAX_CHARS} characters, and the base request accepts at most ${MAX_GENERIC_PATHS_PER_REQUEST} paths.`),
   /**
    * Recursive traversal switch.
    *
@@ -76,7 +76,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  regex: z.string().max(REGEX_PATTERN_MAX_CHARS).optional().describe("Regular expression applied to counted lines. Base requests provide this field when regex-based line filtering is required; continuation-only requests omit it and reload the persisted request context."),
+  regex: z.string().max(REGEX_PATTERN_MAX_CHARS).optional().describe(`Regular expression applied to counted lines. Base requests provide this field when regex-based line filtering is required; continuation-only requests omit it and reload the persisted request context. The regex pattern is capped at ${REGEX_PATTERN_MAX_CHARS} characters.`),
   /**
    * Include glob filters.
    *
@@ -91,7 +91,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  includeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_INCLUDE_GLOBS_PER_REQUEST).optional().default([]).describe("Glob patterns used to limit which files are included when counting recursively. These file filters do not reopen default-excluded trees by themselves, and continuation-only requests omit them in favor of the persisted request context."),
+  includeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_INCLUDE_GLOBS_PER_REQUEST).optional().default([]).describe(`Glob patterns used to limit which files are included when counting recursively. These file filters do not reopen default-excluded trees by themselves, and continuation-only requests omit them in favor of the persisted request context. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_INCLUDE_GLOBS_PER_REQUEST} include globs.`),
   /**
    * Exclude glob filters.
    *
@@ -106,7 +106,7 @@ export const CountLinesArgsSchema = z.object({
    * }
    * ```
    */
-  excludeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_EXCLUDE_GLOBS_PER_REQUEST).optional().default([]).describe("Glob patterns that add caller-specific exclusions on top of the default excluded trees for the counting scope."),
+  excludeGlobs: z.array(z.string().max(GLOB_PATTERN_MAX_CHARS)).max(MAX_EXCLUDE_GLOBS_PER_REQUEST).optional().default([]).describe(`Glob patterns that add caller-specific exclusions on top of the default excluded trees for the counting scope. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} exclusion globs.`),
   /**
    * Optional `.gitignore` enrichment toggle.
    *
@@ -149,7 +149,7 @@ export const CountLinesArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this count-lines request without changing the file-filter role of `includeGlobs`.",
+      `Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this count-lines request without changing the file-filter role of \`includeGlobs\`. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} reopened-descendant globs.`,
     ),
   /**
    * Empty-line handling mode.

@@ -10,6 +10,8 @@ This file is the endpoint-local single source of truth for `diff_text_content` c
 
 The workspace-level `CONVENTIONS.md` is a TOC surface. It should re-reference this local file instead of duplicating endpoint-specific detail.
 
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+
 ---
 
 ## Architectural Principle: In-Memory Raw-Text Comparison Only
@@ -64,6 +66,49 @@ The currently relevant local limits are:
 - `TEXT_DIFF_RESPONSE_CAP_CHARS = 240,000`
 
 This endpoint must therefore be documented as a bounded raw-text comparison surface, not as an unbounded arbitrary text diff engine.
+
+---
+
+## Public Limit Disclosure Placement
+
+`diff_text_content` belongs to the raw-text comparison family and follows the global public-limit-disclosure policy with a caller-supplied-content emphasis.
+
+### Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the request.
+
+For `diff_text_content`, that includes:
+
+- pair-count ceiling via `MAX_RAW_TEXT_DIFF_PAIRS_PER_REQUEST`
+- per-content ceiling via `RAW_CONTENT_MAX_CHARS`
+- per-label ceiling via `LABEL_MAX_CHARS`
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### Tool-description disclosure (required)
+
+Stable operation-wide delivery rules belong in the runtime tool description because they shape caller planning for the full diff surface.
+
+For `diff_text_content`, that includes:
+
+- successful raw-text diff output remains bounded by the raw-text diff family response cap
+- oversized in-memory comparison sets must be shortened or split
+
+The endpoint-local rule is therefore:
+
+> Raw-text diff response budgeting must be disclosed in the runtime tool description through constant-backed builders rather than endpoint-local hardcoded prose.
+
+### Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- internal diff shaping heuristics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

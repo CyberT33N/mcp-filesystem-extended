@@ -33,6 +33,11 @@ The important endpoint-local defaults are:
 - timestamp metadata is opt-in
 - permission metadata is opt-in
 
+The public request contract exposes stable caller-actionable request limits directly on the parameter surface:
+
+- requested paths remain bounded by the shared path-length cap
+- the request batch remains bounded by the shared generic path-count ceiling
+
 ### Metadata selection semantics
 
 The grouped metadata selectors widen output shape without changing the endpoint's ownership model:
@@ -132,6 +137,37 @@ This endpoint preserves several invariants that matter for autonomous agents and
 - single-path and batch text formatting are deterministic for the same structured result
 
 These invariants make repeated metadata inspection safer to compare and easier to reason about when agents perform follow-up operations.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits
+- maximum path count
+- grouped metadata selection semantics
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- caller-visible metadata output remains bounded by the metadata-family response budget
+- oversized multi-path requests may be refused rather than treated as a continuation-driven discovery surface
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- traversal emergency-runtime ceilings
+- internal metadata formatting heuristics
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

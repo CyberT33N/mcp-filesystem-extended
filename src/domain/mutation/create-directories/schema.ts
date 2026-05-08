@@ -24,5 +24,5 @@ export const CreateDirectoriesArgsSchema = z.object({
     .array(z.string().max(PATH_MAX_CHARS))
     .min(1)
     .max(MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST)
-    .describe("Paths of directories to create. Pass one path for a single directory creation or multiple paths for a batch directory creation."),
+    .describe(`Paths of directories to create. Pass one path for a single directory creation or multiple paths for a batch directory creation. Each path is capped at ${PATH_MAX_CHARS} characters, and the request accepts at most ${MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST} directory paths.`),
 });

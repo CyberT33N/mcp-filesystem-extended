@@ -37,7 +37,7 @@ export const DiffTextContentArgsSchema = z.object({
          * }
          * ```
          */
-        leftContent: z.string().max(RAW_CONTENT_MAX_CHARS).describe("First content string to compare"),
+        leftContent: z.string().max(RAW_CONTENT_MAX_CHARS).describe(`First content string to compare. Each content string is capped at ${RAW_CONTENT_MAX_CHARS} characters.`),
         /**
          * Right-hand content.
          *
@@ -52,7 +52,7 @@ export const DiffTextContentArgsSchema = z.object({
          * }
          * ```
          */
-        rightContent: z.string().max(RAW_CONTENT_MAX_CHARS).describe("Second content string to compare"),
+        rightContent: z.string().max(RAW_CONTENT_MAX_CHARS).describe(`Second content string to compare. Each content string is capped at ${RAW_CONTENT_MAX_CHARS} characters.`),
         /**
          * Left-hand label.
          *
@@ -67,7 +67,7 @@ export const DiffTextContentArgsSchema = z.object({
          * }
          * ```
          */
-        leftLabel: z.string().max(LABEL_MAX_CHARS).optional().default("original").describe("Label for the first content"),
+        leftLabel: z.string().max(LABEL_MAX_CHARS).optional().default("original").describe(`Label for the first content. Labels are capped at ${LABEL_MAX_CHARS} characters.`),
         /**
          * Right-hand label.
          *
@@ -82,10 +82,10 @@ export const DiffTextContentArgsSchema = z.object({
          * }
          * ```
          */
-        rightLabel: z.string().max(LABEL_MAX_CHARS).optional().default("modified").describe("Label for the second content"),
+        rightLabel: z.string().max(LABEL_MAX_CHARS).optional().default("modified").describe(`Label for the second content. Labels are capped at ${LABEL_MAX_CHARS} characters.`),
       })
     )
     .min(1)
     .max(MAX_RAW_TEXT_DIFF_PAIRS_PER_REQUEST)
-    .describe("Text-content pairs to diff. Pass one pair for a single diff or multiple pairs for batch diff generation."),
+    .describe(`Text-content pairs to diff. Pass one pair for a single diff or multiple pairs for batch diff generation. The request accepts at most ${MAX_RAW_TEXT_DIFF_PAIRS_PER_REQUEST} pairs.`),
 });

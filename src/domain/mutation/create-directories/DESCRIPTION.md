@@ -36,6 +36,37 @@ It is not a file-creation endpoint and not a source-to-destination copy or move 
 
 ---
 
+## 2A. Public Limit Disclosure Model
+[INTENT: SPECIFICATION]
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### 2A.1 Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits
+- maximum path count / batch breadth for one mutation request
+
+### 2A.2 Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- successful output remains a concise path-mutation summary rather than a content-heavy payload
+- oversized path batches are refused rather than widened into broader mutation behavior
+
+### 2A.3 Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- internal directory-creation implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
+
+---
+
 ## 3. Endpoint Architecture
 [INTENT: SPECIFICATION]
 

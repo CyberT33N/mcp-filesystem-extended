@@ -17,6 +17,11 @@ The caller sends `pairs`, where each pair contains:
 
 The current schema accepts one or more pairs, validates the pair count against the comparison family cap, and constrains the caller path strings before the handler runs.
 
+The public request contract therefore exposes stable caller-actionable request limits directly on the parameter surface:
+
+- file paths remain bounded by the shared path-length cap
+- the pair batch remains bounded by the shared file-backed comparison ceiling
+
 The public registration surface exposes `diff_files` as the on-disk unified-diff tool.
 
 ---
@@ -62,6 +67,36 @@ This endpoint is text-result oriented. It does not move primary comparison data 
 - `diff_text_content` follows the stricter raw-text caller-input budget model.
 
 This distinction must remain explicit in all endpoint-local documentation.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits
+- pair-count ceiling
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- successful file-backed diff output remains bounded by the file-diff family response cap
+- oversized comparison sets must be narrowed or split rather than treated as an unbounded diff surface
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- internal diff shaping heuristics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

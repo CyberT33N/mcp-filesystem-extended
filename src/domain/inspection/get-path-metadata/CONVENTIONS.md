@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `get_path_metadata`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices. This file does not duplicate those broader rules. It explains how they apply specifically to the structured metadata lookup surface.
+Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the structured metadata lookup surface.
 
 ---
 
@@ -95,9 +95,47 @@ When more than one path is requested, the text response becomes a grouped batch 
 This batch formatting is a caller-visible convenience surface only. The structured `entries` / `errors` contract remains the authoritative metadata surface.
 
 ---
+---
+
+## Public Limit Disclosure Placement
+
+`get_path_metadata` belongs to the metadata and integrity family and follows the global public-limit-disclosure policy with a request-shape-first emphasis.
+
+### Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the request.
+
+For `get_path_metadata`, that includes:
+
+- path-length limits via `PATH_MAX_CHARS`
+- path-count ceiling via `MAX_GENERIC_PATHS_PER_REQUEST`
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### Tool-description disclosure (selective)
+
+Stable operation-wide delivery rules may appear in the runtime tool description, but this family prioritizes concise request-shape communication over aggressive numeric tool-description disclosure.
+
+For `get_path_metadata`, the important runtime rule is simply that:
+
+- caller-visible metadata output remains bounded by the metadata-family response budget
+- oversized multi-path requests may still be refused
+
+### Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- traversal emergency-runtime ceilings
+- internal metadata formatting heuristics
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
+
+---
 
 ## Metadata-Family Guardrail Conventions
-
 `get_path_metadata` belongs to the metadata and integrity family rather than the recursive traversal or preview-first resume families.
 
 The endpoint-specific implications are:

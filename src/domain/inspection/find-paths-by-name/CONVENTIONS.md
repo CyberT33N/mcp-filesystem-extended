@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `find_paths_by_name`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail and resume-architecture slices. This file does not duplicate those broader rules. It explains how they apply specifically to the name-based path discovery surface.
+Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail and resume-architecture slices, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the name-based path discovery surface.
 
 ---
 
@@ -92,6 +92,52 @@ The endpoint-specific implications are:
 - Narrowing roots or tightening `nameContains` remains the first-class way to reduce workload.
 
 This endpoint must not imply that callers can bypass the shared traversal hardening baseline by default. The additive controls reopen named descendants only within that existing server-owned policy.
+
+---
+
+## Public Limit Disclosure Placement
+
+`find_paths_by_name` belongs to the discovery family and follows the global public-limit-disclosure policy with a name-discovery-specific emphasis.
+
+### Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the request.
+
+For `find_paths_by_name`, that includes:
+
+- root-path length via `PATH_MAX_CHARS`
+- root-count ceiling via `MAX_DISCOVERY_ROOTS_PER_REQUEST`
+- substring-length ceiling via `LABEL_MAX_CHARS`
+- exclusion and reopened-descendant glob ceilings via `GLOB_PATTERN_MAX_CHARS` and `MAX_EXCLUDE_GLOBS_PER_REQUEST`
+- result-count ceiling via `DISCOVERY_MAX_RESULTS_HARD_CAP`
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### Tool-description disclosure (required, mode-aware)
+
+Stable operation-wide delivery rules belong in the runtime tool description because they shape caller planning for the full result surface.
+
+For `find_paths_by_name`, that includes:
+
+- inline and `next-chunk` delivery remain bounded by the discovery-family response cap
+- `complete-result` is additive and follows the shared global fuse instead of the discovery-family cap
+- broad valid workloads may degrade into preview-first delivery, same-endpoint resume, or explicit narrowing guidance
+
+The endpoint-local rule is therefore:
+
+> Discovery-family response budgeting must be disclosed in the runtime tool description as a mode-aware contract, not as a blanket single-number rule.
+
+### Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- traversal emergency-runtime ceilings
+- internal admission and probe internals
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal traversal-protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

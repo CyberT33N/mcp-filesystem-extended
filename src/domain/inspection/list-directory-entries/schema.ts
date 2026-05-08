@@ -46,7 +46,7 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Paths to directories to list. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single listing root or multiple paths for batch listing roots; resume-only requests omit this field and reload the persisted request context."
+      `Paths to directories to list. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single listing root or multiple paths for batch listing roots; resume-only requests omit this field and reload the persisted request context. Each root path is capped at ${PATH_MAX_CHARS} characters, and the base request accepts at most ${MAX_DISCOVERY_ROOTS_PER_REQUEST} roots.`
     ),
   /**
    * Recursive traversal mode.
@@ -106,7 +106,7 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob-like patterns that add caller-specific exclusions on top of the default excluded trees for the structured listing output."
+      `Glob-like patterns that add caller-specific exclusions on top of the default excluded trees for the structured listing output. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} exclusion globs.`
     ),
   /**
    * Optional `.gitignore` enrichment toggle.
@@ -150,7 +150,7 @@ export const ListDirectoryEntriesArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this listing request without broadening the full root scope."
+      `Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this listing request without broadening the full root scope. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} reopened-descendant globs.`
     ),
 }).superRefine((args, ctx) => {
   const resumeRequest = args.resumeToken !== undefined;

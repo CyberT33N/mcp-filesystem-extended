@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   MAX_CONTENT_FILES_PER_REQUEST,
+  MAX_TOTAL_RAW_TEXT_REQUEST_CHARS,
   PATH_MAX_CHARS,
   RAW_CONTENT_MAX_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
@@ -38,7 +39,7 @@ export const CreateFilesArgsSchema = z.object({
          * }
          * ```
          */
-        path: z.string().max(PATH_MAX_CHARS).describe("Path to the file to write"),
+        path: z.string().max(PATH_MAX_CHARS).describe(`Path to the file to write. Each path is capped at ${PATH_MAX_CHARS} characters.`),
         /**
          * File content payload.
          *
@@ -53,10 +54,10 @@ export const CreateFilesArgsSchema = z.object({
          * }
          * ```
          */
-        content: z.string().max(RAW_CONTENT_MAX_CHARS).describe("Content to write to the file"),
+        content: z.string().max(RAW_CONTENT_MAX_CHARS).describe(`Content to write to the file. Each content payload is capped at ${RAW_CONTENT_MAX_CHARS} characters.`),
       })
     )
     .min(1)
     .max(MAX_CONTENT_FILES_PER_REQUEST)
-    .describe("Files to create. Pass one file for a single creation or multiple files for a batch creation."),
+    .describe(`Files to create. Pass one file for a single creation or multiple files for a batch creation. The request accepts at most ${MAX_CONTENT_FILES_PER_REQUEST} file entries, and the cumulative raw-text input across the request is capped at ${MAX_TOTAL_RAW_TEXT_REQUEST_CHARS} characters.`),
 });

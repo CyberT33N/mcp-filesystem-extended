@@ -36,6 +36,39 @@ It is not a non-destructive copy endpoint and not a destination-free delete surf
 
 ---
 
+## 2A. Public Limit Disclosure Model
+[INTENT: SPECIFICATION]
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### 2A.1 Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- source and destination path-length limits
+- maximum operation count / batch breadth for one mutation request
+- overwrite semantics on the relevant public field
+
+### 2A.2 Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- successful output remains a concise path-mutation summary rather than a content-heavy payload
+- unsafe overwrite or relocation conflicts are refused server-side
+- missing destination parent directories are created by this endpoint without a separate prerequisite call
+
+### 2A.3 Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- internal relocation/rename implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
+
+---
+
 ## 3. Endpoint Architecture
 [INTENT: SPECIFICATION]
 

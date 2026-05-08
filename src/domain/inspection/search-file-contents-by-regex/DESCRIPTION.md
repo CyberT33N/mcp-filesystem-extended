@@ -39,6 +39,14 @@ The important endpoint-local defaults are:
 - `maxResults` defaults to `100`
 - `caseSensitive` defaults to `false`
 
+The public request contract exposes stable caller-actionable request limits directly on the parameter surface:
+
+- scope paths remain bounded by the shared path-length cap
+- the base request remains bounded by the shared regex-root ceiling
+- the regex pattern remains bounded by the shared regex-length ceiling
+- include, exclude, and reopened-descendant globs remain bounded by the shared glob and glob-count ceilings
+- `maxResults` remains bounded by the shared regex-search result hard cap
+
 ### Resume request surface
 
 Resume requests are intentionally separate from base requests.
@@ -157,6 +165,41 @@ The top-level result also carries:
 - `resume`
 
 `totalLocations` tracks emitted match locations, while `totalMatches` tracks aggregate matches encountered across roots before all bounded shaping completed.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits
+- maximum scope count
+- regex-length limit
+- include/exclude/reopened-descendant glob ceilings
+- result-count ceiling for `maxResults`
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- inline and `next-chunk` delivery remain bounded by the regex-search family response cap
+- `complete-result` is additive and follows the shared global fuse instead of the regex-search family cap
+- broad valid workloads may still degrade into preview-first delivery, same-endpoint resume, or narrowing guidance
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- traversal emergency-runtime ceilings
+- dynamic lane-tier budgets
+- internal admission and probe internals
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal execution-protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

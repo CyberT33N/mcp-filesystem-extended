@@ -35,7 +35,7 @@ export const DiffFilesArgsSchema = z.object({
          * }
          * ```
          */
-        leftPath: z.string().max(PATH_MAX_CHARS).describe("Path to the first file in the diff pair"),
+        leftPath: z.string().max(PATH_MAX_CHARS).describe(`Path to the first file in the diff pair. Each path is capped at ${PATH_MAX_CHARS} characters.`),
         /**
          * Right-hand file path.
          *
@@ -50,10 +50,10 @@ export const DiffFilesArgsSchema = z.object({
          * }
          * ```
          */
-        rightPath: z.string().max(PATH_MAX_CHARS).describe("Path to the second file in the diff pair"),
+        rightPath: z.string().max(PATH_MAX_CHARS).describe(`Path to the second file in the diff pair. Each path is capped at ${PATH_MAX_CHARS} characters.`),
       })
     )
     .min(1)
     .max(MAX_COMPARISON_PAIRS_PER_REQUEST)
-    .describe("File pairs to diff. Pass one pair for a single diff or multiple pairs for batch diff generation."),
+    .describe(`File pairs to diff. Pass one pair for a single diff or multiple pairs for batch diff generation. The request accepts at most ${MAX_COMPARISON_PAIRS_PER_REQUEST} pairs.`),
 });

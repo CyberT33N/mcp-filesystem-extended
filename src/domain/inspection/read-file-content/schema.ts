@@ -53,7 +53,7 @@ const readFileContentPathSchema = z
   .string()
   .max(PATH_MAX_CHARS)
   .describe(
-    "Single file path to read. This endpoint accepts exactly one file target and does not behave as a multi-file batch read."
+    `Single file path to read. This endpoint accepts exactly one file target, does not behave as a multi-file batch read, and limits the path string to ${PATH_MAX_CHARS} characters.`
   );
 
 const lineCountSchema = z
@@ -62,7 +62,7 @@ const lineCountSchema = z
   .min(1)
   .max(READ_FILE_CONTENT_LINE_RANGE_MAX_LINES)
   .describe(
-    "Maximum number of lines to return for `line_range` mode. Defaults to 500 lines and is hard-capped at 2000 lines."
+    `Maximum number of lines to return for \`line_range\` mode. Defaults to ${READ_FILE_CONTENT_LINE_RANGE_DEFAULT_LINES} lines and is hard-capped at ${READ_FILE_CONTENT_LINE_RANGE_MAX_LINES} lines.`
   );
 
 const byteCountSchema = z
@@ -71,7 +71,7 @@ const byteCountSchema = z
   .min(1)
   .max(READ_FILE_CONTENT_BYTE_RANGE_MAX_BYTES)
   .describe(
-    "Maximum number of bytes to return for `byte_range` or `chunk_cursor` mode. Defaults to 256 KiB and is hard-capped at 1 MiB."
+    `Maximum number of bytes to return for \`byte_range\` or \`chunk_cursor\` mode. Defaults to ${READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES} bytes and is hard-capped at ${READ_FILE_CONTENT_BYTE_RANGE_MAX_BYTES} bytes.`
   );
 
 const lineRangeStartSchema = z
@@ -94,7 +94,7 @@ const chunkCursorSchema = z
   .optional()
   .default(null)
   .describe(
-    "Opaque continuation cursor returned by a previous `chunk_cursor` response. Omit or pass null to start from the beginning of the file."
+    `Opaque continuation cursor returned by a previous \`chunk_cursor\` response. Omit or pass null to start from the beginning of the file. Cursor strings are capped at ${READ_FILE_CONTENT_CURSOR_MAX_CHARS} characters.`
   );
 
 const ReadFileContentCanonicalFullRequestSchema = z.object({
@@ -132,7 +132,7 @@ const ReadFileContentPublicLineRangeWindowSchema = z
       .min(1)
       .optional()
       .describe(
-        "Inclusive 1-based line number at which the public `line-range` window ends. When omitted, the default line window is used."
+        `Inclusive 1-based line number at which the public \`line-range\` window ends. When omitted, the default line window is used. The inclusive public line window may not exceed ${READ_FILE_CONTENT_LINE_RANGE_MAX_LINES} lines.`
       ),
   })
   .superRefine((value, ctx) => {
@@ -168,7 +168,7 @@ const ReadFileContentPublicByteRangeWindowSchema = z
       .min(1)
       .optional()
       .describe(
-        "Zero-based exclusive byte offset at which the public `byte-range` window ends. When omitted, the bounded byte-count window is used."
+        `Zero-based exclusive byte offset at which the public \`byte-range\` window ends. When omitted, the bounded byte-count window is used. The total public byte window may not exceed ${READ_FILE_CONTENT_BYTE_RANGE_MAX_BYTES} bytes.`
       ),
     byteCount: byteCountSchema.optional(),
   })
@@ -281,13 +281,13 @@ export const ReadFileContentFlatArgsSchema = z.object({
       "Read mode that determines which bounded-read contract is applied. Use `full` for small files, `line-range` for line-windowed access, `byte-range` for byte-offset access, and `chunk-cursor` for cursor-based streaming."
     ),
   line_range: ReadFileContentPublicLineRangeWindowSchema.optional().describe(
-    "Mode-specific option block accepted only when `mode = 'line-range'`. Defines the inclusive start and optional end line for the bounded line-window read."
+    `Mode-specific option block accepted only when \`mode = 'line-range'\`. Defines the inclusive start and optional end line for the bounded line-window read. The default window starts at line 1 and remains bounded by the ${READ_FILE_CONTENT_LINE_RANGE_MAX_LINES}-line hard cap.`
   ),
   byte_range: ReadFileContentPublicByteRangeWindowSchema.optional().describe(
-    "Mode-specific option block accepted only when `mode = 'byte-range'`. Defines the start byte offset and either an exclusive end offset or a byte-count window."
+    `Mode-specific option block accepted only when \`mode = 'byte-range'\`. Defines the start byte offset and either an exclusive end offset or a byte-count window. The public byte window remains bounded by the ${READ_FILE_CONTENT_BYTE_RANGE_MAX_BYTES}-byte hard cap.`
   ),
   chunk_cursor: ReadFileContentPublicChunkCursorWindowSchema.optional().describe(
-    "Mode-specific option block accepted only when `mode = 'chunk-cursor'`. Carries the opaque continuation cursor and the requested byte-count window."
+    `Mode-specific option block accepted only when \`mode = 'chunk-cursor'\`. Carries the opaque continuation cursor and the requested byte-count window. The byte window defaults to ${READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES} bytes, is hard-capped at ${READ_FILE_CONTENT_BYTE_RANGE_MAX_BYTES} bytes, and the cursor string remains capped at ${READ_FILE_CONTENT_CURSOR_MAX_CHARS} characters.`
   ),
 });
 

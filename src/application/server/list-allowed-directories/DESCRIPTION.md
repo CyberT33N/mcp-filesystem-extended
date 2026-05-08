@@ -34,6 +34,35 @@ It is not a domain-owned inspection endpoint and not a filesystem mutation surfa
 
 ---
 
+## 2A. Public Limit Disclosure Model
+[INTENT: SPECIFICATION]
+
+`list_allowed_directories` follows the global public-limit-disclosure policy with a server-scope-specific non-prioritization rule.
+
+### 2A.1 Parameter surface
+
+This endpoint exposes no caller-supplied request payload.
+
+There is therefore no parameter-level limit-disclosure surface to populate.
+
+### 2A.2 Tool-description surface
+
+The runtime tool description should explain only that this endpoint is the compact text-only scope-disclosure surface for the effective `allowedDirectories` boundary.
+
+It should not be overloaded with numeric contract limits that do not materially change tool selection or argument construction.
+
+### 2A.3 Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as a planning number,
+- traversal emergency-runtime ceilings,
+- response-family budgeting rules from content-heavy endpoint families.
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract for this endpoint.
+
+---
+
 ## 3. Endpoint Architecture
 [INTENT: SPECIFICATION]
 

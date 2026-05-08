@@ -31,6 +31,12 @@ The important endpoint-local defaults are:
 - `algorithm` defaults to `sha256`
 - algorithm selection is limited to the schema-owned enum
 
+The public request contract exposes stable caller-actionable request limits directly on the parameter surface:
+
+- requested paths remain bounded by the shared path-length cap
+- the request batch remains bounded by the shared generic path-count ceiling
+- algorithm choice remains bounded to the schema-owned enum
+
 ### Algorithm selection semantics
 
 The schema controls which checksum algorithms are allowed.
@@ -116,6 +122,37 @@ The endpoint therefore preserves successful checksum entries and failed file err
 - consumers must inspect both arrays for batch requests
 
 This is important for autonomous agents that may otherwise mistake a non-empty `entries` array for full batch success.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits
+- maximum path count
+- bounded algorithm selection through the schema enum
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- caller-visible checksum output remains bounded by the metadata-family response budget
+- oversized multi-file requests may be refused rather than treated as a continuation-driven discovery surface
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- traversal emergency-runtime ceilings
+- internal hash-generation implementation mechanics
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

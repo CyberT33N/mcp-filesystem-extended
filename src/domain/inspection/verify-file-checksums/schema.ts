@@ -40,7 +40,7 @@ export const VerifyFileChecksumsArgsSchema = z.object({
          * }
          * ```
          */
-        path: z.string().max(PATH_MAX_CHARS).describe("Path to the file to verify"),
+        path: z.string().max(PATH_MAX_CHARS).describe(`Path to the file to verify. Each path is capped at ${PATH_MAX_CHARS} characters.`),
         /**
          * Expected hash value.
          *
@@ -55,12 +55,12 @@ export const VerifyFileChecksumsArgsSchema = z.object({
          * }
          * ```
          */
-        expectedHash: z.string().max(HASH_STRING_MAX_CHARS).describe("Expected hash value to compare against"),
+        expectedHash: z.string().max(HASH_STRING_MAX_CHARS).describe(`Expected hash value to compare against. The expected hash string is capped at ${HASH_STRING_MAX_CHARS} characters.`),
       })
     )
     .min(1)
     .max(MAX_GENERIC_PATHS_PER_REQUEST)
-    .describe("Files to verify with their expected hashes. Pass one file for a single verification or multiple files for a batch verification."),
+    .describe(`Files to verify with their expected hashes. Pass one file for a single verification or multiple files for a batch verification. The request accepts at most ${MAX_GENERIC_PATHS_PER_REQUEST} file entries.`),
   /**
    * Hash algorithm selection.
    *
@@ -75,7 +75,7 @@ export const VerifyFileChecksumsArgsSchema = z.object({
    * }
    * ```
    */
-  algorithm: z.enum(["md5", "sha1", "sha256", "sha512"]).default("sha256").describe("Hash algorithm to use"),
+  algorithm: z.enum(["md5", "sha1", "sha256", "sha512"]).default("sha256").describe("Hash algorithm to use. Defaults to `sha256`."),
 });
 
 export const VerifyFileChecksumsResultSchema = z.object({

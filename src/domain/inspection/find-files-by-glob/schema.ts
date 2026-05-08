@@ -39,7 +39,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Root directories to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single glob search scope or multiple paths for batch glob searches; resume-only requests omit this field and reload the persisted request context."
+      `Root directories to search in. Broad roots exclude default vendor/cache trees by default, while explicit roots inside excluded trees remain valid. Base requests pass one path for a single glob search scope or multiple paths for batch glob searches; resume-only requests omit this field and reload the persisted request context. Each root path is capped at ${PATH_MAX_CHARS} characters, and the base request accepts at most ${MAX_DISCOVERY_ROOTS_PER_REQUEST} roots.`
     ),
   /**
    * Match glob.
@@ -60,7 +60,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .max(GLOB_PATTERN_MAX_CHARS)
     .optional()
     .describe(
-      "**Required for base requests.** Glob pattern used for path matching, for example '**\/*.ts'. Base requests provide this field for path matching; resume-only requests omit it and reload the persisted request context."
+      `**Required for base requests.** Glob pattern used for path matching, for example '**\/*.ts'. Base requests provide this field for path matching; resume-only requests omit it and reload the persisted request context. The glob pattern is capped at ${GLOB_PATTERN_MAX_CHARS} characters.`
     ),
   /**
    * Exclusion globs.
@@ -81,7 +81,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .max(MAX_EXCLUDE_GLOBS_PER_REQUEST)
     .optional()
     .default([])
-    .describe("Glob patterns that add caller-specific exclusions on top of the default excluded trees for the file search scope."),
+    .describe(`Glob patterns that add caller-specific exclusions on top of the default excluded trees for the file search scope. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} exclusion globs.`),
   /**
    * Optional `.gitignore` enrichment toggle.
    *
@@ -124,7 +124,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this file search request without broadening the full root scope."
+      `Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this file search request without broadening the full root scope. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} reopened-descendant globs.`
     ),
   /**
    * Result ceiling.
@@ -145,7 +145,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .max(DISCOVERY_MAX_RESULTS_HARD_CAP)
     .optional()
     .default(DISCOVERY_MAX_RESULTS_HARD_CAP)
-    .describe("Maximum number of path results to return before truncation."),
+    .describe(`Maximum number of path results to return before truncation. The value may not exceed the hard cap of ${DISCOVERY_MAX_RESULTS_HARD_CAP} results.`),
 }).superRefine((args, ctx) => {
   const resumeRequest = args.resumeToken !== undefined;
   const hasQueryDefiningFields =

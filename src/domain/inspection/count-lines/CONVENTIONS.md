@@ -42,6 +42,52 @@ Wichtig ist dabei:
 
 ---
 
+## Architektonische Entscheidung — Public Limit Disclosure Placement
+
+`count_lines` folgt der globalen Public-Limit-Disclosure-Governance aus [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md), aber mit einer count-family-spezifischen Ausprägung.
+
+### Parameter-description disclosure (erforderlich)
+
+Stabile Request-Shape-Limits gehören in die schema-getragenen Parameterbeschreibungen, weil der Caller sie beim Bauen des Requests braucht.
+
+Für `count_lines` betrifft das:
+
+- Path-Längen via `PATH_MAX_CHARS`
+- Path-Anzahl via `MAX_GENERIC_PATHS_PER_REQUEST`
+- Regex-Länge via `REGEX_PATTERN_MAX_CHARS`
+- Include-/Exclude-/Reopen-Glob-Grenzen via `GLOB_PATTERN_MAX_CHARS`, `MAX_INCLUDE_GLOBS_PER_REQUEST` und `MAX_EXCLUDE_GLOBS_PER_REQUEST`
+
+Die endpoint-lokale Regel lautet daher:
+
+> Request-shape Limits müssen in [`schema.ts`](./schema.ts) über konstantengebundene Parameterbeschreibungen offengelegt werden.
+
+### Tool-description disclosure (erforderlich, aber delivery-orientiert)
+
+Stabile operation-wide Delivery-Regeln gehören in die Runtime-Toolbeschreibung, weil sie die Erwartung an die gesamte Result-Surface prägen.
+
+Für `count_lines` betrifft das:
+
+- final inline and aggregated counting output remain bounded by the count-family response cap
+- sobald der Workload die Inline-Lane verlässt, gibt es nur same-endpoint `complete-result`
+- preview-style partial totals bleiben ausgeschlossen
+
+Die endpoint-lokale Regel lautet daher:
+
+> Die Counting-Familie priorisiert im Tooltext primär den Delivery-Vertrag und nicht eine aggressiv numerische Cap-Kommunikation wie die Read-Familie.
+
+### Nicht priorisierte interne Limits (erforderliche Non-Disclosure-Begründung)
+
+Die Routine-Toolbeschreibung priorisiert hier bewusst **nicht**:
+
+- die exakte globale Fuse als primäre Planungszahl
+- Traversal-Emergency-Runtime-Ceilings
+- interne Admission- und Probe-Mechanik
+- Counting-Lane-Implementierungsdetails
+
+Diese Flächen bleiben bewusst in den shared Architektur-Konventionen, weil sie serverinterne Schutzmechanik und keine primäre caller-actionable Contract-Fläche sind.
+
+---
+
 ## Architektonische Entscheidung — Keine Erweiterung um Zeilenpositionen
 
 ### Was abgelehnt wurde

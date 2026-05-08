@@ -18,6 +18,8 @@ It owns the rules for:
 
 The endpoint-local architecture description lives in [`DESCRIPTION.md`](./DESCRIPTION.md), and the concise developer-facing summary lives in [`README.md`](./README.md).
 
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+
 ---
 
 ## 2. Canonical Request Surface
@@ -70,6 +72,49 @@ This preserves the intended coordinates for earlier ranges while later ranges ar
 - The runtime normalizes line endings before replacement and preview generation.
 - When indentation preservation is enabled, the first inserted line inherits the indentation of the first replaced line.
 - Additional inserted lines keep the indentation supplied by the caller inside `replacementText`.
+
+---
+
+## 3A. Public Limit Disclosure Placement
+[INTENT: CONSTRAINT]
+
+`replace_file_line_ranges` belongs to the content-mutation family and follows the global public-limit-disclosure policy with both request-shape and preview-surface emphasis.
+
+### 3A.1 Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the replacement request.
+
+For `replace_file_line_ranges`, that includes:
+
+- target path-length limits via `PATH_MAX_CHARS`
+- files-per-request via `MAX_CONTENT_FILES_PER_REQUEST`
+- replacements-per-file via `MAX_REPLACEMENTS_PER_FILE`
+- single `replacementText` size via `REPLACEMENT_TEXT_MAX_CHARS`
+- cumulative replacement-input budgeting where the request contract surfaces it
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### 3A.2 Tool-description disclosure (selective)
+
+Stable operation-wide delivery rules may appear in the runtime tool description, but this family prioritizes concise request-shape communication over aggressive numeric tool-description disclosure.
+
+For `replace_file_line_ranges`, the important runtime rule is that:
+
+- successful preview output remains bounded by the file-backed diff family response surface
+- oversized preview results or oversized replacement scopes are refused rather than widened into a broader write surface
+- the endpoint accepts direct `replacementText`, not unified diff patch text
+
+### 3A.3 Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- internal preview-generation implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

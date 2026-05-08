@@ -24,6 +24,6 @@ export const ReadFilesWithLineNumbersArgsSchema = z.object({
     .min(1)
     .max(MAX_GENERIC_PATHS_PER_REQUEST)
     .describe(
-      "Paths to the text files to read. Pass one path for a single-file read or multiple paths for a batch read."
+      `Paths to the text files to read. Pass one path for a single-file read or multiple paths for a batch read. Each path is capped at ${PATH_MAX_CHARS} characters, and the batch accepts at most ${MAX_GENERIC_PATHS_PER_REQUEST} paths.`
     ),
 });

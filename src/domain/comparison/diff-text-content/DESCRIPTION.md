@@ -19,6 +19,12 @@ The caller sends `pairs`, where each pair contains:
 
 The current schema accepts one or more pairs, validates the pair count against the raw-text diff family cap, constrains each content string through the shared raw-content schema budget, and supplies default labels when the caller omits them.
 
+The public request contract therefore exposes stable caller-actionable request limits directly on the parameter surface:
+
+- raw-text pair count remains bounded by the shared raw-text comparison ceiling
+- each content string remains bounded by the shared raw-content cap
+- each optional label remains bounded by the shared label-length cap
+
 The public registration surface exposes `diff_text_content` as the in-memory raw-text diff tool.
 
 ---
@@ -69,6 +75,37 @@ The currently relevant local limits are:
 - output family cap: `TEXT_DIFF_RESPONSE_CAP_CHARS = 240,000`
 
 When these budgets are exceeded, callers must reduce pair count or shorten the compared content instead of expecting the endpoint to stream or silently truncate raw-text diffs.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- pair-count ceiling
+- per-content raw-text ceiling
+- per-label length ceiling
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- successful raw-text diff output remains bounded by the raw-text diff family response cap
+- oversized in-memory comparison sets must be shortened or split rather than treated as an unbounded diff surface
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- internal diff shaping heuristics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

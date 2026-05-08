@@ -19,6 +19,8 @@ It owns the rules for:
 
 The endpoint-local architecture description lives in [`DESCRIPTION.md`](./DESCRIPTION.md), and the concise developer-facing summary lives in [`README.md`](./README.md).
 
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+
 ---
 
 ## 2. Canonical Request Surface
@@ -75,10 +77,51 @@ Because that behavior is already owned locally, callers do not need `create_dire
 - the same contract covers same-parent rename and cross-directory relocation.
 
 ---
+---
+
+## 3A. Public Limit Disclosure Placement
+[INTENT: CONSTRAINT]
+
+`move_paths` belongs to the path-mutation family and follows the global public-limit-disclosure policy with a request-shape-first emphasis.
+
+### 3A.1 Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the move request.
+
+For `move_paths`, that includes:
+
+- source and destination path-length limits via `PATH_MAX_CHARS`
+- operation-count and batch breadth via `MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST`
+- overwrite semantics on the relevant public field
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### 3A.2 Tool-description disclosure (selective)
+
+Stable operation-wide delivery rules may appear in the runtime tool description, but this family prioritizes concise request-shape communication over aggressive numeric tool-description disclosure.
+
+For `move_paths`, the important runtime rule is that:
+
+- successful output remains a concise path-mutation summary
+- unsafe overwrite or relocation conflicts are refused server-side
+- the endpoint creates missing destination parents without requiring a separate directory-creation call
+
+### 3A.3 Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- internal relocation/rename implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
+
+---
 
 ## 4. Guardrails and Safety Model
 [INTENT: CONSTRAINT]
-
 | Surface | Limit | Meaning |
 | --- | --- | --- |
 | Operations per request | `200` | Maximum number of move operations in one mutation batch |

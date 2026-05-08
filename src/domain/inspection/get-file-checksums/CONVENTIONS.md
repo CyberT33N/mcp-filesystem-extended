@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `get_file_checksums`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices. This file does not duplicate those broader rules. It explains how they apply specifically to the checksum-generation surface.
+Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the checksum-generation surface.
 
 ---
 
@@ -104,9 +104,48 @@ That means:
 - this endpoint does **not** expose preview-style continuation or resume metadata to work around text-budget limits
 
 ---
+---
+
+## Public Limit Disclosure Placement
+
+`get_file_checksums` belongs to the metadata and integrity family and follows the global public-limit-disclosure policy with an integrity-generation emphasis.
+
+### Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the request.
+
+For `get_file_checksums`, that includes:
+
+- path-length limits via `PATH_MAX_CHARS`
+- path-count ceiling via `MAX_GENERIC_PATHS_PER_REQUEST`
+- algorithm selection bounded by the schema-owned enum
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### Tool-description disclosure (selective)
+
+Stable operation-wide delivery rules may appear in the runtime tool description, but this family prioritizes concise request-shape communication over aggressive numeric tool-description disclosure.
+
+For `get_file_checksums`, the important runtime rule is that:
+
+- caller-visible checksum output remains bounded by the metadata-family response budget
+- oversized multi-file requests may still be refused
+
+### Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- internal hash-generation implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
+
+---
 
 ## Integrity-Family Boundary Conventions
-
 `get_file_checksums` belongs to the metadata and integrity family, but it owns only checksum generation.
 
 The endpoint-specific implications are:

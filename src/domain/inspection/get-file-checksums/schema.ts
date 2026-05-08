@@ -26,7 +26,7 @@ export const GetFileChecksumsArgsSchema = z.object({
     .array(z.string().max(PATH_MAX_CHARS))
     .min(1)
     .max(MAX_GENERIC_PATHS_PER_REQUEST)
-    .describe("Paths to the files to generate checksums for. Pass one path for a single checksum calculation or multiple paths for a batch checksum calculation."),
+    .describe(`Paths to the files to generate checksums for. Pass one path for a single checksum calculation or multiple paths for a batch checksum calculation. Each path is capped at ${PATH_MAX_CHARS} characters, and the request accepts at most ${MAX_GENERIC_PATHS_PER_REQUEST} paths.`),
   /**
    * Hash algorithm selection.
    *
@@ -41,7 +41,7 @@ export const GetFileChecksumsArgsSchema = z.object({
    * }
    * ```
    */
-  algorithm: z.enum(["md5", "sha1", "sha256", "sha512"]).default("sha256").describe("Hash algorithm to use"),
+  algorithm: z.enum(["md5", "sha1", "sha256", "sha512"]).default("sha256").describe("Hash algorithm to use. Defaults to `sha256`."),
 });
 
 export const GetFileChecksumsResultSchema = z.object({

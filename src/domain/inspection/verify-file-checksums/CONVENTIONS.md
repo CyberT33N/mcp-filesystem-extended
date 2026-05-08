@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `verify_file_checksums`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices. This file does not duplicate those broader rules. It explains how they apply specifically to the checksum-verification surface.
+Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the checksum-verification surface.
 
 ---
 
@@ -137,6 +137,46 @@ That means:
 - verification output must stay concise
 - oversized formatted verification output is refused by the shared metadata-family text budget
 - this endpoint does **not** expose preview-style continuation or resume metadata to work around text-budget limits
+
+---
+
+## Public Limit Disclosure Placement
+
+`verify_file_checksums` belongs to the metadata and integrity family and follows the global public-limit-disclosure policy with an integrity-verification emphasis.
+
+### Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the request.
+
+For `verify_file_checksums`, that includes:
+
+- path-length limits via `PATH_MAX_CHARS`
+- file-entry count ceiling via `MAX_GENERIC_PATHS_PER_REQUEST`
+- expected-hash string ceiling via `HASH_STRING_MAX_CHARS`
+- algorithm selection bounded by the schema-owned enum
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### Tool-description disclosure (selective)
+
+Stable operation-wide delivery rules may appear in the runtime tool description, but this family prioritizes concise request-shape communication over aggressive numeric tool-description disclosure.
+
+For `verify_file_checksums`, the important runtime rule is that:
+
+- caller-visible verification output remains bounded by the metadata-family response budget
+- oversized multi-file verification requests may still be refused
+
+### Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- internal normalization or verification implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

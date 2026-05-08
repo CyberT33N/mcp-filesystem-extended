@@ -55,7 +55,7 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "File or directory scopes to search in. Explicit file scopes are searched directly, while directory scopes exclude default vendor/cache trees by default unless explicitly reopened through the shared traversal policy. Base requests provide one or more scopes, while resume-only requests omit this field and reload the persisted request context."
+      `File or directory scopes to search in. Explicit file scopes are searched directly, while directory scopes exclude default vendor/cache trees by default unless explicitly reopened through the shared traversal policy. Base requests provide one or more scopes, while resume-only requests omit this field and reload the persisted request context. Each scope path is capped at ${PATH_MAX_CHARS} characters, and the base request accepts at most ${MAX_REGEX_ROOTS_PER_REQUEST} scopes.`
     ),
   /**
    * Regex pattern.
@@ -76,7 +76,7 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
     .max(REGEX_PATTERN_MAX_CHARS)
     .optional()
     .describe(
-      "**Required for base requests.** Regular expression applied to file contents. Base requests provide this field for the initial regex search; resume-only requests omit it and reload the persisted request context."
+      `**Required for base requests.** Regular expression applied to file contents. Base requests provide this field for the initial regex search; resume-only requests omit it and reload the persisted request context. The regex pattern is capped at ${REGEX_PATTERN_MAX_CHARS} characters.`
     ),
   /**
    * Include globs.
@@ -98,7 +98,7 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob patterns used to limit which files are searched before the regex is applied to file contents. These file filters do not reopen default-excluded trees by themselves."
+      `Glob patterns used to limit which files are searched before the regex is applied to file contents. These file filters do not reopen default-excluded trees by themselves. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_INCLUDE_GLOBS_PER_REQUEST} include globs.`
     ),
   /**
    * Exclude globs.
@@ -119,7 +119,7 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
     .max(MAX_EXCLUDE_GLOBS_PER_REQUEST)
     .optional()
     .default([])
-    .describe("Glob patterns that add caller-specific exclusions on top of the default excluded trees for the regex search scope."),
+    .describe(`Glob patterns that add caller-specific exclusions on top of the default excluded trees for the regex search scope. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} exclusion globs.`),
   /**
    * Optional `.gitignore` enrichment toggle.
    *
@@ -162,7 +162,7 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this regex search request without changing the file-filter role of `includeGlobs`."
+      `Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this regex search request without changing the file-filter role of \`includeGlobs\`. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} reopened-descendant globs.`
     ),
   /**
    * Match location cap.
@@ -185,7 +185,7 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
     .max(REGEX_SEARCH_MAX_RESULTS_HARD_CAP)
     .optional()
     .default(100)
-    .describe("Maximum number of results to return before truncation."),
+    .describe(`Maximum number of results to return before truncation. The value may not exceed the hard cap of ${REGEX_SEARCH_MAX_RESULTS_HARD_CAP} results.`),
   /**
    * Case-sensitivity flag.
    *

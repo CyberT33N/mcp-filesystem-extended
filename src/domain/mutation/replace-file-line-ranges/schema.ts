@@ -1,4 +1,5 @@
 import {
+  LINE_REPLACEMENT_TOTAL_INPUT_CHARS,
   MAX_CONTENT_FILES_PER_REQUEST,
   MAX_REPLACEMENTS_PER_FILE,
   PATH_MAX_CHARS,
@@ -41,7 +42,7 @@ export const ReplaceFileLineRangesArgsSchema = z.object({
         path: z
           .string()
           .max(PATH_MAX_CHARS)
-          .describe("Path to the existing text file whose inclusive line ranges should be replaced."),
+          .describe(`Path to the existing text file whose inclusive line ranges should be replaced. Each path is capped at ${PATH_MAX_CHARS} characters.`),
         /**
          * Replacement operations.
          *
@@ -115,18 +116,18 @@ export const ReplaceFileLineRangesArgsSchema = z.object({
                 .string()
                 .max(REPLACEMENT_TEXT_MAX_CHARS)
                 .describe(
-                  "Text inserted for the inclusive line range. This field is direct replacement text, not unified diff patch content."
+                  `Text inserted for the inclusive line range. This field is direct replacement text, not unified diff patch content. Each replacementText payload is capped at ${REPLACEMENT_TEXT_MAX_CHARS} characters.`
                 ),
             })
           )
           .min(1)
           .max(MAX_REPLACEMENTS_PER_FILE)
-          .describe("Line-range replacements to apply to this file."),
+          .describe(`Line-range replacements to apply to this file. Each file accepts at most ${MAX_REPLACEMENTS_PER_FILE} replacements.`),
       })
     )
     .min(1)
     .max(MAX_CONTENT_FILES_PER_REQUEST)
-    .describe("Files whose inclusive line ranges should be replaced."),
+    .describe(`Files whose inclusive line ranges should be replaced. The request accepts at most ${MAX_CONTENT_FILES_PER_REQUEST} files, and the cumulative replacementText input across the request is capped at ${LINE_REPLACEMENT_TOTAL_INPUT_CHARS} characters.`),
   /**
    * Dry-run mode.
    *

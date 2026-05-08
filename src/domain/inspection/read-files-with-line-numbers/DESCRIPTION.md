@@ -4,6 +4,8 @@
 
 `read_files_with_line_numbers` reads one or more text files and returns their full content with **inline one-based absolute line-number prefixes** on every line. It is the primary full-file read surface for LLM agent workflows that require precise line-level targeting in subsequent operations.
 
+The public contract exposes stable request-shape limits on the parameter surface and a stable operation-wide direct-read family output ceiling on the runtime tool description.
+
 This endpoint is optimized for batch parallel reads where all files can be read in a single call. Use this endpoint when:
 
 - Reading one or more files in full before analysis, refactoring, or editing
@@ -53,8 +55,41 @@ Line-number prefixes are purely additive — they prepend `N: ` to each line wit
 ## Batch Behavior
 
 - All files in the request are read in parallel.
-- The response budget is validated as a projected estimate before reads begin, and again as an actual measurement before the response is emitted. Oversized batch requests are rejected early.
+- Each path stays bounded by the shared path-length cap, and the batch stays bounded by the shared multi-path request ceiling.
+- The response budget is validated as a projected estimate before reads begin, and again as an actual measurement before the response is emitted. Successful responses remain within the shared direct-read family response ceiling of 450,000 characters.
+- Oversized batch requests are rejected early instead of degrading into unbounded output.
 - Per-file read failures are reported inline as `path: Error - <message>` without aborting the remaining files in the batch.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits for each requested file path
+- maximum multi-path batch breadth for one read request
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- successful responses remain bounded by the direct-read family response cap
+- oversized multi-file batches are refused rather than widened into unbounded output
+- large individual files should be split out into `read_file_content` with `line_range` or `chunk_cursor`
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- internal parallel-read or line-annotation implementation mechanics
+- server-internal emergency/runtime guardrails beyond the caller-actionable direct-read family contract
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 
@@ -80,7 +115,7 @@ None of these visual effects alter the content that was transmitted to the agent
 
 ### The projected response budget check fails before reading begins
 
-The projected budget check estimates the total response size from the file sizes before any reads occur. If the projection exceeds the direct-read family cap, the entire batch is rejected early with a recommendation to reduce the file set or switch to `read_file_content` with `chunk_cursor` mode for large individual files.
+The projected budget check estimates the total response size from the file sizes before any reads occur. If the projection exceeds the direct-read family cap, the entire batch is rejected early with a recommendation to reduce the file set or switch a large individual file to `read_file_content` with `line-range` or `chunk_cursor` mode.
 
 To resolve: reduce the number of files per request, or split large files using `read_file_content` with `line_range` or `chunk_cursor` mode.
 

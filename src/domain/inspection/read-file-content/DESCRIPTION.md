@@ -4,7 +4,7 @@
 
 `read_file_content` reads one text file through an explicitly selected read mode. It is designed for single-file content access where control over the read surface (full, bounded line range, bounded byte range, or cursor-based chunking) is required.
 
-This endpoint complements `read_files_with_line_numbers`, which is optimized for batch full-file reads with guaranteed inline line-number annotation. Use `read_file_content` when:
+This endpoint complements `read_files_with_line_numbers`, which is optimized for batch full-file reads with guaranteed inline line-number annotation. Successful inline responses remain bounded by the shared direct-read family response ceiling, while mode-specific request windows are disclosed directly on the public parameter surface. Use `read_file_content` when:
 
 - Reading a single large file that exceeds the direct-read family cap (via `line_range`, `byte_range`, or `chunk_cursor`)
 - Targeting a specific line range within a file
@@ -31,6 +31,48 @@ Reads a bounded window of bytes using a zero-based start offset and a byte count
 ### `chunk_cursor`
 
 Reads sequential byte-bounded chunks using an opaque cursor string. Content is returned as decoded text **without inline line-number prefixes** because chunks are defined by byte boundaries, not line boundaries. Continuation is supported via `nextCursor`. Pass `null` as the cursor to begin from the first byte.
+
+### Public bounded-read contract
+
+The public request contract exposes stable mode-specific limits directly on the parameter surface:
+
+- `line-range` defaults to 500 lines and is hard-capped at 2,000 lines
+- `byte-range` and `chunk-cursor` default to 256 KiB and are hard-capped at 1 MiB per request window
+- path and cursor surfaces stay bounded by the shared request-contract caps
+
+The runtime tool description separately exposes the stable operation-wide read-family output ceiling and the retry implication that a legal request window can still decode into an oversized response.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable mode-specific request limits that callers need while constructing the request:
+
+- default and hard-cap line counts for `line_range`
+- default and hard-cap byte windows for `byte_range` and `chunk_cursor`
+- path and cursor-shape boundaries where the public request contract exposes them
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- successful inline responses remain bounded by the direct-read family response cap
+- a legal `byteCount` is not a guarantee that the decoded output will fit
+- `chunk_cursor` is the designated fallback lane for oversized reads that cannot stay inside the direct-read family ceiling
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- internal decoding or line-annotation implementation mechanics
+- server-internal emergency/runtime guardrails beyond the caller-actionable read-family contract
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 
@@ -64,7 +106,7 @@ None of these visual effects alter the content that was transmitted to the agent
 
 ### The `full` mode returns an error about exceeding the inline full-read ceiling
 
-The `full` mode is constrained to files within the shared inline full-read ceiling. For files that exceed this ceiling, switch to `line_range` or `chunk_cursor` mode. The `chunk_cursor` mode is the designated fallback path for iterating through files larger than the direct-read cap.
+The `full` mode is constrained to files within the shared inline full-read ceiling. Successful inline responses also remain within the shared direct-read family response ceiling of 450,000 characters. For files that exceed the inline full-read ceiling or whose decoded response would exceed the direct-read family ceiling, switch to `line_range` or `chunk_cursor` mode. The `chunk_cursor` mode is the designated fallback path for iterating through files larger than the direct-read cap.
 
 ### The `line_range` mode shows line numbers that do not match what I expected
 

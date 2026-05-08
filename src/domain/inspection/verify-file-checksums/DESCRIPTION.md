@@ -33,6 +33,13 @@ The important endpoint-local defaults are:
 - `algorithm` defaults to `sha256`
 - algorithm selection is limited to the schema-owned enum
 
+The public request contract exposes stable caller-actionable request limits directly on the parameter surface:
+
+- verification target paths remain bounded by the shared path-length cap
+- the request batch remains bounded by the shared generic path-count ceiling
+- expected-hash strings remain bounded by the shared hash-string ceiling
+- algorithm choice remains bounded to the schema-owned enum
+
 ### Algorithm and expected-hash semantics
 
 The schema controls which checksum algorithms are allowed.
@@ -164,6 +171,38 @@ The `summary` object is not a decorative surface. It is the endpoint-local aggre
 - `errorCount` counts failed verification attempts
 
 The summary therefore complements, but never replaces, the detailed `entries` and `errors` arrays.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits
+- maximum file-entry count
+- expected-hash string length ceiling
+- bounded algorithm selection through the schema enum
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- caller-visible verification output remains bounded by the metadata-family response budget
+- oversized multi-file verification requests may be refused rather than treated as a continuation-driven discovery surface
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- internal normalization or verification implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

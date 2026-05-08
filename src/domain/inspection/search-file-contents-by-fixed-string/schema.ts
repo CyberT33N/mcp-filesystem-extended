@@ -38,14 +38,14 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "File or directory scopes to search in. Explicit file scopes are searched directly, while directory scopes exclude default vendor/cache trees by default unless explicitly reopened through the shared traversal policy. Base requests provide one or more scopes, while resume-only requests omit this field and reload the persisted request context."
+      `File or directory scopes to search in. Explicit file scopes are searched directly, while directory scopes exclude default vendor/cache trees by default unless explicitly reopened through the shared traversal policy. Base requests provide one or more scopes, while resume-only requests omit this field and reload the persisted request context. Each scope path is capped at ${PATH_MAX_CHARS} characters, and the base request accepts at most ${MAX_REGEX_ROOTS_PER_REQUEST} scopes.`
     ),
   fixedString: z
     .string()
     .max(SHORT_TEXT_MAX_CHARS)
     .optional()
     .describe(
-      "**Required for base requests.** Exact fixed-string pattern applied to file contents. Base requests provide this field for the initial literal search; resume-only requests omit it and reload the persisted request context."
+      `**Required for base requests.** Exact fixed-string pattern applied to file contents. Base requests provide this field for the initial literal search; resume-only requests omit it and reload the persisted request context. The fixed-string pattern is capped at ${SHORT_TEXT_MAX_CHARS} characters.`
     ),
   includeGlobs: z
     .array(z.string().max(GLOB_PATTERN_MAX_CHARS))
@@ -53,7 +53,7 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob patterns used to limit which files are searched before the fixed-string matcher is applied to file contents. These file filters do not reopen default-excluded trees by themselves."
+      `Glob patterns used to limit which files are searched before the fixed-string matcher is applied to file contents. These file filters do not reopen default-excluded trees by themselves. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_INCLUDE_GLOBS_PER_REQUEST} include globs.`
     ),
   excludeGlobs: z
     .array(z.string().max(GLOB_PATTERN_MAX_CHARS))
@@ -61,7 +61,7 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob patterns that add caller-specific exclusions on top of the default excluded trees for the fixed-string search scope."
+      `Glob patterns that add caller-specific exclusions on top of the default excluded trees for the fixed-string search scope. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} exclusion globs.`
     ),
   respectGitIgnore: z
     .boolean()
@@ -76,7 +76,7 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
     .optional()
     .default([])
     .describe(
-      "Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this fixed-string search request without changing the file-filter role of `includeGlobs`."
+      `Glob patterns that explicitly reopen descendants beneath default-excluded or caller-excluded trees for this fixed-string search request without changing the file-filter role of \`includeGlobs\`. Each glob is capped at ${GLOB_PATTERN_MAX_CHARS} characters, and the request accepts at most ${MAX_EXCLUDE_GLOBS_PER_REQUEST} reopened-descendant globs.`
     ),
   maxResults: z
     .number()
@@ -85,7 +85,7 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
     .max(REGEX_SEARCH_MAX_RESULTS_HARD_CAP)
     .optional()
     .default(100)
-    .describe("Maximum number of results to return before truncation."),
+    .describe(`Maximum number of results to return before truncation. The value may not exceed the hard cap of ${REGEX_SEARCH_MAX_RESULTS_HARD_CAP} results.`),
   caseSensitive: z
     .boolean()
     .optional()

@@ -32,7 +32,7 @@ export const GetPathMetadataArgsSchema = z.object({
     .min(1)
     .max(MAX_GENERIC_PATHS_PER_REQUEST)
     .describe(
-      "Array of file or directory paths. Pass one path for a single lookup or multiple paths for batch metadata retrieval."
+      `Array of file or directory paths. Pass one path for a single lookup or multiple paths for batch metadata retrieval. Each path is capped at ${PATH_MAX_CHARS} characters, and the request accepts at most ${MAX_GENERIC_PATHS_PER_REQUEST} paths.`
     ),
   /**
    * Metadata selection.

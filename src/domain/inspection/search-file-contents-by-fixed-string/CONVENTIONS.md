@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `search_file_contents_by_fixed_string`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail, content-classification, search-platform, and resume-architecture slices. This file does not duplicate those broader rules. It explains how they apply specifically to the literal content-search surface.
+Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail, content-classification, search-platform, and resume-architecture slices, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the literal content-search surface.
 
 ---
 
@@ -117,6 +117,53 @@ The caller-visible architectural outcomes are:
 - `narrowing-required`
 
 The fixed-string endpoint-local docs must explain that broad valid workloads may degrade into preview-first or server-owned completion behavior, while unsupported surfaces, invalid scopes, or over-hard-gap workloads still refuse.
+
+---
+
+## Public Limit Disclosure Placement
+
+`search_file_contents_by_fixed_string` belongs to the preview-capable search family and follows the global public-limit-disclosure policy with a literal-search-specific emphasis.
+
+### Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the request.
+
+For `search_file_contents_by_fixed_string`, that includes:
+
+- scope-path length via `PATH_MAX_CHARS`
+- scope-count ceiling via `MAX_REGEX_ROOTS_PER_REQUEST`
+- fixed-string-length ceiling via `SHORT_TEXT_MAX_CHARS`
+- include/exclude/reopened-descendant glob ceilings via `GLOB_PATTERN_MAX_CHARS`, `MAX_INCLUDE_GLOBS_PER_REQUEST`, and `MAX_EXCLUDE_GLOBS_PER_REQUEST`
+- result-count ceiling via `REGEX_SEARCH_MAX_RESULTS_HARD_CAP`
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### Tool-description disclosure (required, mode-aware)
+
+Stable operation-wide delivery rules belong in the runtime tool description because they shape caller planning for the full result surface.
+
+For `search_file_contents_by_fixed_string`, that includes:
+
+- inline and `next-chunk` delivery remain bounded by the fixed-string search-family response cap
+- `complete-result` is additive and follows the shared global fuse instead of the fixed-string search-family cap
+- broad valid workloads may degrade into preview-first delivery, same-endpoint resume, or explicit narrowing guidance
+
+The endpoint-local rule is therefore:
+
+> Search-family response budgeting must be disclosed in the runtime tool description as a mode-aware contract, not as a blanket single-number rule.
+
+### Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- traversal emergency-runtime ceilings
+- dynamic lane-tier budgets
+- internal admission and probe internals
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal execution-protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

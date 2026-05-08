@@ -18,6 +18,8 @@ It owns the rules for:
 
 The endpoint-local architecture description lives in [`DESCRIPTION.md`](./DESCRIPTION.md), and the concise developer-facing summary lives in [`README.md`](./README.md).
 
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+
 ---
 
 ## 2. Canonical Request Surface
@@ -69,6 +71,35 @@ There is no domain handler/schema pair and no endpoint-local request payload to 
 ### 3.4 Scope-before-action guidance
 
 Use this endpoint when the caller needs to understand the effective allowed-directory roots before issuing path-based calls.
+
+---
+
+## 3A. Public Limit Disclosure Placement
+[INTENT: CONSTRAINT]
+
+`list_allowed_directories` follows the global public-limit-disclosure policy with a server-scope-specific non-prioritization rule.
+
+### 3A.1 No parameter-description disclosure surface
+
+This endpoint has no caller-supplied request payload.
+
+There is therefore no parameter-level limit-disclosure surface to populate.
+
+### 3A.2 Tool-description disclosure rule
+
+The public tool description should explain only that this endpoint is a compact text-only scope-disclosure surface for the effective `allowedDirectories` boundary.
+
+It should not be overloaded with numeric contract limits that do not materially change caller tool selection or argument construction.
+
+### 3A.3 Non-prioritized internal limits
+
+This endpoint must not promote the following shared internal or broader server-owned limits into its routine public tool description as if they were primary caller targets:
+
+- the exact global response fuse,
+- traversal emergency-runtime ceilings,
+- response-family budgeting heuristics from content-heavy endpoint families.
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract for this endpoint.
 
 ---
 

@@ -79,7 +79,20 @@ import {
 } from "@domain/inspection/verify-file-checksums/schema";
 
 import type { RegisterToolCatalogContext } from "./register-tool-catalog";
-import { READ_ONLY_LOCAL_TOOL_ANNOTATIONS } from "./tool-registration-presets";
+import {
+  buildCountLinesToolDescription,
+  buildFindFilesByGlobToolDescription,
+  buildFindPathsByNameToolDescription,
+  buildGetFileChecksumsToolDescription,
+  buildGetPathMetadataToolDescription,
+  buildListDirectoryEntriesToolDescription,
+  buildReadFileContentToolDescription,
+  buildReadFilesWithLineNumbersToolDescription,
+  buildSearchFileContentsByFixedStringToolDescription,
+  buildSearchFileContentsByRegexToolDescription,
+  buildVerifyFileChecksumsToolDescription,
+  READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
+} from "./tool-registration-presets";
 
 const STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION =
   "When additive `admission` and `resume` metadata are returned, `structuredContent.admission` and `structuredContent.resume` remain the authoritative machine-readable envelope, while primary result data remains complete in `content.text` and any mirrored structured result data must not replace it.";
@@ -118,9 +131,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Read files with line numbers",
       description:
-        "Reads one or more text files and returns line-numbered content blocks. " +
-        "Use this tool for direct bounded batch reading, not for metadata lookup or content search. " +
-        "This surface remains the inline multi-file reader for smaller workloads; reduce file count or switch to `read_file_content` for larger single-file access.",
+        buildReadFilesWithLineNumbersToolDescription(),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ReadFilesWithLineNumbersArgsSchema,
     },
@@ -133,10 +144,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Read file content",
       description:
-        "Reads one text file through explicit `full`, `line-range`, `byte-range`, or `chunk-cursor` modes while large-file access stays bounded by shared runtime policy and response budgets. " +
-        "Use this tool for single-file content access, not for metadata lookup, multi-file batch reads, or content search. " +
-        "The ranged and cursor modes accept their mode-specific option blocks (`line_range`, `byte_range`, `chunk_cursor`) and are normalized at the MCP boundary into the canonical bounded-read contract. " +
-        "Full mode remains limited to smaller files; valid larger access must switch to range or cursor modes, while unsupported or over-hard-gap workloads still refuse.",
+        buildReadFileContentToolDescription(),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ReadFileContentFlatArgsSchema,
       outputSchema: ReadFileContentResultSchema,
@@ -158,17 +166,12 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     "list_directory_entries",
     {
       title: "List directory entries",
-      description:
-        "Lists structured directory entries for one or more directory roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
-        "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly. " +
-        "Valid broad listing workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken`; no separate continuation endpoint exists. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
-        "Scope reduction remains a first-class alternative: narrow roots, choose a deeper root, or set `recursive = false` when a shallow listing is sufficient. " +
-        `${LIST_DIRECTORY_ENTRIES_TEXT_SURFACING_DESCRIPTION} ` +
-        "Preview-capable directory listing supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
-        `${FINAL_PREVIEW_FIRST_DESCRIPTION} ` +
-        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
-        `${EXTERNAL_CONSUMER_BOUNDARY_DESCRIPTION}`,
+      description: buildListDirectoryEntriesToolDescription(
+        STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION,
+        LIST_DIRECTORY_ENTRIES_TEXT_SURFACING_DESCRIPTION,
+        FINAL_PREVIEW_FIRST_DESCRIPTION,
+        EXTERNAL_CONSUMER_BOUNDARY_DESCRIPTION,
+      ),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ListDirectoryEntriesArgsSchema,
       outputSchema: ListDirectoryEntriesStructuredResultSchema,
@@ -216,13 +219,9 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Find paths by name",
       description:
-        "Finds file and directory paths by case-insensitive name substring while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
-        "Use this tool for path discovery, not for searching file contents. " +
-        "Valid broad discovery workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
-        "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
-        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
-        "Scope reduction remains a first-class alternative: narrow roots or make `nameContains` more specific to stay inline or reduce payload size.",
+        buildFindPathsByNameToolDescription(
+          STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION,
+        ),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: FindPathsByNameArgsSchema,
       outputSchema: FindPathsByNameResultSchema,
@@ -273,13 +272,9 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Find files by glob",
       description:
-        "Finds files by glob pattern under one or more roots while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
-        "Use this tool when the selection is expressed in glob syntax rather than plain name matching or regex content search. " +
-        "Valid broad discovery workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
-        "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
-        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
-        "Scope reduction remains a first-class alternative: narrow roots, tighten `glob`, or reduce reopened descendants through `includeExcludedGlobs`.",
+        buildFindFilesByGlobToolDescription(
+          STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION,
+        ),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: FindFilesByGlobArgsSchema,
       outputSchema: FindFilesByGlobResultSchema,
@@ -330,13 +325,9 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Search file contents by regex",
       description:
-        "Searches text file contents with a regular expression while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
-        "Use this tool for content matching, not for file-name or glob matching. " +
-        "Explicit large text-compatible file scopes may proceed to the shared regex-search lane after content-state eligibility succeeds, while broad recursive workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while structurally unsafe patterns, unsupported surfaces, and recursive workloads that still exceed the server-owned lane budgets continue to refuse. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
-        "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
-        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
-        "Scope reduction remains a first-class alternative: narrow roots, add `includeGlobs`, or tighten the regex to the intended file set.",
+        buildSearchFileContentsByRegexToolDescription(
+          STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION,
+        ),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByRegexBaseArgsSchema,
       outputSchema: SearchFileContentsByRegexResultSchema,
@@ -401,14 +392,9 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     "search_file_contents_by_fixed_string",
     {
       title: "Search file contents by fixed string",
-      description:
-        "Searches text file contents with an exact fixed string while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
-        "Use this tool for literal content matching, not for regex content matching, file-name matching, or glob matching. " +
-        "Explicit large text-compatible file scopes may proceed to the shared fixed-string-search lane after content-state eligibility succeeds, while broad recursive workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while unsupported surfaces and recursive workloads that still exceed the server-owned lane budgets continue to refuse. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
-        "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. " +
-        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. " +
-        "Scope reduction remains a first-class alternative: narrow roots, add `includeGlobs`, or reduce the search to the relevant subtree.",
+      description: buildSearchFileContentsByFixedStringToolDescription(
+        STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION,
+      ),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: SearchFileContentsByFixedStringBaseArgsSchema,
       outputSchema: SearchFileContentsByFixedStringResultSchema,
@@ -474,13 +460,9 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Count lines",
       description:
-        "Counts lines in files or traversed directory trees while broad directory roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. " +
-        "Use this tool for totals and filtered line counting, not for reading full file content. " +
-        "Total-only counts use a large-file-safe streaming path, pattern-aware counts reuse the shared native-search lane, and broad workloads that leave the inline band return completion-backed `resumeToken` metadata on this same endpoint instead of partial preview totals. " +
-        `${STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION} ` +
-        "This family supports only `resumeMode = 'complete-result'`; preview-style partial totals and `next-chunk` are never exposed. " +
-        "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus `resumeMode = 'complete-result'`. " +
-        "Scope reduction remains a first-class alternative: narrow `paths`, reduce recursive breadth, or constrain files with `includeGlobs`.",
+        buildCountLinesToolDescription(
+          STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION,
+        ),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: CountLinesArgsSchema,
       outputSchema: CountLinesResultSchema,
@@ -522,9 +504,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Get file checksums",
       description:
-        "Generates checksums for one or more files using a selected hash algorithm. " +
-        "Use this tool for hash generation, not for verification against expected values. " +
-        "Results remain bounded by server safety caps, and oversized multi-file requests may be refused when the projected response would exceed those caps.",
+        buildGetFileChecksumsToolDescription(),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: GetFileChecksumsArgsSchema,
       outputSchema: GetFileChecksumsResultSchema,
@@ -549,9 +529,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Verify file checksums",
       description:
-        "Verifies one or more files against expected hash values. " +
-        "Use this tool when an expected checksum is already known. " +
-        "Results remain bounded by server safety caps, and oversized multi-file requests may be refused when the projected response would exceed those caps.",
+        buildVerifyFileChecksumsToolDescription(),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: VerifyFileChecksumsArgsSchema,
       outputSchema: VerifyFileChecksumsResultSchema,
@@ -581,9 +559,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
     {
       title: "Get path metadata",
       description:
-        "Returns structured metadata for one or more files or directories. " +
-        "Required `size` and `type` are always included, while grouped timestamp and permission metadata can be requested explicitly. " +
-        "Results remain bounded by server safety caps, and oversized multi-path requests may be refused when the projected response would exceed those caps.",
+        buildGetPathMetadataToolDescription(),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: GetPathMetadataArgsSchema,
       outputSchema: GetPathMetadataResultSchema,

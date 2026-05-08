@@ -37,6 +37,12 @@ The important endpoint-local defaults are:
 - `size` and `type` are always returned
 - timestamps and permissions are opt-in grouped metadata
 
+The public request contract exposes stable caller-actionable request limits directly on the parameter surface:
+
+- root paths remain bounded by the shared path-length cap
+- the base request remains bounded by the shared discovery-root ceiling
+- exclusion and reopened-descendant globs remain bounded by the shared glob and exclusion ceilings
+
 ### Resume-only request surface
 
 Resume-only requests are same-endpoint requests that use:
@@ -120,6 +126,38 @@ If the caller explicitly targets a root inside one of those excluded trees, that
 ### Optional `.gitignore` participation
 
 `respectGitIgnore` adds optional root-local ignore rules on top of the server-owned baseline. It does not replace that baseline.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits
+- maximum root count
+- exclusion-glob and reopened-descendant-glob ceilings
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- inline and `next-chunk` text delivery remain bounded by the discovery-family response cap
+- `complete-result` stays additive and uses the shared global fuse instead of the discovery-family cap
+- broad valid workloads may still require narrowing or same-endpoint resume
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- traversal emergency-runtime ceilings
+- internal admission and probe internals
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal guardrails rather than the primary caller-actionable contract.
 
 ---
 

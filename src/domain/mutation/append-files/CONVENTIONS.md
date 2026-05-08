@@ -10,6 +10,8 @@ This file is the endpoint-local single source of truth for `append_files` conven
 
 The workspace-level [`CONVENTIONS.md`](../../../../CONVENTIONS.md) is a TOC surface and should re-reference this local file instead of duplicating endpoint-specific detail.
 
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+
 ---
 
 ## Architectural Principle: Append-at-End Only
@@ -88,6 +90,46 @@ Successful output is intentionally small.
 The handler formats a concise mutation summary and then enforces the shared path-mutation summary budget rather than mirroring large caller-supplied content back to the client.
 
 The endpoint also participates in the shared cumulative content-bearing mutation input budget described by the existing guardrail SSOT surfaces.
+
+---
+
+## Public Limit Disclosure Placement
+
+`append_files` belongs to the mutation family and follows the global public-limit-disclosure policy with a request-shape-first emphasis.
+
+### Parameter-description disclosure (required)
+
+Stable request-shape limits belong in the schema-owned parameter descriptions because callers need them while constructing the append payload.
+
+For `append_files`, that includes:
+
+- path-length limits via `PATH_MAX_CHARS`
+- per-file content limits via `RAW_CONTENT_MAX_CHARS`
+- batch entry count via `MAX_CONTENT_FILES_PER_REQUEST`
+- cumulative content-bearing mutation budgeting where the request contract surfaces it
+
+The endpoint-local rule is therefore:
+
+> Request-shape limits must be disclosed in [`schema.ts`](./schema.ts) through constant-backed parameter descriptions.
+
+### Tool-description disclosure (selective)
+
+Stable operation-wide delivery rules may appear in the runtime tool description, but this family prioritizes concise request-shape communication over aggressive numeric tool-description disclosure.
+
+For `append_files`, the important runtime rule is that:
+
+- successful output remains a concise mutation summary rather than an echoed payload
+- oversized append payloads are refused rather than truncated
+
+### Non-prioritized internal limits (required non-disclosure rationale)
+
+This endpoint must not promote the following internal or broader server-owned limits into its routine public tool description as if they were the primary caller target:
+
+- the exact global fuse as the dominant optimization number
+- internal append-write implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
 
 ---
 

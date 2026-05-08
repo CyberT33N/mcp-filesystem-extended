@@ -36,6 +36,41 @@ It is not the additive creation surface and not the additive append-at-end surfa
 
 ---
 
+## 2A. Public Limit Disclosure Model
+[INTENT: SPECIFICATION]
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### 2A.1 Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- target path-length limits
+- maximum file count per request
+- maximum replacement count per file
+- per-replacement `replacementText` length limits
+- cumulative replacement-input budgeting where the request contract surfaces it
+
+### 2A.2 Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- successful preview output remains bounded by the file-backed diff family response surface
+- oversized preview results or oversized replacement scopes are refused rather than widened into a broader write surface
+- the endpoint accepts direct `replacementText`, not unified diff patch text
+
+### 2A.3 Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- internal preview-generation implementation mechanics
+- server-internal emergency/runtime guardrails
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal protection mechanics rather than the primary caller-actionable contract.
+
+---
+
 ## 3. Endpoint Architecture
 [INTENT: SPECIFICATION]
 

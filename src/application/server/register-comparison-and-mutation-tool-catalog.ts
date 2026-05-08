@@ -20,6 +20,15 @@ import { DeletePathsArgsSchema } from "@domain/mutation/delete-paths/schema";
 import type { RegisterToolCatalogContext } from "./register-tool-catalog";
 import {
   ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
+  buildAppendFilesToolDescription,
+  buildCopyPathsToolDescription,
+  buildCreateDirectoriesToolDescription,
+  buildCreateFilesToolDescription,
+  buildDeletePathsToolDescription,
+  buildDiffFilesToolDescription,
+  buildDiffTextContentToolDescription,
+  buildMovePathsToolDescription,
+  buildReplaceFileLineRangesToolDescription,
   DESTRUCTIVE_LOCAL_TOOL_ANNOTATIONS,
   IDEMPOTENT_ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
   READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
@@ -45,9 +54,7 @@ export function registerComparisonAndMutationToolCatalog(
     {
       title: "Create files",
       description:
-        "Creates one or more new text files. " +
-        "Use this tool only when the target files do not already exist. " +
-        "Per-item and cumulative content budgets are enforced server-side, so oversized payloads are refused rather than truncated.",
+        buildCreateFilesToolDescription(),
       annotations: ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: CreateFilesArgsSchema,
     },
@@ -60,9 +67,7 @@ export function registerComparisonAndMutationToolCatalog(
     {
       title: "Append files",
       description:
-        "Appends text content to one or more files. " +
-        "Use this tool for additive writes at file end, not targeted replacement. " +
-        "Per-item and cumulative content budgets are enforced server-side, so oversized payloads are refused rather than truncated.",
+        buildAppendFilesToolDescription(),
       annotations: ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: AppendFilesArgsSchema,
     },
@@ -75,9 +80,7 @@ export function registerComparisonAndMutationToolCatalog(
     {
       title: "Delete paths",
       description:
-        "Deletes files or directories. " +
-        "Use this tool only for removal, not for in-place rewrite workflows. " +
-        "Batch-size and blast-radius limits are enforced server-side and cannot be bypassed.",
+        buildDeletePathsToolDescription(),
       annotations: DESTRUCTIVE_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: DeletePathsArgsSchema,
     },
@@ -90,10 +93,7 @@ export function registerComparisonAndMutationToolCatalog(
     {
       title: "Copy paths",
       description:
-        "Copies files or directories to new destinations. " +
-        "Creates missing destination parent directories recursively, so do not call create_directories first. " +
-        "Use this tool when the source should remain in place after the operation. " +
-        "Batch-size and blast-radius limits are enforced server-side and cannot be bypassed.",
+        buildCopyPathsToolDescription(),
       annotations: ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: CopyPathsArgsSchema,
     },
@@ -115,10 +115,7 @@ export function registerComparisonAndMutationToolCatalog(
     "diff_files",
     {
       title: "Diff files",
-      description:
-        "Compares the contents of one or more file pairs and returns unified diffs. " +
-        "Use this tool when the comparison source is already stored on disk. " +
-        "Pair-count and response-size budgets are enforced server-side, so narrow the comparison set when a projected diff is refused.",
+      description: buildDiffFilesToolDescription(),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: DiffFilesArgsSchema,
     },
@@ -138,10 +135,7 @@ export function registerComparisonAndMutationToolCatalog(
     "diff_text_content",
     {
       title: "Diff text content",
-      description:
-        "Compares one or more in-memory text content pairs and returns unified diffs. " +
-        "Use this tool when the compared inputs are provided directly rather than read from files. " +
-        "Stricter raw-text and response-size budgets are enforced server-side for caller-supplied content, so oversized text pairs are refused.",
+      description: buildDiffTextContentToolDescription(),
       annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: DiffTextContentArgsSchema,
     },
@@ -163,9 +157,7 @@ export function registerComparisonAndMutationToolCatalog(
     {
       title: "Replace file line ranges",
       description:
-        "Replaces one or more 1-based inclusive line ranges in existing text files. " +
-        "Use this tool for direct line-range replacement, not unified diff patch text. " +
-        "Per-file replacement-count, replacement-text, and preview budgets are enforced server-side, so reduce the replacement scope when a request is refused.",
+        buildReplaceFileLineRangesToolDescription(),
       annotations: DESTRUCTIVE_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: ReplaceFileLineRangesArgsSchema,
     },
@@ -192,9 +184,7 @@ export function registerComparisonAndMutationToolCatalog(
     {
       title: "Create directories",
       description:
-        "Creates one or more directory paths, including missing parent directories. " +
-        "Use this tool for directory creation only. " +
-        "Batch-size and large-scale operation limits are enforced server-side and cannot be bypassed.",
+        buildCreateDirectoriesToolDescription(),
       annotations: IDEMPOTENT_ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: CreateDirectoriesArgsSchema,
     },
@@ -207,10 +197,7 @@ export function registerComparisonAndMutationToolCatalog(
     {
       title: "Move paths",
       description:
-        "Moves or renames files or directories. " +
-        "Creates missing destination parent directories recursively, so do not call create_directories first. " +
-        "Use this tool when the source should no longer remain at the original path. " +
-        "Batch-size and blast-radius limits are enforced server-side and cannot be bypassed.",
+        buildMovePathsToolDescription(),
       annotations: DESTRUCTIVE_LOCAL_TOOL_ANNOTATIONS,
       inputSchema: MovePathsArgsSchema,
     },

@@ -35,6 +35,13 @@ The important endpoint-local rules are:
 - recursive traversal is opt-in,
 - file-filter and exclusion controls narrow recursive breadth before counting proceeds.
 
+The public request contract exposes stable caller-actionable request limits directly on the parameter surface:
+
+- count-scope paths remain bounded by the shared path-length cap
+- the base request remains bounded by the shared generic path-count ceiling
+- the optional regex remains bounded by the shared regex-length ceiling
+- include, exclude, and reopened-descendant globs remain bounded by the shared glob and glob-count ceilings
+
 ### Resume request surface
 
 `count_lines` is completion-backed only once a broad workload leaves the inline lane.
@@ -136,6 +143,40 @@ At the file-entry level, each counted file may contribute:
 - optional `matchingCount`
 
 That optional `matchingCount` remains an aggregate count, not a location surface.
+
+---
+
+## Public Limit Disclosure Model
+
+For this endpoint, limit disclosure is intentionally split across two public surfaces.
+
+### Parameter surface
+
+Parameter descriptions carry the stable request-shape limits that callers need while constructing the request:
+
+- path-length limits
+- maximum path count
+- regex-length limit
+- include/exclude/reopened-descendant glob ceilings
+
+### Tool-description surface
+
+The runtime tool description carries the stable operation-wide delivery rule:
+
+- final inline and aggregated counting output remain bounded by the count-family response cap
+- once the workload leaves inline, the family uses same-endpoint `complete-result` continuation instead of preview-style partial totals
+- broad valid workloads may still require narrowing rather than expecting an unbounded counting surface
+
+### Intentional non-disclosure in routine tool text
+
+The routine tool description does not prioritize:
+
+- the exact global fuse as the primary planning number
+- traversal emergency-runtime ceilings
+- internal admission and probe internals
+- deeper counting-lane implementation heuristics
+
+Those surfaces remain owned by shared architecture conventions because they are server-internal execution-protection mechanics rather than the primary caller-actionable contract.
 
 ---
 
