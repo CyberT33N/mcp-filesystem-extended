@@ -4,13 +4,13 @@ file_id: "7.1"
 unit_name: "Filesystem and Read Core"
 parent_orchestration: ".plan/7-infrastructure/orchestration.md"
 hierarchy_level: 2
-unit_status: "in_progress"
+unit_status: "done"
 total_tasks: 2
-completed_tasks: 1
+completed_tasks: 2
 has_sub_units: false
 sub_unit_count: 0
-resume_frontier_task: "7.1.1"
-next_frontier_task: "7.1.2"
+resume_frontier_task: "7.2.1"
+next_frontier_task: "7.2.2"
 todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -18,5 +18,5 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 
 ## Tasks
 - [x] **7.1.1 Filesystem helper core tests** → `7.1.1-filesystem-helper-core-tests.md`
-- [ ] **7.1.2 Streaming read core tests** → `7.1.2-streaming-read-core-tests.md`
+- [x] **7.1.2 Streaming read core tests** → `7.1.2-streaming-read-core-tests.md`
 

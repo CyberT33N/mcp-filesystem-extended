@@ -8,14 +8,14 @@ status: "in_progress"
 total_units: 9
  completed_units: 6
  total_tasks_all_levels: 22
- completed_tasks_all_levels: 17
+ completed_tasks_all_levels: 18
   hierarchy_depth: 3
   max_hierarchy_depth: 4
   plan_directory: ".plan/"
    resume_frontier_unit: "7"
-   resume_frontier_task: "7.1.1"
-   next_frontier_task: "7.1.2"
-todo_window_default: "ACTIVE_PLUS_NEXT"
+   resume_frontier_task: "7.2.1"
+   next_frontier_task: "7.2.2"
+ todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
 # MCP Filesystem Extended - Unit-Test Coverage Plan
@@ -25,12 +25,12 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
 - **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
 - **Overall Status:** in_progress
-- **Progress:** 17/22 tasks completed
+- **Progress:** 18/22 tasks completed
 
 ## Execution Frontier
 - **Resume Frontier Unit:** `7`
-- **Resume Frontier Task:** `7.1.1`
-- **Next Frontier Task:** `7.1.2`
+- **Resume Frontier Task:** `7.2.1`
+- **Next Frontier Task:** `7.2.2`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
 - **Frontier Rule:** First establish the shared inspection fixture foundation, then advance into the application and domain coverage slices.
 
@@ -68,7 +68,7 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
   - Summary: Covers continuation/resume contracts, shared guardrail policies, traversal policy surfaces, shared search policy kernels, and the runtime capability profile contract.
 - [ ] **7. Infrastructure** → `.plan/7-infrastructure/orchestration.md`
   - Classification: `MIXED`
-  - Status: `in_progress` | Tasks: 4 | Completed: 1
+  - Status: `in_progress` | Tasks: 4 | Completed: 2
   - Summary: Covers filesystem helpers, streaming read cores, persistence stores, runtime detectors, formatters, loggers, and native search adapters.
 - [ ] **8. Shared Errors** → `.plan/8-shared-errors/orchestration.md`
   - Classification: `ISOLATED`
