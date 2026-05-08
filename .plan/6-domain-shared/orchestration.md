@@ -6,10 +6,10 @@ parent_orchestration: "PLAN.md"
 hierarchy_level: 1
 unit_status: "in_progress"
 total_tasks: 5
-completed_tasks: 3
+completed_tasks: 4
 has_sub_units: true
 sub_unit_count: 2
-resume_frontier_task: "6.2.1"
+resume_frontier_task: "6.2.2"
 next_frontier_task: "6.2.2"
 todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 ---
@@ -21,7 +21,8 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
   - Classification: `ISOLATED`
   - Status: `done` | Tasks: 3 | Completed: 3
   - Summary: Covers continuation/resume contracts plus the shared guardrail and traversal policy surfaces.
-- [ ] **6.2 Search core and runtime profile** → `.plan/6-domain-shared/6.2-search-core-and-runtime-profile/orchestration.md`
+- [~] **6.2 Search core and runtime profile** → `.plan/6-domain-shared/6.2-search-core-and-runtime-profile/orchestration.md`
   - Classification: `ISOLATED`
+  - Status: `in_progress` | Tasks: 2 | Completed: 1
   - Summary: Covers shared search policy kernels and the runtime IO capability profile.
 
