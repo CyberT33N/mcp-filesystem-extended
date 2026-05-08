@@ -6,15 +6,15 @@ created: "2026-01-05T20:22:00Z"
 last_updated: "2026-01-05T20:22:00Z"
 status: "in_progress"
 total_units: 9
- completed_units: 5
+ completed_units: 6
  total_tasks_all_levels: 22
- completed_tasks_all_levels: 15
- hierarchy_depth: 3
- max_hierarchy_depth: 4
- plan_directory: ".plan/"
-  resume_frontier_unit: "6"
-  resume_frontier_task: "6.2.2"
-  next_frontier_task: "6.2.2"
+ completed_tasks_all_levels: 16
+  hierarchy_depth: 3
+  max_hierarchy_depth: 4
+  plan_directory: ".plan/"
+   resume_frontier_unit: "7"
+   resume_frontier_task: "7.1.1"
+   next_frontier_task: "7.1.2"
 todo_window_default: "ACTIVE_PLUS_NEXT"
 ---
 
@@ -25,12 +25,12 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
 - **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
 - **Overall Status:** in_progress
-- **Progress:** 15/22 tasks completed
+- **Progress:** 16/22 tasks completed
 
 ## Execution Frontier
-- **Resume Frontier Unit:** `6`
-- **Resume Frontier Task:** `6.2.2`
-- **Next Frontier Task:** `6.2.2`
+- **Resume Frontier Unit:** `7`
+- **Resume Frontier Task:** `7.1.1`
+- **Next Frontier Task:** `7.1.2`
 - **Todo Window Default:** `ACTIVE_PLUS_NEXT`
 - **Frontier Rule:** First establish the shared inspection fixture foundation, then advance into the application and domain coverage slices.
 
@@ -62,9 +62,9 @@ todo_window_default: "ACTIVE_PLUS_NEXT"
   - Classification: `ISOLATED`
   - Status: `done` | Tasks: 2 | Completed: 2
   - Summary: Covers mutation endpoint families and the shared mutation guardrails surface.
-- [ ] **6. Domain Shared** → `.plan/6-domain-shared/orchestration.md`
+- [x] **6. Domain Shared** → `.plan/6-domain-shared/orchestration.md`
   - Classification: `MIXED`
-  - Status: `in_progress` | Tasks: 5 | Completed: 4
+  - Status: `done` | Tasks: 5 | Completed: 5
   - Summary: Covers continuation/resume contracts, shared guardrail policies, traversal policy surfaces, shared search policy kernels, and the runtime capability profile contract.
 - [ ] **7. Infrastructure** → `.plan/7-infrastructure/orchestration.md`
   - Classification: `MIXED`
