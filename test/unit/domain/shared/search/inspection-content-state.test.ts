@@ -2,6 +2,9 @@ import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
 
 import {
+  INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS,
+} from "@domain/shared/guardrails/tool-guardrail-limits";
+import {
   INSPECTION_CONTENT_CONFIDENCE_LITERALS,
   INSPECTION_CONTENT_OPERATION_LITERALS,
   INSPECTION_CONTENT_STATE_LITERALS,

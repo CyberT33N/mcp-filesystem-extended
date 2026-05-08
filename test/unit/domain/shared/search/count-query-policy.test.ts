@@ -101,6 +101,24 @@ describe("count query policy", () => {
     expect(policy.serviceHardGapBytes).toBeNull();
   });
 
+  it("uses the streaming pattern-aware lane for hybrid text-dominant surfaces", () => {
+    const policy = resolveCountQueryPolicy({
+      ioCapabilityProfile: PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+      inspectionContentClassification: {
+        resolvedState: INSPECTION_CONTENT_STATE_LITERALS.HYBRID_TEXT_DOMINANT,
+        resolvedTextEncoding: INSPECTION_CONTENT_TEXT_ENCODING_LITERALS.UTF8,
+      },
+      pattern: "preview-first",
+    });
+
+    expect(policy.executionLane).toBe(CountQueryExecutionLane.STREAMING_PATTERN_AWARE);
+    expect(policy.patternClassification?.classification).toBe(
+      PATTERN_CLASSIFICATION_LITERALS.literal,
+    );
+    expect(policy.syncCandidateBytesCap).toBeNull();
+    expect(policy.serviceHardGapBytes).toBeNull();
+  });
+
   it("uses the native pattern-aware lane and fixed-string caps for UTF-8 literal queries", () => {
     const policy = resolveCountQueryPolicy({
       ioCapabilityProfile: PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
@@ -151,13 +169,12 @@ describe("count query policy", () => {
     );
   });
 
-  it("builds a literal native-count command without line numbers and keeps the hybrid literal lane explicit", () => {
+  it("builds a literal native-count command without line numbers and keeps the default binary skip lane", () => {
     const command = buildPatternAwareCountCommand({
       candidatePath: "src/domain/shared/search/search-execution-policy.ts",
       ioCapabilityProfile: PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
       pattern: "preview-first",
       caseSensitive: false,
-      hybridLiteralSearchLane: true,
     });
     const searchExecutionPolicy = resolveSearchExecutionPolicy(
       PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
@@ -168,39 +185,43 @@ describe("count query policy", () => {
     expect(command.args).toContain("--count");
     expect(command.args).toContain("--no-messages");
     expect(command.args).toContain("--fixed-strings");
-    expect(command.args).toContain("--binary-files=text");
+    expect(command.args).toContain("--binary-files=without-match");
     expect(command.args).toContain("--ignore-case");
     expect(command.args.slice(-2)).toEqual([
       "preview-first",
       "src/domain/shared/search/search-execution-policy.ts",
     ]);
     expect(command.fixedStringMode).toBe(true);
-    expect(command.hybridLiteralSearchLane).toBe(true);
+    expect(command.hybridLiteralSearchLane).toBe(false);
     expect(command.requiresPcre2).toBe(false);
     expect(command.syncCandidateBytesCap).toBe(
       searchExecutionPolicy.fixedStringSyncCandidateBytesCap,
     );
   });
 
-  it("builds a PCRE2 count command with explicit context and max-count flags", () => {
+  it("builds a PCRE2 count command without leaking unsupported context flags", () => {
     const command = buildPatternAwareCountCommand({
       candidatePath: "src/domain/shared/search/pattern-classifier.ts",
       ioCapabilityProfile: PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
       pattern: "(?<=preview-)mode",
       caseSensitive: true,
-      beforeContextLines: 2,
-      afterContextLines: 3,
-      maxCount: 4,
     });
+    const searchExecutionPolicy = resolveSearchExecutionPolicy(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+    );
 
     expect(command.args).toContain("--perl-regexp");
-    expect(command.args).toContain("--before-context=2");
-    expect(command.args).toContain("--after-context=3");
-    expect(command.args).toContain("--max-count=4");
+    expect(command.args).toContain("--count");
+    expect(command.args).toContain("--no-messages");
+    expect(command.args).toContain("--binary-files=without-match");
+    expect(command.args).not.toContain("--fixed-strings");
     expect(command.args).not.toContain("--ignore-case");
     expect(command.args).not.toContain("--line-number");
     expect(command.fixedStringMode).toBe(false);
     expect(command.hybridLiteralSearchLane).toBe(false);
     expect(command.requiresPcre2).toBe(true);
+    expect(command.syncCandidateBytesCap).toBe(
+      searchExecutionPolicy.regexSyncCandidateBytesCap,
+    );
   });
 });
