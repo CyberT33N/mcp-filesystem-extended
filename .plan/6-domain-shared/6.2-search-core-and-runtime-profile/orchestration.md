@@ -4,9 +4,9 @@ file_id: "6.2"
 unit_name: "Search Core and Runtime Profile"
 parent_orchestration: ".plan/6-domain-shared/orchestration.md"
 hierarchy_level: 2
-unit_status: "in_progress"
+unit_status: "done"
 total_tasks: 2
-completed_tasks: 1
+completed_tasks: 2
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "6.2.2"
@@ -18,5 +18,5 @@ todo_window_mode_override: "ACTIVE_PLUS_NEXT"
 
 ## Tasks
 - [x] **6.2.1 Shared search core tests** → `6.2.1-shared-search-core-tests.md`
-- [~] **6.2.2 Runtime IO capability profile tests** → `6.2.2-runtime-io-capability-profile-tests.md`
+- [x] **6.2.2 Runtime IO capability profile tests** → `6.2.2-runtime-io-capability-profile-tests.md`
 
