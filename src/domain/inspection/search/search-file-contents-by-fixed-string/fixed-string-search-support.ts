@@ -214,6 +214,8 @@ export function createFixedStringRootErrorResult(
     totalMatches: 0,
     truncated: false,
     error: errorMessage,
+    stopReason: null,
+    stopMessage: null,
   };
 }
 

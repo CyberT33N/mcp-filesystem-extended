@@ -2,6 +2,7 @@ import {
   COUNT_LINES_RESPONSE_CAP_CHARS,
   DISCOVERY_RESPONSE_CAP_CHARS,
   FILE_DIFF_RESPONSE_CAP_CHARS,
+  FIXED_STRING_SEARCH_RESPONSE_CAP_CHARS,
   METADATA_RESPONSE_CAP_CHARS,
   READ_FILE_CONTENT_RESPONSE_CAP_CHARS,
   READ_FILES_RESPONSE_CAP_CHARS,
@@ -127,7 +128,7 @@ export function buildSearchFileContentsByFixedStringToolDescription(
   return (
     "Searches text file contents with an exact fixed string while broad roots exclude default vendor/cache trees unless callers target them explicitly or reopen descendants with additive overrides such as `includeExcludedGlobs` or optional `.gitignore` enrichment. "
     + "Use this tool for literal content matching, not for regex content matching, file-name matching, or glob matching. "
-    + `Inline and \`next-chunk\` text delivery remain bounded by the fixed-string-search family response cap of ${formatToolDescriptionCharacterLimit(REGEX_SEARCH_RESPONSE_CAP_CHARS)}. Additive \`complete-result\` continuation follows the shared global fuse instead of that family cap. `
+    + `Inline and \`next-chunk\` text delivery remain bounded by the fixed-string-search family response cap of ${formatToolDescriptionCharacterLimit(FIXED_STRING_SEARCH_RESPONSE_CAP_CHARS)}. Additive \`complete-result\` continuation follows the shared global fuse instead of that family cap. `
     + "Explicit large text-compatible file scopes may proceed to the shared fixed-string-search lane after content-state eligibility succeeds, while broad recursive workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while unsupported surfaces and recursive workloads that still exceed the server-owned lane budgets continue to refuse. "
     + `${structuredContinuationAuthorityDescription} `
     + "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. "

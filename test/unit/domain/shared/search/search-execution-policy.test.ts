@@ -93,4 +93,10 @@ describe("resolveSearchExecutionPolicy", () => {
     expect(policy.regexSyncCandidateBytesCap).toBe(16 * 1_024 * 1_024);
     expect(policy.fixedStringSyncCandidateBytesCap).toBe(48 * 1_024 * 1_024);
   });
+
+  it("preserves the shared generic traversal-inline execution budget while family overrides remain consumer-owned", () => {
+    const policy = resolveSearchExecutionPolicy(createIoCapabilityProfile());
+
+    expect(policy.traversalInlineExecutionBudgetMs).toBe(4_000);
+  });
 });

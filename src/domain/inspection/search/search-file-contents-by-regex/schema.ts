@@ -21,6 +21,7 @@ import {
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
+import { SEARCH_STOP_REASON_VALUES } from "../search-stop-state";
 
 /**
  * Canonical request contract for guarded regex content search.
@@ -420,6 +421,22 @@ export const SearchFileContentsByRegexResultSchema = z.object({
        * ```
        */
       error: z.string().nullable(),
+      /**
+       * Canonical bounded-stop reason.
+       *
+       * @remarks
+       * This property distinguishes bounded partial-result states from ordinary
+       * root-local failures when the search stopped early without becoming an error.
+       */
+      stopReason: z.enum(SEARCH_STOP_REASON_VALUES).nullable(),
+      /**
+       * Caller-visible bounded-stop explanation.
+       *
+       * @remarks
+       * This property explains why the current root stopped early when a bounded
+       * partial-result state exists.
+       */
+      stopMessage: z.string().nullable(),
     }),
   ),
   /**

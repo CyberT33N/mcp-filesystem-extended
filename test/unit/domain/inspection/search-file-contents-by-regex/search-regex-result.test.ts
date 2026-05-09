@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   assertFormattedRegexResponseBudget,
   formatSearchRegexPathOutput,
-} from "@domain/inspection/search-file-contents-by-regex/search-regex-result";
+} from "@domain/inspection/search/search-file-contents-by-regex/search-regex-result";
 import {
   resolveExplicitFileScopeCsvFixturePaths,
   type ResolvedInspectionSearchFixturePaths,

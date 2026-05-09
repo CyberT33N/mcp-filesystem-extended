@@ -17,10 +17,14 @@ export interface BuildUgrepCommandInput {
   executionPolicy: SearchExecutionPolicy;
 
   /**
-   * Concrete candidate path or scope passed to the native search backend.
+   * Concrete candidate paths or scopes passed to the native search backend.
+   *
+   * @remarks
+   * The shared native-search lane may execute against one validated file, one validated directory
+   * root, or one ordered batch of validated file candidates that already survived family-local
+   * traversal and eligibility checks.
    */
-  candidatePath: string;
-
+  candidatePaths: string[];
   /**
    * Indicates whether literal search intentionally targets a hybrid-searchable surface.
    */
@@ -129,7 +133,7 @@ export function buildUgrepCommand(input: BuildUgrepCommandInput): UgrepCommand {
     args.push("--perl-regexp");
   }
 
-  args.push(input.patternClassification.originalPattern, input.candidatePath);
+  args.push(input.patternClassification.originalPattern, ...input.candidatePaths);
 
   return {
     args,

@@ -15,6 +15,8 @@ Use this endpoint when the question is:
 
 Do not use this endpoint when the real need is regex-driven matching, total-only counting, metadata lookup, or direct file-content reading.
 
+This endpoint now lives under the shared [`inspection/search` family layer](../DESCRIPTION.md), which owns the family-wide preview-threshold philosophy, endpoint differentiation model, and the too-eager-preview problem statement.
+
 ---
 
 ## Request Model
@@ -84,6 +86,10 @@ They first enter the shared traversal admission planner, which decides whether t
 
 This means recursive workload breadth is a server-owned admission question, not an endpoint-local ad hoc guess.
 
+When admission keeps a directory-root workload inline, the endpoint no longer depends only on one native process per file.
+Validated native-searchable file candidates may now be grouped into ordered shell-free native `ugrep` batches, while decoded-text fallback and unsupported-surface handling still remain file-local.
+That split preserves per-file eligibility truth without leaving the inline lane trapped in avoidable process-spawn fragmentation.
+
 ### Content-state eligibility
 
 Fixed-string search is a text-oriented operation and consumes the shared capability matrix.
@@ -121,10 +127,20 @@ That preference exists because:
 The endpoint keeps runtime shaping active before caller-visible text is emitted.
 
 That means:
-
 - exact-match locations are collected through the shared literal lane,
 - bounded excerpts are preserved for caller-visible output,
 - resumable responses remain constrained by shared resume and response-budget rules.
+
+### Endpoint-local threshold calibration
+
+This endpoint consumes the family-owned threshold surface from [`search-family-thresholds.ts`](../search-family-thresholds.ts).
+
+Its current endpoint-specific values are:
+- inline execution budget override = `14,000 ms`
+- estimated per-candidate-file admission cost = `60 ms`
+
+These values are intentionally more permissive than regex search while still correcting the older too-eager-preview posture.
+The goal is to let moderate recursive literal-search workloads remain inline more often without erasing preview-first for genuinely broad workloads.
 
 ---
 

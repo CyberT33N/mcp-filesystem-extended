@@ -210,8 +210,8 @@ These endpoints support both `resumeMode = 'next-chunk'` and `resumeMode = 'comp
 | `list_directory_entries` | [`src/domain/inspection/list-directory-entries/schema.ts`](../../src/domain/inspection/list-directory-entries/schema.ts) | `roots` (array, `.default([])` is correct — empty array = absent) |
 | `find_paths_by_name` | [`src/domain/inspection/find-paths-by-name/schema.ts`](../../src/domain/inspection/find-paths-by-name/schema.ts) | `nameContains` (string, no default — `undefined` = absent) |
 | `find_files_by_glob` | [`src/domain/inspection/find-files-by-glob/schema.ts`](../../src/domain/inspection/find-files-by-glob/schema.ts) | `glob` (string, no default — `undefined` = absent) |
-| `search_file_contents_by_regex` | [`src/domain/inspection/search-file-contents-by-regex/schema.ts`](../../src/domain/inspection/search-file-contents-by-regex/schema.ts) | `regex` (string, no default — `undefined` = absent) |
-| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search-file-contents-by-fixed-string/schema.ts`](../../src/domain/inspection/search-file-contents-by-fixed-string/schema.ts) | `fixedString` (string, no default — `undefined` = absent) |
+| `search_file_contents_by_regex` | [`src/domain/inspection/search/search-file-contents-by-regex/schema.ts`](../../src/domain/inspection/search/search-file-contents-by-regex/schema.ts) | `regex` (string, no default — `undefined` = absent) |
+| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search/search-file-contents-by-fixed-string/schema.ts`](../../src/domain/inspection/search/search-file-contents-by-fixed-string/schema.ts) | `fixedString` (string, no default — `undefined` = absent) |
 
 ### Completion-Backed-Only Family
 

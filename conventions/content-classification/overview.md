@@ -176,8 +176,8 @@ These endpoint families must all consume the same shared classification and capa
 |---|---|
 | `read_file_content` | [`src/domain/inspection/read-file-content/handler.ts`](../../src/domain/inspection/read-file-content/handler.ts) |
 | `read_files_with_line_numbers` | [`src/domain/inspection/read-files-with-line-numbers/handler.ts`](../../src/domain/inspection/read-files-with-line-numbers/handler.ts) |
-| `search_file_contents_by_regex` | [`src/domain/inspection/search-file-contents-by-regex/handler.ts`](../../src/domain/inspection/search-file-contents-by-regex/handler.ts) |
-| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search-file-contents-by-fixed-string/fixed-string-search-support.ts`](../../src/domain/inspection/search-file-contents-by-fixed-string/fixed-string-search-support.ts) |
+| `search_file_contents_by_regex` | [`src/domain/inspection/search/search-file-contents-by-regex/handler.ts`](../../src/domain/inspection/search/search-file-contents-by-regex/handler.ts) |
+| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts`](../../src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts) |
 | `count_lines` | [`src/domain/inspection/count-lines/handler.ts`](../../src/domain/inspection/count-lines/handler.ts) |
 
 ### Path-Discovery Endpoints

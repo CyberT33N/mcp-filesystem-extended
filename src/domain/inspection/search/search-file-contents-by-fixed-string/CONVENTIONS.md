@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `search_file_contents_by_fixed_string`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail, content-classification, search-platform, and resume-architecture slices, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the literal content-search surface.
+Shared search-family rules now remain owned first by the family-level [`inspection/search` conventions](../CONVENTIONS.md), and then by the workspace-level conventions index plus the shared guardrail, content-classification, search-platform, and resume-architecture slices, especially [`public-limit-disclosure-governance.md`](../../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the literal content-search surface.
 
 ---
 
@@ -117,6 +117,20 @@ The caller-visible architectural outcomes are:
 - `narrowing-required`
 
 The fixed-string endpoint-local docs must explain that broad valid workloads may degrade into preview-first or server-owned completion behavior, while unsupported surfaces, invalid scopes, or over-hard-gap workloads still refuse.
+
+### Family-owned threshold calibration
+
+This endpoint is tuned by the search-family threshold policy from [`search-family-thresholds.ts`](../search-family-thresholds.ts).
+
+The endpoint-specific calibrated values are:
+- inline execution budget override = `14,000 ms`
+- estimated per-candidate-file admission cost = `60 ms`
+
+These values exist because the older fixed-string admission posture was also too preview-eager for moderate recursive code-search workloads, even though fixed-string search is narrower than regex.
+Without this correction, the endpoint would still enter preview-first too early for many enterprise literal-search workloads where callers usually want the complete result set.
+
+Fixed-string remains intentionally more permissive than regex.
+That differentiation is required because exact literal matching is narrower, cheaper, and more likely to justify inline completion when the projected caller-visible result surface stays compact.
 
 ---
 
@@ -240,6 +254,19 @@ When the response is resumable:
 - family-level response caps remain authoritative for inline and `next-chunk`,
 - `complete-result` uses the global fuse as the effective final ceiling instead of the family cap,
 - endpoint-local docs must not describe `complete-result` as a cap bypass.
+
+### Single-execution response rule
+
+This endpoint must not execute the same search twice in order to build `content.text` and `structuredContent` separately.
+
+The architecturally correct rule is:
+- one search execution,
+- one shared result object,
+- one formatted `content.text` surface derived from that result,
+- and one mirrored `structuredContent` surface derived from that same result.
+
+If the endpoint executes twice, resume state, truncation state, and root-local failure state can drift between the two surfaces.
+That would violate the shared structured-content contract.
 
 ---
 

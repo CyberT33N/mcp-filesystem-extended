@@ -290,14 +290,21 @@ function buildSearchFixedStringContinuationEnvelope(
 }
 
 /**
- * Executes fixed-string search across one or more roots and returns the formatted text response surface.
+ * Executes one fixed-string search request exactly once and derives both the caller-visible text
+ * surface and the structured result payload from that same execution result.
  *
- * @param options - Request, resume, and environment options for the formatted fixed-string search flow.
- * @returns Formatted text output that respects the shared search-family response cap.
+ * @remarks
+ * This helper prevents the fixed-string endpoint from executing the same search twice — once for
+ * `structuredContent` and once again for `content.text`. The search-family architecture requires a
+ * single execution truth so resume state, truncation, and root-local outcomes cannot drift between
+ * duplicated runs.
+ *
+ * @param options - Request, resume, and environment options for one fixed-string search tool response.
+ * @returns One shared formatted text surface and one shared structured result surface.
  */
-export async function handleSearchFixedString(
-  options: HandleSearchFixedStringOptions,
-): Promise<string> {
+export async function buildSearchFixedStringToolResult(
+  options: GetSearchFixedStringResultOptions,
+): Promise<{ text: string; result: SearchFixedStringResult }> {
   const {
     resumeToken,
     resumeMode,
@@ -313,59 +320,71 @@ export async function handleSearchFixedString(
     inspectionResumeSessionStore,
   } = options;
 
-  const executionContext = resolveSearchFixedStringExecutionContext(
-    {
-      resumeToken,
-      resumeMode,
-      searchPaths,
-      fixedString,
-      filePatterns,
-      excludePatterns,
-      includeExcludedGlobs,
-      respectGitIgnore,
-      maxResults,
-      caseSensitive,
-      inspectionResumeSessionStore,
-      now: new Date(),
-    },
-  );
-  const structuredResult = await getSearchFixedStringResult(
-    {
-      resumeToken,
-      resumeMode,
-      searchPaths,
-      fixedString,
-      filePatterns,
-      excludePatterns,
-      includeExcludedGlobs,
-      respectGitIgnore,
-      maxResults,
-      caseSensitive,
-      allowedDirectories,
-      inspectionResumeSessionStore,
-    },
-  );
+  const now = new Date();
+  const executionContext = resolveSearchFixedStringExecutionContext({
+    resumeToken,
+    resumeMode,
+    searchPaths,
+    fixedString,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    inspectionResumeSessionStore,
+    now,
+  });
+  const result = await getSearchFixedStringResult({
+    resumeToken,
+    resumeMode,
+    searchPaths,
+    fixedString,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    allowedDirectories,
+    inspectionResumeSessionStore,
+  });
   const effectiveMaxResults = Math.min(
     executionContext.requestPayload.maxResults,
     REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
   );
-  const effectiveFixedString = executionContext.requestPayload.fixedString;
-
-  const output = assertFormattedFixedStringResponseBudget(
+  const text = assertFormattedFixedStringResponseBudget(
     SEARCH_FIXED_STRING_TOOL_NAME,
     formatSearchFixedStringContinuationAwareTextOutput(
-      structuredResult,
-      effectiveFixedString,
+      result,
+      executionContext.requestPayload.fixedString,
       effectiveMaxResults,
     ),
     executionContext.requestedResumeMode,
   );
 
-  if (resumeToken !== undefined && !structuredResult.resume.resumable && structuredResult.resume.resumeToken === null) {
-    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
+    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, now);
   }
 
-  return output;
+  return {
+    text,
+    result,
+  };
+}
+
+/**
+ * Executes fixed-string search across one or more roots and returns the formatted text response surface.
+ *
+ * @param options - Request, resume, and environment options for the formatted fixed-string search flow.
+ * @returns Formatted text output that respects the shared search-family response cap.
+ */
+export async function handleSearchFixedString(
+  options: HandleSearchFixedStringOptions,
+): Promise<string> {
+  const { text } = await buildSearchFixedStringToolResult(options);
+
+  return text;
 }
 
 /**
@@ -496,14 +515,18 @@ export async function getSearchFixedStringResult(
   });
 
   return {
-    roots: roots.map(({ root, matches, filesSearched, totalMatches, truncated, error }) => ({
-      root,
-      matches,
-      filesSearched,
-      totalMatches,
-      truncated,
-      error,
-    })),
+    roots: roots.map(
+      ({ root, matches, filesSearched, totalMatches, truncated, error, stopReason, stopMessage }) => ({
+        root,
+        matches,
+        filesSearched,
+        totalMatches,
+        truncated,
+        error,
+        stopReason,
+        stopMessage,
+      })
+    ),
     totalLocations: roots.reduce((total, root) => total + root.matches.length, 0),
     totalMatches: roots.reduce((total, root) => total + root.totalMatches, 0),
     truncated: roots.some((root) => root.truncated),

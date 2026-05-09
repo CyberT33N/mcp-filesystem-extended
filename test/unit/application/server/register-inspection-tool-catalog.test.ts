@@ -31,14 +31,10 @@ const registerInspectionToolCatalogTestState = vi.hoisted(() => ({
   handleSearchGlob: vi.fn(),
   findFilesByGlobArgsSchema: { schema: "find-files-by-glob" },
   findFilesByGlobResultSchema: { schema: "find-files-by-glob-result" },
-  handleSearchRegex: vi.fn(),
-  getSearchRegexStructuredResult: vi.fn(),
-  searchFileContentsByRegexArgsSchema: { schema: "search-regex" },
+  buildSearchRegexToolResult: vi.fn(),
   searchFileContentsByRegexBaseArgsSchema: { schema: "search-regex-base" },
   searchFileContentsByRegexResultSchema: { schema: "search-regex-result" },
-  handleSearchFixedString: vi.fn(),
-  getSearchFixedStringStructuredResult: vi.fn(),
-  searchFileContentsByFixedStringArgsSchema: { schema: "search-fixed-string" },
+  buildSearchFixedStringToolResult: vi.fn(),
   searchFileContentsByFixedStringBaseArgsSchema: {
     schema: "search-fixed-string-base",
   },
@@ -59,6 +55,19 @@ const registerInspectionToolCatalogTestState = vi.hoisted(() => ({
   verifyFileChecksumsResultSchema: {
     schema: "verify-file-checksums-result",
   },
+  buildCountLinesToolDescription: vi.fn(() => "count-lines description"),
+  buildFindFilesByGlobToolDescription: vi.fn(() => "find-files-by-glob description"),
+  buildFindPathsByNameToolDescription: vi.fn(() => "find-paths-by-name description"),
+  buildGetFileChecksumsToolDescription: vi.fn(() => "get-file-checksums description"),
+  buildGetPathMetadataToolDescription: vi.fn(() => "get-path-metadata description"),
+  buildListDirectoryEntriesToolDescription: vi.fn(() => "list-directory-entries description"),
+  buildReadFileContentToolDescription: vi.fn(
+    () => "read-file-content description with line-range and chunk-cursor support",
+  ),
+  buildReadFilesWithLineNumbersToolDescription: vi.fn(() => "read-files-with-line-numbers description"),
+  buildSearchFileContentsByFixedStringToolDescription: vi.fn(() => "search-fixed-string description"),
+  buildSearchFileContentsByRegexToolDescription: vi.fn(() => "search-regex description"),
+  buildVerifyFileChecksumsToolDescription: vi.fn(() => "verify-file-checksums description"),
   readOnlyLocalToolAnnotations: { audience: "read-only" },
 }));
 
@@ -141,31 +150,24 @@ vi.mock("@domain/inspection/find-files-by-glob/schema", () => ({
     registerInspectionToolCatalogTestState.findFilesByGlobResultSchema,
 }));
 
-vi.mock("@domain/inspection/search-file-contents-by-regex/handler", () => ({
-  handleSearchRegex: registerInspectionToolCatalogTestState.handleSearchRegex,
-  getSearchRegexResult:
-    registerInspectionToolCatalogTestState.getSearchRegexStructuredResult,
+vi.mock("@domain/inspection/search/search-file-contents-by-regex/handler", () => ({
+  buildSearchRegexToolResult:
+    registerInspectionToolCatalogTestState.buildSearchRegexToolResult,
 }));
 
-vi.mock("@domain/inspection/search-file-contents-by-regex/schema", () => ({
-  SearchFileContentsByRegexArgsSchema:
-    registerInspectionToolCatalogTestState.searchFileContentsByRegexArgsSchema,
+vi.mock("@domain/inspection/search/search-file-contents-by-regex/schema", () => ({
   SearchFileContentsByRegexBaseArgsSchema:
     registerInspectionToolCatalogTestState.searchFileContentsByRegexBaseArgsSchema,
   SearchFileContentsByRegexResultSchema:
     registerInspectionToolCatalogTestState.searchFileContentsByRegexResultSchema,
 }));
 
-vi.mock("@domain/inspection/search-file-contents-by-fixed-string/handler", () => ({
-  handleSearchFixedString:
-    registerInspectionToolCatalogTestState.handleSearchFixedString,
-  getSearchFixedStringResult:
-    registerInspectionToolCatalogTestState.getSearchFixedStringStructuredResult,
+vi.mock("@domain/inspection/search/search-file-contents-by-fixed-string/handler", () => ({
+  buildSearchFixedStringToolResult:
+    registerInspectionToolCatalogTestState.buildSearchFixedStringToolResult,
 }));
 
-vi.mock("@domain/inspection/search-file-contents-by-fixed-string/schema", () => ({
-  SearchFileContentsByFixedStringArgsSchema:
-    registerInspectionToolCatalogTestState.searchFileContentsByFixedStringArgsSchema,
+vi.mock("@domain/inspection/search/search-file-contents-by-fixed-string/schema", () => ({
   SearchFileContentsByFixedStringBaseArgsSchema:
     registerInspectionToolCatalogTestState.searchFileContentsByFixedStringBaseArgsSchema,
   SearchFileContentsByFixedStringResultSchema:
@@ -212,6 +214,28 @@ vi.mock("@domain/inspection/verify-file-checksums/schema", () => ({
 }));
 
 vi.mock("@application/server/tool-registration-presets", () => ({
+  buildCountLinesToolDescription:
+    registerInspectionToolCatalogTestState.buildCountLinesToolDescription,
+  buildFindFilesByGlobToolDescription:
+    registerInspectionToolCatalogTestState.buildFindFilesByGlobToolDescription,
+  buildFindPathsByNameToolDescription:
+    registerInspectionToolCatalogTestState.buildFindPathsByNameToolDescription,
+  buildGetFileChecksumsToolDescription:
+    registerInspectionToolCatalogTestState.buildGetFileChecksumsToolDescription,
+  buildGetPathMetadataToolDescription:
+    registerInspectionToolCatalogTestState.buildGetPathMetadataToolDescription,
+  buildListDirectoryEntriesToolDescription:
+    registerInspectionToolCatalogTestState.buildListDirectoryEntriesToolDescription,
+  buildReadFileContentToolDescription:
+    registerInspectionToolCatalogTestState.buildReadFileContentToolDescription,
+  buildReadFilesWithLineNumbersToolDescription:
+    registerInspectionToolCatalogTestState.buildReadFilesWithLineNumbersToolDescription,
+  buildSearchFileContentsByFixedStringToolDescription:
+    registerInspectionToolCatalogTestState.buildSearchFileContentsByFixedStringToolDescription,
+  buildSearchFileContentsByRegexToolDescription:
+    registerInspectionToolCatalogTestState.buildSearchFileContentsByRegexToolDescription,
+  buildVerifyFileChecksumsToolDescription:
+    registerInspectionToolCatalogTestState.buildVerifyFileChecksumsToolDescription,
   READ_ONLY_LOCAL_TOOL_ANNOTATIONS:
     registerInspectionToolCatalogTestState.readOnlyLocalToolAnnotations,
 }));
@@ -232,10 +256,8 @@ describe("register-inspection-tool-catalog", () => {
     registerInspectionToolCatalogTestState.handleSearchFiles.mockClear();
     registerInspectionToolCatalogTestState.getFindFilesByGlobResult.mockClear();
     registerInspectionToolCatalogTestState.handleSearchGlob.mockClear();
-    registerInspectionToolCatalogTestState.handleSearchRegex.mockClear();
-    registerInspectionToolCatalogTestState.getSearchRegexStructuredResult.mockClear();
-    registerInspectionToolCatalogTestState.handleSearchFixedString.mockClear();
-    registerInspectionToolCatalogTestState.getSearchFixedStringStructuredResult.mockClear();
+    registerInspectionToolCatalogTestState.buildSearchRegexToolResult.mockClear();
+    registerInspectionToolCatalogTestState.buildSearchFixedStringToolResult.mockClear();
     registerInspectionToolCatalogTestState.formatCountLinesResultOutput.mockClear();
     registerInspectionToolCatalogTestState.getCountLinesResult.mockClear();
     registerInspectionToolCatalogTestState.getFileChecksumsResult.mockClear();

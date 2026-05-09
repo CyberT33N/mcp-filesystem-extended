@@ -7,7 +7,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Hoisted native regex search runner mock used to stabilize the path-result contract tests.
  */
-const { mockedRunUgrepSearch } = vi.hoisted(() => ({
+const { mockedGetRequiredUgrepExecutablePath, mockedRunUgrepSearch } = vi.hoisted(() => ({
+  mockedGetRequiredUgrepExecutablePath: vi.fn(() => "C:/tools/ugrep.exe"),
   mockedRunUgrepSearch: vi.fn(),
 }));
 
@@ -15,8 +16,12 @@ vi.mock("@infrastructure/search/ugrep-runner", () => ({
   runUgrepSearch: mockedRunUgrepSearch,
 }));
 
-import { SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME } from "@domain/inspection/search-file-contents-by-regex/schema";
-import { getSearchRegexPathResult } from "@domain/inspection/search-file-contents-by-regex/search-regex-path-result";
+vi.mock("@infrastructure/runtime/ugrep-runtime-dependency", () => ({
+  getRequiredUgrepExecutablePath: mockedGetRequiredUgrepExecutablePath,
+}));
+
+import { SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME } from "@domain/inspection/search/search-file-contents-by-regex/schema";
+import { getSearchRegexPathResult } from "@domain/inspection/search/search-file-contents-by-regex/search-regex-path-result";
 import {
   resolveExplicitFileScopeCsvFixturePaths,
   type ResolvedInspectionSearchFixturePaths,

@@ -7,7 +7,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Hoisted native fixed-string search runner mock used to stabilize the path-result contract tests.
  */
-const { mockedRunUgrepSearch } = vi.hoisted(() => ({
+const { mockedGetRequiredUgrepExecutablePath, mockedRunUgrepSearch } = vi.hoisted(() => ({
+  mockedGetRequiredUgrepExecutablePath: vi.fn(() => "C:/tools/ugrep.exe"),
   mockedRunUgrepSearch: vi.fn(),
 }));
 
@@ -15,7 +16,11 @@ vi.mock("@infrastructure/search/ugrep-runner", () => ({
   runUgrepSearch: mockedRunUgrepSearch,
 }));
 
-import { getSearchFixedStringPathResult } from "@domain/inspection/search-file-contents-by-fixed-string/search-fixed-string-path-result";
+vi.mock("@infrastructure/runtime/ugrep-runtime-dependency", () => ({
+  getRequiredUgrepExecutablePath: mockedGetRequiredUgrepExecutablePath,
+}));
+
+import { getSearchFixedStringPathResult } from "@domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-path-result";
 import {
   resolveExplicitFileScopeCsvFixturePaths,
   type ResolvedInspectionSearchFixturePaths,

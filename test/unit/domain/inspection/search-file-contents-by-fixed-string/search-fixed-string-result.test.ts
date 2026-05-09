@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   assertFormattedFixedStringResponseBudget,
   formatSearchFixedStringPathOutput,
-} from "@domain/inspection/search-file-contents-by-fixed-string/search-fixed-string-result";
+} from "@domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-result";
 import {
   resolveExplicitFileScopeCsvFixturePaths,
   type ResolvedInspectionSearchFixturePaths,

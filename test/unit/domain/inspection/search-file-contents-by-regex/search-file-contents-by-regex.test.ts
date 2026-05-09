@@ -43,7 +43,7 @@ vi.mock("@infrastructure/runtime/io-capability-detector", () => ({
 }));
 
 vi.mock(
-  "@domain/inspection/search-file-contents-by-regex/search-regex-path-result",
+  "@domain/inspection/search/search-file-contents-by-regex/search-regex-path-result",
   () => ({
     createRegexSearchAggregateBudgetState: mockedCreateRegexSearchAggregateBudgetState,
     getSearchRegexPathResult: mockedGetSearchRegexPathResult,
@@ -51,7 +51,7 @@ vi.mock(
 );
 
 vi.mock(
-  "@domain/inspection/search-file-contents-by-regex/search-regex-result",
+  "@domain/inspection/search/search-file-contents-by-regex/search-regex-result",
   () => ({
     assertFormattedRegexResponseBudget: mockedAssertFormattedRegexResponseBudget,
     formatSearchRegexContinuationAwareTextOutput:
@@ -69,9 +69,10 @@ import {
   SourceReadTier,
 } from "@domain/shared/runtime/io-capability-profile";
 import {
+  buildSearchRegexToolResult,
   getSearchRegexResult,
   handleSearchRegex,
-} from "@domain/inspection/search-file-contents-by-regex/handler";
+} from "@domain/inspection/search/search-file-contents-by-regex/handler";
 import {
   resolveExplicitFileScopeCsvFixturePaths,
   type ResolvedInspectionSearchFixturePaths,
@@ -160,7 +161,7 @@ describe("search_file_contents_by_regex", () => {
       matches: [
         {
           content: "export async function handleSearchRegex(",
-          file: "src/domain/inspection/search-file-contents-by-regex/handler.ts",
+          file: "src/domain/inspection/search/search-file-contents-by-regex/handler.ts",
           line: 70,
           match: "handleSearchRegex",
         },
@@ -217,6 +218,54 @@ describe("search_file_contents_by_regex", () => {
       null,
     );
     expect(result).toBe("formatted regex search output");
+  });
+
+  it("builds text and structured regex tool surfaces from one shared execution result", async () => {
+    const pathResult = {
+      admissionOutcome: "inline",
+      error: null,
+      filesSearched: 2,
+      matches: [],
+      nextContinuationState: null,
+      root: "src",
+      totalMatches: 0,
+      truncated: false,
+      traversalInlineExecutionBudgetMs: 4_000,
+      traversalInlineCandidateFileBudget: 8_000,
+    };
+
+    mockedGetSearchRegexPathResult.mockResolvedValue(pathResult);
+    mockedFormatSearchRegexContinuationAwareTextOutput.mockReturnValue(
+      "formatted regex search output",
+    );
+
+    const toolResult = await buildSearchRegexToolResult({
+      resumeToken: undefined,
+      resumeMode: undefined,
+      searchPaths: ["src"],
+      pattern: "handleSearchRegex",
+      filePatterns: ["*.ts"],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 10,
+      caseSensitive: false,
+      allowedDirectories: ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
+      inspectionResumeSessionStore: undefined,
+    });
+
+    expect(toolResult.text).toBe("formatted regex search output");
+    expect(toolResult.result).toMatchObject({
+      roots: [
+        expect.objectContaining({
+          root: "src",
+        }),
+      ],
+      totalLocations: 0,
+      totalMatches: 0,
+      truncated: false,
+    });
+    expect(mockedGetSearchRegexPathResult).toHaveBeenCalledTimes(1);
   });
 
   it("preserves root-local failures in the structured multi-root result surface", async () => {

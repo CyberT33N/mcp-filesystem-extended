@@ -63,12 +63,13 @@ Shared ownership boundaries that remain true across the workspace:
 | `get_file_checksums` | [`DESCRIPTION.md`](src/domain/inspection/get-file-checksums/DESCRIPTION.md) |
 | `verify_file_checksums` | [`DESCRIPTION.md`](src/domain/inspection/verify-file-checksums/DESCRIPTION.md) |
 
-### 4.3 Inspection — search and count
+### 4.3 Inspection — search family and count
 
-| Endpoint | Local architecture description |
+| Endpoint / family | Local architecture description |
 |---|---|
-| `search_file_contents_by_regex` | [`DESCRIPTION.md`](src/domain/inspection/search-file-contents-by-regex/DESCRIPTION.md) |
-| `search_file_contents_by_fixed_string` | [`DESCRIPTION.md`](src/domain/inspection/search-file-contents-by-fixed-string/DESCRIPTION.md) |
+| `inspection/search` family | [`DESCRIPTION.md`](src/domain/inspection/search/DESCRIPTION.md) |
+| `search_file_contents_by_regex` | [`DESCRIPTION.md`](src/domain/inspection/search/search-file-contents-by-regex/DESCRIPTION.md) |
+| `search_file_contents_by_fixed_string` | [`DESCRIPTION.md`](src/domain/inspection/search/search-file-contents-by-fixed-string/DESCRIPTION.md) |
 | `count_lines` | [`DESCRIPTION.md`](src/domain/inspection/count-lines/DESCRIPTION.md) |
 
 ### 4.4 Inspection — read

@@ -97,6 +97,53 @@ describe("traversal scope and admission", () => {
     });
   });
 
+  it("honors a consumer-owned inline execution budget override before degrading to preview-first", () => {
+    const executionPolicy = resolveSearchExecutionPolicy(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+    );
+
+    const decision = resolveTraversalWorkloadAdmissionDecision({
+      requestedRoot: "src/domain/shared",
+      rootEntry: {
+        requestedPath: "src/domain/shared",
+        validPath: "C:/workspace/src/domain/shared",
+        type: "directory",
+        size: 0,
+      },
+      admissionEvidence: {
+        requestedRoot: "src/domain/shared",
+        visitedEntries: 100,
+        visitedDirectories: 10,
+        elapsedMs: 25,
+      },
+      candidateWorkloadEvidence: {
+        estimatedCandidateBytes: 1_024,
+        matchedCandidateFiles: 78,
+        estimatedResponseChars: 120,
+        probeElapsedMs: 1_000,
+        probeTruncated: false,
+      },
+      projectedInlineTextChars: 200,
+      executionPolicy,
+      consumerCapabilities: {
+        toolName: "search_file_contents_by_regex",
+        previewFirstSupported: true,
+        inlineCandidateByteBudget: 10_000,
+        inlineCandidateFileBudget: 500,
+        inlineTextResponseCapChars: 1_000,
+        executionTimeCostMultiplier: 2,
+        estimatedPerCandidateFileCostMs: 90,
+        inlineExecutionBudgetMs: 12_000,
+        taskBackedExecutionSupported: false,
+      },
+    });
+
+    expect(decision).toEqual({
+      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE,
+      guidanceText: null,
+    });
+  });
+
   it("switches to preview-first admission when the projected inline response text exceeds the consumer cap", () => {
     const executionPolicy = resolveSearchExecutionPolicy(
       PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
@@ -184,7 +231,7 @@ describe("traversal scope and admission", () => {
     expect(decision.outcome).toBe(
       TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
     );
-    expect(decision.guidanceText).toContain("task-backed execution lane");
+    expect(decision.guidanceText).toContain("completion-backed execution lane");
   });
 
   it("requires narrowing when the traversal exceeds inline admission and the consumer has no preview-first or task-backed lane", () => {

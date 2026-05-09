@@ -23,6 +23,7 @@ This document is the entry point for the architecture conventions of this projec
 | [Search Platform Endpoint Lane Matrix](conventions/search-platform/endpoint-family-lane-matrix.md) | Complete affected endpoint matrix, lane capabilities, resume modes, refusal surfaces, and supported large-file behaviors |
 | [Search Platform Preflight and Hardgap Governance](conventions/search-platform/preflight-and-hardgap-governance.md) | Correct preflight ownership, recursive admission lanes, explicit-file search entry rules, and hardgap boundaries |
 | [Search Platform Threshold and Variable Registry](conventions/search-platform/threshold-and-variable-registry.md) | Canonical search-platform variables, family thresholds, hardgaps, sync caps, response caps, and their intended ownership |
+| [Inspection Search Family Conventions](src/domain/inspection/search/CONVENTIONS.md) | Search-family topology, preview-threshold philosophy, regex versus fixed-string differentiation, and the too-eager-preview problem |
 
 ---
 
@@ -49,10 +50,11 @@ Endpoint-specific policy stays in the linked endpoint-local convention files bel
 - [`get_file_checksums`](src/domain/inspection/get-file-checksums/CONVENTIONS.md)
 - [`verify_file_checksums`](src/domain/inspection/verify-file-checksums/CONVENTIONS.md)
 
-### Inspection — search and count
+### Inspection — search family and count
 
-- [`search_file_contents_by_regex`](src/domain/inspection/search-file-contents-by-regex/CONVENTIONS.md)
-- [`search_file_contents_by_fixed_string`](src/domain/inspection/search-file-contents-by-fixed-string/CONVENTIONS.md)
+- [`inspection/search` family conventions](src/domain/inspection/search/CONVENTIONS.md)
+- [`search_file_contents_by_regex`](src/domain/inspection/search/search-file-contents-by-regex/CONVENTIONS.md)
+- [`search_file_contents_by_fixed_string`](src/domain/inspection/search/search-file-contents-by-fixed-string/CONVENTIONS.md)
 - [`count_lines`](src/domain/inspection/count-lines/CONVENTIONS.md)
 
 ### Inspection — read

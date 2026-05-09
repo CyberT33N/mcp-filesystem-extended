@@ -20,6 +20,11 @@ import {
 } from "./fixed-string-search-support";
 import { SEARCH_FILE_CONTENTS_BY_FIXED_STRING_TOOL_NAME } from "./schema";
 import { type FixedStringSearchMatch } from "./search-fixed-string-result";
+import {
+  createSearchMaxResultsLimitReachedState,
+  createUnstoppedSearchState,
+  type SearchStopState,
+} from "../search-stop-state";
 
 function collectFixedStringMatchesFromDecodedText(
   candidateEntry: FilesystemPreflightEntry,
@@ -118,6 +123,7 @@ export async function collectFixedStringMatchesFromFileEntry(
   totalMatches: number;
   totalBytesScanned: number;
   truncated: boolean;
+  stopState: SearchStopState;
 }> {
   if (!matchesIncludedFilePatterns(candidateRelativePath, filePatterns)) {
     return {
@@ -126,6 +132,7 @@ export async function collectFixedStringMatchesFromFileEntry(
       totalMatches: 0,
       totalBytesScanned: totalBytesScannedBeforeRead,
       truncated: false,
+      stopState: createUnstoppedSearchState(),
     };
   }
 
@@ -160,6 +167,7 @@ export async function collectFixedStringMatchesFromFileEntry(
       totalMatches: 0,
       totalBytesScanned: nextTotalBytesScanned,
       truncated: false,
+      stopState: createUnstoppedSearchState(),
     };
   }
 
@@ -170,6 +178,7 @@ export async function collectFixedStringMatchesFromFileEntry(
       totalMatches: 0,
       totalBytesScanned: nextTotalBytesScanned,
       truncated: true,
+      stopState: createSearchMaxResultsLimitReachedState(maxAdditionalResults),
     };
   }
 
@@ -206,12 +215,15 @@ export async function collectFixedStringMatchesFromFileEntry(
       totalMatches: decodedTextSearchResult.totalMatches,
       totalBytesScanned: nextTotalBytesScanned,
       truncated: decodedTextSearchResult.truncated,
+      stopState: decodedTextSearchResult.truncated
+        ? createSearchMaxResultsLimitReachedState(effectiveLocationCap)
+        : createUnstoppedSearchState(),
     };
   }
   const command = buildUgrepCommand({
     patternClassification: createFixedStringPatternClassification(fixedString),
     executionPolicy,
-    candidatePath: candidateEntry.validPath,
+    candidatePaths: [candidateEntry.validPath],
     caseSensitive,
     maxCount: effectiveLocationCap,
   });
@@ -242,6 +254,7 @@ export async function collectFixedStringMatchesFromFileEntry(
       totalMatches: 0,
       totalBytesScanned: nextTotalBytesScanned,
       truncated: false,
+      stopState: createUnstoppedSearchState(),
     };
   }
 
@@ -299,5 +312,8 @@ export async function collectFixedStringMatchesFromFileEntry(
     totalMatches,
     totalBytesScanned: nextTotalBytesScanned,
     truncated,
+    stopState: truncated
+      ? createSearchMaxResultsLimitReachedState(effectiveLocationCap)
+      : createUnstoppedSearchState(),
   };
 }

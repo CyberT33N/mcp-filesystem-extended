@@ -133,6 +133,8 @@ function createRegexRootErrorResult(
     totalMatches: 0,
     truncated: false,
     error: errorMessage,
+    stopReason: null,
+    stopMessage: null,
   };
 }
 
@@ -330,20 +332,21 @@ function buildSearchRegexContinuationEnvelope(
 }
 
 /**
- * Executes regex search across one or more roots and returns the formatted text response surface.
+ * Executes one regex-search request exactly once and derives both the caller-visible text surface
+ * and the structured result payload from that same execution result.
  *
  * @remarks
- * This handler preserves the public regex endpoint contract while delegating the heavy execution
- * lane to endpoint-local helper modules that consume the shared runtime policy, classifiers, and
- * native `ugrep` backend. Invalid regex patterns remain global failures, while multi-root runtime
- * problems are preserved as root-local failures instead of collapsing the whole batch response.
+ * This helper exists to prevent the response contract from running the same regex search twice —
+ * once for `structuredContent` and once again for `content.text`. The search-family architecture
+ * requires both response surfaces to be shaped from one shared execution result so resume state,
+ * truncation, and per-root outcomes cannot drift between duplicated runs.
  *
- * @param options - Request, resume, and environment options for the formatted regex-search flow.
- * @returns Formatted text output that respects the regex-search family response cap.
+ * @param options - Request, resume, and environment options for one regex-search tool response.
+ * @returns One shared formatted text surface and one shared structured result surface.
  */
-export async function handleSearchRegex(
-  options: HandleSearchRegexOptions,
-): Promise<string> {
+export async function buildSearchRegexToolResult(
+  options: GetSearchRegexResultOptions,
+): Promise<{ text: string; result: SearchRegexResult }> {
   const {
     resumeToken,
     resumeMode,
@@ -359,23 +362,22 @@ export async function handleSearchRegex(
     inspectionResumeSessionStore,
   } = options;
 
-  const executionContext = resolveSearchRegexExecutionContext(
-    {
-      resumeToken,
-      resumeMode,
-      searchPaths,
-      pattern,
-      filePatterns,
-      excludePatterns,
-      includeExcludedGlobs,
-      respectGitIgnore,
-      maxResults,
-      caseSensitive,
-      inspectionResumeSessionStore,
-      now: new Date(),
-    },
-  );
-  const structuredResult = await getSearchRegexResult({
+  const now = new Date();
+  const executionContext = resolveSearchRegexExecutionContext({
+    resumeToken,
+    resumeMode,
+    searchPaths,
+    pattern,
+    filePatterns,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    caseSensitive,
+    inspectionResumeSessionStore,
+    now,
+  });
+  const result = await getSearchRegexResult({
     resumeToken,
     resumeMode,
     searchPaths,
@@ -393,23 +395,44 @@ export async function handleSearchRegex(
     executionContext.requestPayload.maxResults,
     REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
   );
-  const effectivePattern = executionContext.requestPayload.pattern;
-
-  const output = assertFormattedRegexResponseBudget(
+  const text = assertFormattedRegexResponseBudget(
     SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
     formatSearchRegexContinuationAwareTextOutput(
-      structuredResult,
-      effectivePattern,
+      result,
+      executionContext.requestPayload.pattern,
       effectiveMaxResults,
     ),
     executionContext.requestedResumeMode,
   );
 
-  if (resumeToken !== undefined && !structuredResult.resume.resumable && structuredResult.resume.resumeToken === null) {
-    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
+    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, now);
   }
 
-  return output;
+  return {
+    text,
+    result,
+  };
+}
+
+/**
+ * Executes regex search across one or more roots and returns the formatted text response surface.
+ *
+ * @remarks
+ * This handler preserves the public regex endpoint contract while delegating the heavy execution
+ * lane to endpoint-local helper modules that consume the shared runtime policy, classifiers, and
+ * native `ugrep` backend. Invalid regex patterns remain global failures, while multi-root runtime
+ * problems are preserved as root-local failures instead of collapsing the whole batch response.
+ *
+ * @param options - Request, resume, and environment options for the formatted regex-search flow.
+ * @returns Formatted text output that respects the regex-search family response cap.
+ */
+export async function handleSearchRegex(
+  options: HandleSearchRegexOptions,
+): Promise<string> {
+  const { text } = await buildSearchRegexToolResult(options);
+
+  return text;
 }
 
 /**
@@ -554,14 +577,18 @@ export async function getSearchRegexResult(
   });
 
   return {
-    roots: roots.map(({ root, matches, filesSearched, totalMatches, truncated, error }) => ({
-      root,
-      matches,
-      filesSearched,
-      totalMatches,
-      truncated,
-      error,
-    })),
+    roots: roots.map(
+      ({ root, matches, filesSearched, totalMatches, truncated, error, stopReason, stopMessage }) => ({
+        root,
+        matches,
+        filesSearched,
+        totalMatches,
+        truncated,
+        error,
+        stopReason,
+        stopMessage,
+      })
+    ),
     totalLocations: roots.reduce((total, root) => total + root.matches.length, 0),
     totalMatches: roots.reduce((total, root) => total + root.totalMatches, 0),
     truncated: roots.some((root) => root.truncated),

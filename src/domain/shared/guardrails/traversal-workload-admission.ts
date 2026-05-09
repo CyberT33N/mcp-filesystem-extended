@@ -91,6 +91,16 @@ export interface TraversalWorkloadAdmissionConsumerCapabilities {
   estimatedPerCandidateFileCostMs?: number | null;
 
   /**
+   * Consumer-local inline execution-budget override in milliseconds.
+   *
+   * @remarks
+   * Search-family siblings may use this surface to remain inside the shared admission planner while
+   * still tuning inline-versus-preview calibration differently from the generic execution-policy
+   * budget.
+   */
+  inlineExecutionBudgetMs?: number | null;
+
+  /**
    * Whether this consumer owns a real task-backed execution lane for oversized workloads.
    */
   taskBackedExecutionSupported: boolean;
@@ -231,7 +241,11 @@ function exceedsInlineExecutionTimeBudget(
     return false;
   }
 
-  return estimatedInlineExecutionCostMs > input.executionPolicy.traversalInlineExecutionBudgetMs;
+  const effectiveInlineExecutionBudgetMs =
+    input.consumerCapabilities.inlineExecutionBudgetMs
+    ?? input.executionPolicy.traversalInlineExecutionBudgetMs;
+
+  return estimatedInlineExecutionCostMs > effectiveInlineExecutionBudgetMs;
 }
 
 function exceedsInlineResponseTextBudget(

@@ -91,10 +91,11 @@ If the MCP server still cannot start native search afterward, configure `UGREP_E
 - [`get_file_checksums`](src/domain/inspection/get-file-checksums/README.md)
 - [`verify_file_checksums`](src/domain/inspection/verify-file-checksums/README.md)
 
-### Inspection — search and count
+### Inspection — search family and count
 
-- [`search_file_contents_by_regex`](src/domain/inspection/search-file-contents-by-regex/README.md)
-- [`search_file_contents_by_fixed_string`](src/domain/inspection/search-file-contents-by-fixed-string/README.md)
+- [`inspection/search` family README](src/domain/inspection/search/README.md)
+- [`search_file_contents_by_regex`](src/domain/inspection/search/search-file-contents-by-regex/README.md)
+- [`search_file_contents_by_fixed_string`](src/domain/inspection/search/search-file-contents-by-fixed-string/README.md)
 - [`count_lines`](src/domain/inspection/count-lines/README.md)
 
 ### Inspection — read

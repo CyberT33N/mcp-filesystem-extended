@@ -329,7 +329,7 @@ export function buildPatternAwareCountCommand(
   }
 
   const baseCommand = buildUgrepCommand({
-    candidatePath: input.candidatePath,
+    candidatePaths: [input.candidatePath],
     caseSensitive: input.caseSensitive,
     executionPolicy: policy.searchExecutionPolicy,
     patternClassification: policy.patternClassification,

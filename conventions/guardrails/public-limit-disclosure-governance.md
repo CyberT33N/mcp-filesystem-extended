@@ -310,8 +310,8 @@ The read family is where hidden response ceilings cause the most retry churn, be
 
 ### Endpoints
 
-- [`search_file_contents_by_regex`](../../src/domain/inspection/search-file-contents-by-regex/CONVENTIONS.md)
-- [`search_file_contents_by_fixed_string`](../../src/domain/inspection/search-file-contents-by-fixed-string/CONVENTIONS.md)
+- [`search_file_contents_by_regex`](../../src/domain/inspection/search/search-file-contents-by-regex/CONVENTIONS.md)
+- [`search_file_contents_by_fixed_string`](../../src/domain/inspection/search/search-file-contents-by-fixed-string/CONVENTIONS.md)
 
 ### Policy
 

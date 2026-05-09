@@ -41,18 +41,16 @@ import {
   FindFilesByGlobArgsSchema,
   FindFilesByGlobResultSchema,
 } from "@domain/inspection/find-files-by-glob/schema";
-import { handleSearchRegex, getSearchRegexResult as getSearchRegexStructuredResult } from "@domain/inspection/search-file-contents-by-regex/handler";
+import { buildSearchRegexToolResult } from "@domain/inspection/search/search-file-contents-by-regex/handler";
 import {
-  SearchFileContentsByRegexArgsSchema,
   SearchFileContentsByRegexBaseArgsSchema,
   SearchFileContentsByRegexResultSchema,
-} from "@domain/inspection/search-file-contents-by-regex/schema";
-import { handleSearchFixedString, getSearchFixedStringResult as getSearchFixedStringStructuredResult } from "@domain/inspection/search-file-contents-by-fixed-string/handler";
+} from "@domain/inspection/search/search-file-contents-by-regex/schema";
+import { buildSearchFixedStringToolResult } from "@domain/inspection/search/search-file-contents-by-fixed-string/handler";
 import {
-  SearchFileContentsByFixedStringArgsSchema,
   SearchFileContentsByFixedStringBaseArgsSchema,
   SearchFileContentsByFixedStringResultSchema,
-} from "@domain/inspection/search-file-contents-by-fixed-string/schema";
+} from "@domain/inspection/search/search-file-contents-by-fixed-string/schema";
 import {
   formatCountLinesResultOutput,
   getCountLinesResult,
@@ -345,21 +343,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         const maxResults = "maxResults" in args ? args.maxResults : 100;
         const caseSensitive = "caseSensitive" in args ? args.caseSensitive : false;
 
-        const result = await getSearchRegexStructuredResult({
-          resumeToken,
-          resumeMode,
-          searchPaths: roots,
-          pattern: regex,
-          filePatterns: includeGlobs,
-          excludePatterns: excludeGlobs,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          maxResults,
-          caseSensitive,
-          allowedDirectories,
-          inspectionResumeSessionStore,
-        });
-        const text = await handleSearchRegex({
+        const { text, result } = await buildSearchRegexToolResult({
           resumeToken,
           resumeMode,
           searchPaths: roots,
@@ -412,21 +396,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
         const maxResults = "maxResults" in args ? args.maxResults : 100;
         const caseSensitive = "caseSensitive" in args ? args.caseSensitive : false;
 
-        const result = await getSearchFixedStringStructuredResult({
-          resumeToken,
-          resumeMode,
-          searchPaths: roots,
-          fixedString,
-          filePatterns: includeGlobs,
-          excludePatterns: excludeGlobs,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          maxResults,
-          caseSensitive,
-          allowedDirectories,
-          inspectionResumeSessionStore,
-        });
-        const text = await handleSearchFixedString({
+        const { text, result } = await buildSearchFixedStringToolResult({
           resumeToken,
           resumeMode,
           searchPaths: roots,

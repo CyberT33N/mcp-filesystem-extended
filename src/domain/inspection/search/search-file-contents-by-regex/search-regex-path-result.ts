@@ -47,6 +47,11 @@ import {
   INSPECTION_CONTENT_OPERATION_LITERALS,
   resolveInspectionContentOperationCapability,
 } from "@domain/shared/search/inspection-content-state";
+
+import {
+  SEARCH_FAMILY_REGEX_ESTIMATED_PER_CANDIDATE_FILE_COST_MS,
+  SEARCH_FAMILY_REGEX_INLINE_EXECUTION_BUDGET_MS,
+} from "../search-family-thresholds";
 import {
   classifyTextBinarySurface,
   type TextBinaryClassification,
@@ -64,10 +69,20 @@ import { formatUgrepSpawnFailure, runUgrepSearch } from "@infrastructure/search/
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import { minimatch } from "minimatch";
 
+import {
+  createSearchExecutionRuntimeBudgetState,
+  createSearchMaxResultsLimitReachedState,
+  createSearchPreviewContinuationState,
+  createSearchPreviewLaneBudgetState,
+  createUnstoppedSearchState,
+  SEARCH_STOP_REASON_LITERALS,
+  type SearchStopState,
+} from "../search-stop-state";
 import { type RegexSearchMatch, type SearchRegexPathResult } from "./search-regex-result";
 
 const SEARCH_REGEX_INLINE_RESPONSE_OVERHEAD_CHARS = 96;
 const SEARCH_REGEX_INLINE_MATCH_RESPONSE_CHARS = 400;
+const SEARCH_REGEX_NATIVE_INLINE_BATCH_SIZE = 16;
 
 /**
  * Mutable aggregate budget state shared across all requested regex roots.
@@ -92,6 +107,13 @@ export interface SearchRegexRootContinuationState {
   traversalFrames: SearchRegexTraversalFrame[];
   activeFileRelativePath: string | null;
   activeFileMatchOffset: number;
+}
+
+interface RegexNativeBatchEntry {
+  candidateEntry: FilesystemPreflightEntry;
+  candidateRelativePath: string;
+  entryIndexBefore: number;
+  entryIndexAfter: number;
 }
 
 /**
@@ -283,6 +305,13 @@ function isNativeRegexBackendPatternSyntaxFailure(runtimeError: string): boolean
     );
 }
 
+interface RegexNativeBatchSearchResult {
+  matches: RegexSearchMatch[];
+  totalMatches: number;
+  truncated: boolean;
+  stopState: SearchStopState;
+}
+
 interface GetSearchRegexPathResultOptions {
   toolName: string;
   searchPath: string;
@@ -321,6 +350,128 @@ async function getValidatedPreflightEntry(
   return firstEntry;
 }
 
+async function collectRegexMatchesFromNativeBatch(
+  toolName: string,
+  batchEntries: RegexNativeBatchEntry[],
+  regex: RegExp,
+  patternClassification: PatternClassification,
+  pattern: string,
+  caseSensitive: boolean,
+  executionPolicy: SearchExecutionPolicy,
+  maxAdditionalResults: number,
+  collectedLocationsBeforeRead: number,
+): Promise<RegexNativeBatchSearchResult> {
+  if (batchEntries.length === 0 || maxAdditionalResults <= 0) {
+    return {
+      matches: [],
+      totalMatches: 0,
+      truncated: maxAdditionalResults <= 0,
+      stopState: maxAdditionalResults <= 0
+        ? createSearchMaxResultsLimitReachedState(maxAdditionalResults)
+        : createUnstoppedSearchState(),
+    };
+  }
+
+  const command = buildUgrepCommand({
+    patternClassification,
+    executionPolicy,
+    candidatePaths: batchEntries.map(({ candidateEntry }) => candidateEntry.validPath),
+    caseSensitive,
+    maxCount: maxAdditionalResults,
+  });
+  const executionResult = await runUgrepSearch(command);
+
+  if (executionResult.spawnErrorMessage !== null) {
+    throw new Error(formatUgrepSpawnFailure(executionResult));
+  }
+
+  if (executionResult.timedOut) {
+    throw new Error("Native search runner timed out before completion.");
+  }
+
+  if (executionResult.exitCode !== null && executionResult.exitCode > 1) {
+    const runtimeError = executionResult.stderr.trim();
+
+    if (runtimeError !== "" && isNativeRegexBackendPatternSyntaxFailure(runtimeError)) {
+      throw createRegexBackendDialectRejectedError(
+        toolName,
+        pattern,
+        caseSensitive,
+        runtimeError,
+      );
+    }
+
+    throw new Error(
+      runtimeError === ""
+        ? `Native search backend exited with code ${executionResult.exitCode}.`
+        : runtimeError,
+    );
+  }
+
+  if (executionResult.exitCode === 1 || executionResult.stdout.trim() === "") {
+    return {
+      matches: [],
+      totalMatches: 0,
+      truncated: false,
+      stopState: createUnstoppedSearchState(),
+    };
+  }
+
+  const matches: RegexSearchMatch[] = [];
+  let totalMatches = 0;
+  let truncated = false;
+  const matchedLines = executionResult.stdout
+    .split(/\r?\n/u)
+    .filter((outputLine) => outputLine.trim() !== "");
+
+  for (const matchedLine of matchedLines) {
+    const parsedLine = parseUgrepMatchLine(matchedLine);
+
+    if (parsedLine === null) {
+      continue;
+    }
+
+    let lineMatch: RegExpExecArray | null;
+
+    resetRegexLastIndex(regex);
+
+    while ((lineMatch = regex.exec(parsedLine.lineContent)) !== null) {
+      totalMatches += 1;
+
+      matches.push({
+        file: parsedLine.file,
+        line: parsedLine.line,
+        content: normalizeRegexMatchExcerpt(parsedLine.lineContent, lineMatch[0]),
+        match: lineMatch[0],
+      });
+
+      assertRegexRuntimeBudget(
+        toolName,
+        collectedLocationsBeforeRead + matches.length,
+        0,
+      );
+
+      if (matches.length >= maxAdditionalResults) {
+        truncated = true;
+        break;
+      }
+    }
+
+    if (truncated) {
+      break;
+    }
+  }
+
+  return {
+    matches,
+    totalMatches,
+    truncated,
+    stopState: truncated
+      ? createSearchMaxResultsLimitReachedState(maxAdditionalResults)
+      : createUnstoppedSearchState(),
+  };
+}
+
 async function collectRegexMatchesFromFileEntry(
   toolName: string,
   candidateEntry: FilesystemPreflightEntry,
@@ -345,6 +496,7 @@ async function collectRegexMatchesFromFileEntry(
   totalBytesScanned: number;
   truncated: boolean;
   unsupportedStateReason: string | null;
+  stopState: SearchStopState;
 }> {
   if (!matchesIncludedFilePatterns(candidateRelativePath, filePatterns)) {
     return {
@@ -354,6 +506,7 @@ async function collectRegexMatchesFromFileEntry(
       totalBytesScanned: totalBytesScannedBeforeRead,
       truncated: false,
       unsupportedStateReason: null,
+      stopState: createUnstoppedSearchState(),
     };
   }
 
@@ -391,12 +544,13 @@ async function collectRegexMatchesFromFileEntry(
 
     return {
       matches: [],
-        fileSearched: false,
-        totalMatches: 0,
-        totalBytesScanned: nextTotalBytesScanned,
-        truncated: false,
-        unsupportedStateReason: searchCapability.reason,
-      };
+      fileSearched: false,
+      totalMatches: 0,
+      totalBytesScanned: nextTotalBytesScanned,
+      truncated: false,
+      unsupportedStateReason: searchCapability.reason,
+      stopState: createUnstoppedSearchState(),
+    };
   }
 
   if (maxAdditionalResults <= 0) {
@@ -407,6 +561,7 @@ async function collectRegexMatchesFromFileEntry(
       totalBytesScanned: nextTotalBytesScanned,
       truncated: true,
       unsupportedStateReason: null,
+      stopState: createSearchMaxResultsLimitReachedState(maxAdditionalResults),
     };
   }
 
@@ -449,13 +604,16 @@ async function collectRegexMatchesFromFileEntry(
       totalBytesScanned: nextTotalBytesScanned,
       truncated: decodedTextSearchResult.truncated,
       unsupportedStateReason: null,
+      stopState: decodedTextSearchResult.truncated
+        ? createSearchMaxResultsLimitReachedState(effectiveLocationCap)
+        : createUnstoppedSearchState(),
     };
   }
 
   const command = buildUgrepCommand({
     patternClassification,
     executionPolicy,
-    candidatePath: candidateEntry.validPath,
+    candidatePaths: [candidateEntry.validPath],
     caseSensitive,
     maxCount: effectiveLocationCap,
   });
@@ -497,6 +655,7 @@ async function collectRegexMatchesFromFileEntry(
       totalBytesScanned: nextTotalBytesScanned,
       truncated: false,
       unsupportedStateReason: null,
+      stopState: createUnstoppedSearchState(),
     };
   }
 
@@ -559,6 +718,9 @@ async function collectRegexMatchesFromFileEntry(
     totalBytesScanned: nextTotalBytesScanned,
     truncated,
     unsupportedStateReason: null,
+    stopState: truncated
+      ? createSearchMaxResultsLimitReachedState(effectiveLocationCap)
+      : createUnstoppedSearchState(),
   };
 }
 
@@ -652,7 +814,8 @@ export async function getSearchRegexPathResult(
       executionTimeCostMultiplier:
         TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.REGEX_SEARCH.executionTimeCostMultiplier,
       estimatedPerCandidateFileCostMs:
-        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.REGEX_SEARCH.estimatedPerCandidateFileCostMs,
+        SEARCH_FAMILY_REGEX_ESTIMATED_PER_CANDIDATE_FILE_COST_MS,
+      inlineExecutionBudgetMs: SEARCH_FAMILY_REGEX_INLINE_EXECUTION_BUDGET_MS,
       taskBackedExecutionSupported: false,
     },
   });
@@ -693,6 +856,8 @@ export async function getSearchRegexPathResult(
       totalMatches: 0,
       truncated: false,
       error: traversalAdmissionDecision.guidanceText,
+      stopReason: null,
+      stopMessage: null,
       admissionOutcome: traversalAdmissionDecision.outcome,
       nextContinuationState: null,
     };
@@ -731,6 +896,10 @@ export async function getSearchRegexPathResult(
         }
       : null;
 
+    const fileScopeStopState = nextContinuationState !== null
+      ? createSearchPreviewContinuationState()
+      : fileSearchResult.stopState;
+
     return {
       root: searchPath,
       matches: fileSearchResult.matches,
@@ -738,6 +907,8 @@ export async function getSearchRegexPathResult(
       totalMatches: fileSearchResult.totalMatches,
       truncated: fileSearchResult.truncated || nextContinuationState !== null,
       error: null,
+      stopReason: fileScopeStopState.stopReason,
+      stopMessage: fileScopeStopState.stopMessage,
       admissionOutcome: traversalAdmissionDecision.outcome,
       nextContinuationState,
     };
@@ -757,8 +928,10 @@ export async function getSearchRegexPathResult(
   let searchAborted = false;
   let totalBytesScanned = 0;
   let unsupportedStateReason: string | null = null;
+  let searchStopState = createUnstoppedSearchState();
   let activeFileRelativePath = continuationState?.activeFileRelativePath ?? null;
   let activeFileMatchOffset = continuationState?.activeFileMatchOffset ?? 0;
+  const pendingNativeBatch: RegexNativeBatchEntry[] = [];
 
   function markTraversalBudgetExceeded(error: unknown): boolean {
     if (!isTraversalRuntimeBudgetExceededError(error)) {
@@ -767,13 +940,38 @@ export async function getSearchRegexPathResult(
 
     searchAborted = true;
 
-    if (previewLanePlan.guidanceText !== null) {
-      unsupportedStateReason = previewLanePlan.guidanceText;
-    } else if (unsupportedStateReason === null) {
-      unsupportedStateReason = error.message;
-    }
+    unsupportedStateReason = error.message;
+    searchStopState = createSearchExecutionRuntimeBudgetState(error.message);
 
     return true;
+  }
+
+  async function flushPendingNativeBatch(): Promise<void> {
+    if (pendingNativeBatch.length === 0 || searchAborted) {
+      return;
+    }
+
+    const batchEntries = pendingNativeBatch.splice(0, pendingNativeBatch.length);
+    const batchSearchResult = await collectRegexMatchesFromNativeBatch(
+      toolName,
+      batchEntries,
+      regex,
+      regexExecutionPlan.patternClassification,
+      pattern,
+      caseSensitive,
+      executionPolicy,
+      admissionAdjustedMaxResults - results.length,
+      results.length,
+    );
+
+    filesSearched += batchEntries.length;
+    matchesFound += batchSearchResult.totalMatches;
+    results.push(...batchSearchResult.matches);
+
+    if (batchSearchResult.truncated) {
+      searchStopState = batchSearchResult.stopState;
+      searchAborted = true;
+    }
   }
 
   if (activeFileRelativePath !== null) {
@@ -822,6 +1020,7 @@ export async function getSearchRegexPathResult(
     }
 
     if (resumedFileSearchResult.truncated) {
+      searchStopState = resumedFileSearchResult.stopState;
       searchAborted = true;
       activeFileMatchOffset += resumedFileSearchResult.matches.length;
     } else {
@@ -951,7 +1150,116 @@ export async function getSearchRegexPathResult(
           unsupportedStateReason = previewLanePlan.guidanceText;
         }
 
+        searchStopState = createSearchPreviewLaneBudgetState(
+          previewLanePlan.guidanceText
+            ?? `Preview-lane candidate byte budget was exhausted for root '${searchPath}'.`,
+        );
+
         break;
+      }
+
+      if (!previewFirstAdmissionActive) {
+        if (!matchesIncludedFilePatterns(relativePath, filePatterns)) {
+          commitInspectionResumeTraversalEntry(currentTraversalFrame);
+          continue;
+        }
+
+        const nextTotalBytesScanned = totalBytesScanned + candidateEntry.size;
+        const nextAggregateBytesScanned = aggregateBudgetState.totalCandidateBytesScanned + candidateEntry.size;
+
+        assertCandidateByteBudget(
+          toolName,
+          nextAggregateBytesScanned,
+          executionPolicy.regexServiceHardGapBytes,
+          `regex aggregate candidate bytes before reading ${candidateEntry.requestedPath}`,
+        );
+
+        aggregateBudgetState.totalCandidateBytesScanned = nextAggregateBytesScanned;
+        totalBytesScanned = nextTotalBytesScanned;
+
+        const textEligibility = await resolveTextEligibility(
+          candidateEntry.validPath,
+          candidateEntry.size,
+        );
+        const searchCapability = resolveInspectionContentOperationCapability(
+          textEligibility,
+          INSPECTION_CONTENT_OPERATION_LITERALS.SEARCH_TEXT,
+        );
+
+        if (!searchCapability.isAllowed) {
+          if (unsupportedStateReason === null) {
+            unsupportedStateReason = searchCapability.reason;
+          }
+
+          commitInspectionResumeTraversalEntry(currentTraversalFrame);
+          continue;
+        }
+
+        if (searchCapability.requiresDecodedTextFallback) {
+          await flushPendingNativeBatch();
+
+          const fileSearchResult = await collectRegexMatchesFromFileEntry(
+            toolName,
+            candidateEntry,
+            relativePath,
+            filePatterns,
+            regex,
+            regexExecutionPlan.patternClassification,
+            pattern,
+            caseSensitive,
+            executionPolicy,
+            aggregateBudgetState,
+            false,
+            false,
+            admissionAdjustedMaxResults - results.length,
+            0,
+            totalBytesScanned - candidateEntry.size,
+            results.length,
+          );
+
+          if (fileSearchResult.fileSearched) {
+            filesSearched += 1;
+          }
+
+          totalBytesScanned = fileSearchResult.totalBytesScanned;
+          matchesFound += fileSearchResult.totalMatches;
+          results.push(...fileSearchResult.matches);
+
+          if (
+            unsupportedStateReason === null
+            && fileSearchResult.unsupportedStateReason !== null
+          ) {
+            unsupportedStateReason = fileSearchResult.unsupportedStateReason;
+          }
+
+          if (fileSearchResult.truncated) {
+            searchStopState = fileSearchResult.stopState;
+            searchAborted = true;
+            commitInspectionResumeTraversalEntry(currentTraversalFrame);
+            break;
+          }
+
+          commitInspectionResumeTraversalEntry(currentTraversalFrame);
+          continue;
+        }
+
+        pendingNativeBatch.push({
+          candidateEntry,
+          candidateRelativePath: relativePath,
+          entryIndexBefore: currentTraversalFrame.nextEntryIndex,
+          entryIndexAfter: currentTraversalFrame.nextEntryIndex + 1,
+        });
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
+
+        if (pendingNativeBatch.length >= SEARCH_REGEX_NATIVE_INLINE_BATCH_SIZE) {
+          await flushPendingNativeBatch();
+
+          if (searchAborted) {
+            break;
+          }
+        }
+
+        continue;
       }
 
       const fileSearchResult = await collectRegexMatchesFromFileEntry(
@@ -989,6 +1297,7 @@ export async function getSearchRegexPathResult(
       }
 
       if (fileSearchResult.truncated) {
+        searchStopState = fileSearchResult.stopState;
         searchAborted = true;
         activeFileRelativePath = relativePath;
         activeFileMatchOffset = fileSearchResult.matches.length;
@@ -1004,6 +1313,10 @@ export async function getSearchRegexPathResult(
     }
   }
 
+  if (!previewFirstAdmissionActive && !searchAborted) {
+    await flushPendingNativeBatch();
+  }
+
   const nextContinuationState = previewFirstAdmissionActive
     && !completeResultRequested
     && (traversalFrames.length > 0 || activeFileRelativePath !== null)
@@ -1014,13 +1327,27 @@ export async function getSearchRegexPathResult(
       }
     : null;
 
+  const rootStopState = nextContinuationState !== null
+    && (
+      searchStopState.stopReason === null
+      || searchStopState.stopReason === SEARCH_STOP_REASON_LITERALS.MAX_RESULTS_LIMIT_REACHED
+    )
+    ? createSearchPreviewContinuationState()
+    : searchStopState;
   return {
     root: searchPath,
     matches: results,
     filesSearched,
     totalMatches: matchesFound,
     truncated: searchAborted || nextContinuationState !== null,
-    error: results.length === 0 && unsupportedStateReason !== null ? unsupportedStateReason : null,
+    error:
+      results.length === 0
+      && unsupportedStateReason !== null
+      && rootStopState.stopReason === null
+        ? unsupportedStateReason
+        : null,
+    stopReason: rootStopState.stopReason,
+    stopMessage: rootStopState.stopMessage,
     admissionOutcome: traversalAdmissionDecision.outcome,
     nextContinuationState,
   };

@@ -21,6 +21,7 @@ import {
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
+import { SEARCH_STOP_REASON_VALUES } from "../search-stop-state";
 
 /**
  * Canonical request contract for guarded fixed-string content search.
@@ -163,6 +164,8 @@ export const SearchFileContentsByFixedStringResultSchema = z.object({
       totalMatches: z.number(),
       truncated: z.boolean(),
       error: z.string().nullable(),
+      stopReason: z.enum(SEARCH_STOP_REASON_VALUES).nullable(),
+      stopMessage: z.string().nullable(),
     })
   ),
   totalLocations: z.number(),

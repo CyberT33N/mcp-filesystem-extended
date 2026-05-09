@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockedRunUgrepSearch } = vi.hoisted(() => ({
+const { mockedGetRequiredUgrepExecutablePath, mockedRunUgrepSearch } = vi.hoisted(() => ({
+  mockedGetRequiredUgrepExecutablePath: vi.fn(() => "C:/tools/ugrep.exe"),
   mockedRunUgrepSearch: vi.fn(),
 }));
 
@@ -12,8 +13,12 @@ vi.mock("@infrastructure/search/ugrep-runner", () => ({
   runUgrepSearch: mockedRunUgrepSearch,
 }));
 
-import { getSearchFixedStringPathResult } from "@domain/inspection/search-file-contents-by-fixed-string/search-fixed-string-path-result";
-import { getSearchRegexPathResult } from "@domain/inspection/search-file-contents-by-regex/search-regex-path-result";
+vi.mock("@infrastructure/runtime/ugrep-runtime-dependency", () => ({
+  getRequiredUgrepExecutablePath: mockedGetRequiredUgrepExecutablePath,
+}));
+
+import { getSearchFixedStringPathResult } from "@domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-path-result";
+import { getSearchRegexPathResult } from "@domain/inspection/search/search-file-contents-by-regex/search-regex-path-result";
 
 const currentDirectoryPath = dirname(fileURLToPath(import.meta.url));
 const workspaceRootPath = resolve(currentDirectoryPath, "../../../..");
@@ -62,17 +67,17 @@ describe("explicit file scope search contract", () => {
   it("bypasses include globs for explicit fixed-string csv file roots", async () => {
     mockedRunUgrepSearch.mockResolvedValueOnce(createSuccessfulExecutionResult());
 
-    const result = await getSearchFixedStringPathResult(
-      fixtureFileRelativePath,
-      "PRAXIS1",
-      ["**/*.json"],
-      [],
-      [],
-      false,
-      10,
-      true,
-      [workspaceRootPath],
-    );
+    const result = await getSearchFixedStringPathResult({
+      searchPath: fixtureFileRelativePath,
+      fixedString: "PRAXIS1",
+      filePatterns: ["**/*.json"],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 10,
+      caseSensitive: true,
+      allowedDirectories: [workspaceRootPath],
+    });
 
     expect(result.error).toBeNull();
     expect(result.filesSearched).toBe(1);
@@ -91,18 +96,18 @@ describe("explicit file scope search contract", () => {
   it("bypasses include globs for explicit regex csv file roots", async () => {
     mockedRunUgrepSearch.mockResolvedValueOnce(createSuccessfulExecutionResult());
 
-    const result = await getSearchRegexPathResult(
-      "search_file_contents_by_regex",
-      fixtureFileRelativePath,
-      "PRAXIS1",
-      ["**/*.json"],
-      [],
-      [],
-      false,
-      10,
-      true,
-      [workspaceRootPath],
-    );
+    const result = await getSearchRegexPathResult({
+      toolName: "search_file_contents_by_regex",
+      searchPath: fixtureFileRelativePath,
+      pattern: "PRAXIS1",
+      filePatterns: ["**/*.json"],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 10,
+      caseSensitive: true,
+      allowedDirectories: [workspaceRootPath],
+    });
 
     expect(result.error).toBeNull();
     expect(result.filesSearched).toBe(1);
@@ -119,17 +124,17 @@ describe("explicit file scope search contract", () => {
   });
 
   it("keeps include globs active for fixed-string directory roots", async () => {
-    const result = await getSearchFixedStringPathResult(
-      fixtureDirectoryRelativePath,
-      "PRAXIS1",
-      ["**/*.json"],
-      [],
-      [],
-      false,
-      10,
-      true,
-      [workspaceRootPath],
-    );
+    const result = await getSearchFixedStringPathResult({
+      searchPath: fixtureDirectoryRelativePath,
+      fixedString: "PRAXIS1",
+      filePatterns: ["**/*.json"],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 10,
+      caseSensitive: true,
+      allowedDirectories: [workspaceRootPath],
+    });
 
     expect(result.error).toBeNull();
     expect(result.filesSearched).toBe(0);
@@ -139,18 +144,18 @@ describe("explicit file scope search contract", () => {
   });
 
   it("keeps include globs active for regex directory roots", async () => {
-    const result = await getSearchRegexPathResult(
-      "search_file_contents_by_regex",
-      fixtureDirectoryRelativePath,
-      "PRAXIS1",
-      ["**/*.json"],
-      [],
-      [],
-      false,
-      10,
-      true,
-      [workspaceRootPath],
-    );
+    const result = await getSearchRegexPathResult({
+      toolName: "search_file_contents_by_regex",
+      searchPath: fixtureDirectoryRelativePath,
+      pattern: "PRAXIS1",
+      filePatterns: ["**/*.json"],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 10,
+      caseSensitive: true,
+      allowedDirectories: [workspaceRootPath],
+    });
 
     expect(result.error).toBeNull();
     expect(result.filesSearched).toBe(0);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createFixedStringSearchAggregateBudgetState } from "@domain/inspection/search-file-contents-by-fixed-string/fixed-string-search-aggregate-budget-state";
+import { createFixedStringSearchAggregateBudgetState } from "@domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-aggregate-budget-state";
 
 /**
  * Non-zero byte count used to prove that aggregate budget states are not shared across calls.

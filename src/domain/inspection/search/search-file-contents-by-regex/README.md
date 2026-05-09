@@ -11,6 +11,8 @@ The accepted pattern surface is the intersection of:
 
 Use it when you need match locations, excerpts, and bounded continuation behavior for known file scopes or guarded directory-root search workloads.
 
+This endpoint now sits under the shared [`inspection/search` family](../README.md), which owns the shared preview-threshold philosophy and the family-level too-eager-preview correction.
+
 ---
 
 ## When to use it
@@ -44,6 +46,7 @@ Do **not** use it as a replacement for:
 
 - explicit large text-compatible files may still proceed through the shared regex lane
 - directory-root workloads use the shared traversal admission planner first
+- admitted inline directory-root workloads now batch validated native-searchable file candidates into ordered shell-free native `ugrep` execution groups instead of spawning one native process per file
 - request-wide regex validation is lane-aware and resolves backend requirements such as lookahead or lookbehind before root execution begins
 - shell-free native `ugrep` dependency resolution is owned by MCP server startup preflight instead of first request execution
 - regex remains text-first and does not imply unrestricted hybrid support

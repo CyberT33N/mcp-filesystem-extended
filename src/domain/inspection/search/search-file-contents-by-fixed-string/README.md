@@ -6,6 +6,8 @@
 
 Use it when you need exact-match locations, caller-visible excerpts, and bounded continuation behavior for known file scopes or guarded directory-root search workloads.
 
+This endpoint now sits under the shared [`inspection/search` family](../README.md), which owns the shared preview-threshold philosophy and the family-level too-eager-preview correction.
+
 ---
 
 ## When to use it
@@ -40,6 +42,7 @@ Do **not** use it as a replacement for:
 
 - explicit large text-compatible files may still proceed through the shared fixed-string lane,
 - directory-root workloads use the shared traversal admission planner first,
+- admitted inline directory-root workloads now batch validated native-searchable file candidates into ordered shell-free native `ugrep` execution groups instead of spawning one native process per file,
 - this endpoint is the preferred literal lane for supported text-compatible and text-dominant hybrid-searchable workloads,
 - shell-free native `ugrep` dependency resolution is owned by MCP server startup preflight instead of first request execution,
 - unsupported pure-binary or binary-dominant surfaces still refuse,

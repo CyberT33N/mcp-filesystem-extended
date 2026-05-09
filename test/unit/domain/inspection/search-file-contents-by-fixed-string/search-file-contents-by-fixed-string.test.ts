@@ -29,16 +29,22 @@ vi.mock("@infrastructure/runtime/io-capability-detector", () => ({
 }));
 
 vi.mock(
-  "@domain/inspection/search-file-contents-by-fixed-string/search-fixed-string-path-result",
+  "@domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-aggregate-budget-state",
   () => ({
     createFixedStringSearchAggregateBudgetState:
       mockedCreateFixedStringSearchAggregateBudgetState,
+  }),
+);
+
+vi.mock(
+  "@domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-path-result",
+  () => ({
     getSearchFixedStringPathResult: mockedGetSearchFixedStringPathResult,
   }),
 );
 
 vi.mock(
-  "@domain/inspection/search-file-contents-by-fixed-string/search-fixed-string-result",
+  "@domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-result",
   () => ({
     assertFormattedFixedStringResponseBudget:
       mockedAssertFormattedFixedStringResponseBudget,
@@ -55,9 +61,10 @@ import {
   SourceReadTier,
 } from "@domain/shared/runtime/io-capability-profile";
 import {
+  buildSearchFixedStringToolResult,
   getSearchFixedStringResult,
   handleSearchFixedString,
-} from "@domain/inspection/search-file-contents-by-fixed-string/handler";
+} from "@domain/inspection/search/search-file-contents-by-fixed-string/handler";
 import {
   resolveExplicitFileScopeCsvFixturePaths,
   type ResolvedInspectionSearchFixturePaths,
@@ -135,7 +142,7 @@ describe("search_file_contents_by_fixed_string", () => {
           content:
             "const SEARCH_FIXED_STRING_TOOL_NAME = \"search_file_contents_by_fixed_string\";",
           file:
-            "src/domain/inspection/search-file-contents-by-fixed-string/handler.ts",
+            "src/domain/inspection/search/search-file-contents-by-fixed-string/handler.ts",
           line: 16,
           match: "search_file_contents_by_fixed_string",
         },
@@ -144,6 +151,8 @@ describe("search_file_contents_by_fixed_string", () => {
       root: "src",
       totalMatches: 1,
       truncated: false,
+      traversalInlineExecutionBudgetMs: 4_000,
+      traversalInlineCandidateFileBudget: 8_000,
     };
 
     mockedGetSearchFixedStringPathResult.mockResolvedValue(pathResult);
@@ -210,6 +219,52 @@ describe("search_file_contents_by_fixed_string", () => {
       null,
     );
     expect(result).toBe("formatted fixed-string search output");
+  });
+
+  it("builds text and structured fixed-string tool surfaces from one shared execution result", async () => {
+    const pathResult = {
+      admissionOutcome: "inline",
+      error: null,
+      filesSearched: 2,
+      matches: [],
+      nextContinuationState: null,
+      root: "src",
+      totalMatches: 0,
+      truncated: false,
+    };
+
+    mockedGetSearchFixedStringPathResult.mockResolvedValue(pathResult);
+    mockedFormatSearchFixedStringContinuationAwareTextOutput.mockReturnValue(
+      "formatted fixed-string search output",
+    );
+
+    const toolResult = await buildSearchFixedStringToolResult({
+      resumeToken: undefined,
+      resumeMode: undefined,
+      searchPaths: ["src"],
+      fixedString: "search_file_contents_by_fixed_string",
+      filePatterns: ["*.ts"],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 10,
+      caseSensitive: true,
+      allowedDirectories: ["C:/Projects/mcp/server/system/files/mcp-filesystem-extended"],
+      inspectionResumeSessionStore: undefined,
+    });
+
+    expect(toolResult.text).toBe("formatted fixed-string search output");
+    expect(toolResult.result).toMatchObject({
+      roots: [
+        expect.objectContaining({
+          root: "src",
+        }),
+      ],
+      totalLocations: 0,
+      totalMatches: 0,
+      truncated: false,
+    });
+    expect(mockedGetSearchFixedStringPathResult).toHaveBeenCalledTimes(1);
   });
 
   it("reuses the shared explicit file-scope fixture in the structured multi-root fixed-string result", async () => {

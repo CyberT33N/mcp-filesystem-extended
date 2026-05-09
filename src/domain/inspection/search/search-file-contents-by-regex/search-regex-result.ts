@@ -12,10 +12,20 @@ import {
   REGEX_SEARCH_RESPONSE_CAP_CHARS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 
+import {
+  formatSearchStopStateLine,
+  isSearchMaxResultsLimitReached,
+  type SearchStopReason,
+} from "../search-stop-state";
+
 /**
- * Describes one collected fixed-string match location.
+ * Describes one collected regex match location.
+ *
+ * @remarks
+ * The regex endpoint emits one structured match payload per collected location so text and
+ * structured result surfaces can share the same normalized excerpt model.
  */
-export interface FixedStringSearchMatch {
+export interface RegexSearchMatch {
   /**
    * Validated file path that produced the reported match.
    */
@@ -27,20 +37,24 @@ export interface FixedStringSearchMatch {
   line: number;
 
   /**
-   * Normalized line excerpt that keeps the matched literal visible whenever possible.
+   * Normalized line excerpt that keeps the match visible whenever possible.
    */
   content: string;
 
   /**
-   * Exact substring matched by the fixed-string search engine.
+   * Exact substring matched by the regex engine.
    */
   match: string;
 }
 
 /**
- * Describes the structured fixed-string result for one validated search scope.
+ * Describes the structured regex-search result for one validated search scope.
+ *
+ * @remarks
+ * This result stays endpoint-specific because it preserves the regex tool contract for one
+ * caller-supplied root while exposing match locations, file counts, and truncation state.
  */
-export interface SearchFixedStringPathResult {
+export interface SearchRegexPathResult {
   /**
    * Original search scope path supplied by the caller.
    */
@@ -49,7 +63,7 @@ export interface SearchFixedStringPathResult {
   /**
    * Collected match locations that survived runtime guardrail enforcement.
    */
-  matches: FixedStringSearchMatch[];
+  matches: RegexSearchMatch[];
 
   /**
    * Number of candidate files examined under the root while budgets permitted scanning.
@@ -57,7 +71,7 @@ export interface SearchFixedStringPathResult {
   filesSearched: number;
 
   /**
-   * Number of fixed-string matches encountered before truncation or traversal completion.
+   * Number of regex matches encountered before truncation or traversal completion.
    */
   totalMatches: number;
 
@@ -70,16 +84,30 @@ export interface SearchFixedStringPathResult {
    * Root-local refusal or operational failure captured without collapsing the whole batch surface.
    */
   error: string | null;
+
+  /**
+   * Canonical bounded-stop reason when the current root stopped early without becoming a failure.
+   */
+  stopReason: SearchStopReason | null;
+
+  /**
+   * Caller-visible explanation for the current bounded-stop state.
+   */
+  stopMessage: string | null;
 }
 
 /**
- * Describes the structured fixed-string result across all requested roots.
+ * Describes the structured regex-search result across all requested roots.
+ *
+ * @remarks
+ * The batch result preserves per-root runtime fuse outcomes so callers can inspect direct-file
+ * and guarded-directory search behavior through one structured surface.
  */
-export interface SearchFixedStringResult {
+export interface SearchRegexResult {
   /**
    * Per-root structured results in caller-supplied order.
    */
-  roots: SearchFixedStringPathResult[];
+  roots: SearchRegexPathResult[];
 
   /**
    * Total number of collected match locations across all roots.
@@ -101,16 +129,16 @@ export interface SearchFixedStringResult {
 }
 
 /**
- * Formats one root-local fixed-string result into the public text response surface.
+ * Formats one root-local regex result into the public text response surface.
  *
- * @param result - Structured fixed-string result for one validated search scope.
- * @param fixedString - Exact literal string supplied by the caller.
+ * @param result - Structured regex result for one validated search scope.
+ * @param pattern - Raw regex pattern supplied by the caller.
  * @param effectiveMaxResults - Effective hard-capped result limit applied by the handler.
  * @returns Human-readable text output for the current root.
  */
-export function formatSearchFixedStringPathOutput(
-  result: SearchFixedStringPathResult,
-  fixedString: string,
+export function formatSearchRegexPathOutput(
+  result: SearchRegexPathResult,
+  pattern: string,
   effectiveMaxResults: number,
 ): string {
   if (result.error !== null) {
@@ -118,22 +146,29 @@ export function formatSearchFixedStringPathOutput(
       return result.error;
     }
 
-    return `Fixed-string search failed for root ${result.root}: ${result.error}`;
+    return `Regex search failed for root ${result.root}: ${result.error}`;
   }
 
   if (result.matches.length === 0) {
-    return `No matches found for fixed string: ${fixedString}\nSearched ${result.filesSearched} files`;
+    let output = `No matches found for regex: ${pattern}\nSearched ${result.filesSearched} files`;
+    const stopStateLine = formatSearchStopStateLine(result);
+
+    if (stopStateLine !== null) {
+      output += `\n${stopStateLine}`;
+    }
+
+    return output;
   }
 
   let output = `Found ${result.totalMatches} matches in ${result.matches.length} locations`;
 
-  if (result.truncated) {
+  if (result.truncated && isSearchMaxResultsLimitReached(result.stopReason)) {
     output += ` (limited to ${effectiveMaxResults} results)`;
   }
 
   output += "\n\n";
 
-  const fileGroups = new Map<string, FixedStringSearchMatch[]>();
+  const fileGroups = new Map<string, RegexSearchMatch[]>();
 
   for (const match of result.matches) {
     if (!fileGroups.has(match.file)) {
@@ -153,48 +188,54 @@ export function formatSearchFixedStringPathOutput(
     output += "\n";
   }
 
+  const stopStateLine = formatSearchStopStateLine(result);
+
+  if (stopStateLine !== null) {
+    output += `${stopStateLine}\n`;
+  }
+
   return output.trimEnd();
 }
 
 /**
- * Formats the structured fixed-string search result into the public text response surface.
+ * Formats the structured regex-search result into the public text response surface.
  *
- * @param result - Structured fixed-string search result across all requested roots.
- * @param fixedString - Exact literal string supplied by the caller.
+ * @param result - Structured regex-search result across all requested roots.
+ * @param pattern - Raw regex pattern supplied by the caller.
  * @param effectiveMaxResults - Effective hard-capped result limit applied by the handler.
- * @returns Human-readable text output for the full fixed-string request.
+ * @returns Human-readable text output for the full regex request.
  */
-export function formatSearchFixedStringResultOutput(
-  result: SearchFixedStringResult,
-  fixedString: string,
+export function formatSearchRegexResultOutput(
+  result: SearchRegexResult,
+  pattern: string,
   effectiveMaxResults: number,
 ): string {
   if (result.roots.length === 1) {
     const firstRootResult = result.roots[0];
 
     if (firstRootResult === undefined) {
-      throw new Error("Expected one root result for fixed-string formatting.");
+      throw new Error("Expected one root result for regex-search formatting.");
     }
 
-    return formatSearchFixedStringPathOutput(firstRootResult, fixedString, effectiveMaxResults);
+    return formatSearchRegexPathOutput(firstRootResult, pattern, effectiveMaxResults);
   }
 
   return result.roots
-    .map((rootResult) => formatSearchFixedStringPathOutput(rootResult, fixedString, effectiveMaxResults))
+    .map((rootResult) => formatSearchRegexPathOutput(rootResult, pattern, effectiveMaxResults))
     .join("\n\n");
 }
 
 /**
- * Formats the fixed-string search result into a continuation-aware caller-visible text surface.
+ * Formats the regex-search result into a continuation-aware caller-visible text surface.
  *
- * @param result - Structured fixed-string search result across all requested roots.
- * @param fixedString - Exact literal string supplied by the caller.
+ * @param result - Structured regex-search result across all requested roots.
+ * @param pattern - Raw regex pattern supplied by the caller.
  * @param effectiveMaxResults - Effective hard-capped result limit applied by the handler.
  * @returns Compact guidance when continuation remains active; otherwise the normal formatted output.
  */
-export function formatSearchFixedStringContinuationAwareTextOutput(
-  result: SearchFixedStringResult,
-  fixedString: string,
+export function formatSearchRegexContinuationAwareTextOutput(
+  result: SearchRegexResult,
+  pattern: string,
   effectiveMaxResults: number,
 ): string {
   const hasResumableContinuation =
@@ -204,7 +245,7 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
   // Always emit the full match data first — content.text must be the complete primary information
   // carrier regardless of delivery mode. Text-only consumers must never depend on structuredContent
   // to obtain result data. See conventions/mcp-response-contract/structured-content-contract.md.
-  const fullOutput = formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
+  const fullOutput = formatSearchRegexResultOutput(result, pattern, effectiveMaxResults);
 
   if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableContinuation) {
     return fullOutput;
@@ -218,27 +259,27 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
     : "";
   const previewSummary =
     result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
-      ? `Fixed-string-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
-      : `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
+      ? `Regex-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
+      : `Regex-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
 
   const continuationBlock = formatInspectionPreviewChunkTextBlock(
     result.admission,
     result.resume,
     previewSummary,
-    "Resume the same fixed-string-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
+    "Resume the same regex-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
   );
 
   return `${fullOutput}\n\n${continuationBlock}`;
 }
 
 /**
- * Enforces the formatted text-response budget for the fixed-string search family surface.
+ * Enforces the formatted text-response budget for the regex-search family.
  *
  * @param toolName - Exact MCP tool name that owns the formatted response.
- * @param formattedOutput - Final serialized text output for the fixed-string response surface.
+ * @param formattedOutput - Final serialized text output for the regex response surface.
  * @returns The unchanged formatted output when the family budget is respected.
  */
-export function assertFormattedFixedStringResponseBudget(
+export function assertFormattedRegexResponseBudget(
   toolName: string,
   formattedOutput: string,
   requestedResumeMode: InspectionResumeMode | null,
@@ -256,7 +297,7 @@ export function assertFormattedFixedStringResponseBudget(
     toolName,
     formattedOutput.length,
     effectiveCap,
-    "Fixed-string search response exceeds the effective search-family cap.",
+    "Regex search response exceeds the effective search-family cap.",
   );
 
   return formattedOutput;
