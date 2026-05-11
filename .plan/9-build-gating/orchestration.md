@@ -4,9 +4,9 @@ file_id: "9"
 unit_name: "Build Gating"
 parent_orchestration: "PLAN.md"
 hierarchy_level: 1
-unit_status: "pending"
+unit_status: "done"
 total_tasks: 1
-completed_tasks: 0
+completed_tasks: 1
 has_sub_units: false
 sub_unit_count: 0
 resume_frontier_task: "9.1"
@@ -27,15 +27,15 @@ todo_window_mode_override: "ACTIVE_ONLY"
 - **Todo Window Mode:** `ACTIVE_ONLY`
 
 ## Tasks
-- [ ] **9.1 Package build process test gate** → `9.1-package-build-process-test-gate.md`
+- [x] **9.1 Package build process test gate** → `9.1-package-build-process-test-gate.md`
   - Classification: `WAITING`
-  - Status: `pending`
+  - Status: `done`
   - Complexity: `LOW`
   - Execution Surface Band: `GREEN`
   - Primary Split Axis: `artifact_family`
   - Files Modified: `package.json`
   - Blocked By: `8.1`
-  - Summary: Wires the package build lifecycle so a deterministic non-watch test aggregate runs before `build`, and `build` continues only when that test aggregate succeeds.
+  - Summary: Wires the package build lifecycle so a deterministic non-watch test aggregate runs before `build`, and `build` continues only on successful test success.
 
 ## Internal Dependencies
 | ID | Source Task | Target Task | Type | Status | Description | Shared Files |
