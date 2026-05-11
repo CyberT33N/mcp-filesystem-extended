@@ -6,16 +6,16 @@ created: "2026-01-05T20:22:00Z"
 last_updated: "2026-01-05T20:22:00Z"
 status: "in_progress"
 total_units: 9
- completed_units: 6
+ completed_units: 7
  total_tasks_all_levels: 22
- completed_tasks_all_levels: 19
+ completed_tasks_all_levels: 20
   hierarchy_depth: 3
   max_hierarchy_depth: 4
   plan_directory: ".plan/"
-   resume_frontier_unit: "7"
-   resume_frontier_task: "7.2.1"
-   next_frontier_task: "7.2.2"
- todo_window_default: "ACTIVE_PLUS_NEXT"
+   resume_frontier_unit: "8"
+   resume_frontier_task: "8.1"
+   next_frontier_task: "8.1"
+ todo_window_default: "ACTIVE_ONLY"
 ---
 
 # MCP Filesystem Extended - Unit-Test Coverage Plan
@@ -25,13 +25,13 @@ total_units: 9
 - **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
 - **Overall Status:** in_progress
-- **Progress:** 19/22 tasks completed
+- **Progress:** 20/22 tasks completed
 
 ## Execution Frontier
-- **Resume Frontier Unit:** `7`
-- **Resume Frontier Task:** `7.2.1`
-- **Next Frontier Task:** `7.2.2`
-- **Todo Window Default:** `ACTIVE_PLUS_NEXT`
+- **Resume Frontier Unit:** `8`
+- **Resume Frontier Task:** `8.1`
+- **Next Frontier Task:** `8.1`
+- **Todo Window Default:** `ACTIVE_ONLY`
 - **Frontier Rule:** First establish the shared inspection fixture foundation, then advance into the application and domain coverage slices.
 
 ## Testing Governance Anchors
@@ -66,9 +66,9 @@ total_units: 9
   - Classification: `MIXED`
   - Status: `done` | Tasks: 5 | Completed: 5
   - Summary: Covers continuation/resume contracts, shared guardrail policies, traversal policy surfaces, shared search policy kernels, and the runtime capability profile contract.
-- [ ] **7. Infrastructure** → `.plan/7-infrastructure/orchestration.md`
+- [x] **7. Infrastructure** → `.plan/7-infrastructure/orchestration.md`
   - Classification: `MIXED`
-  - Status: `in_progress` | Tasks: 4 | Completed: 3
+  - Status: `done` | Tasks: 4 | Completed: 4
   - Summary: Covers filesystem helpers, streaming read cores, persistence stores, runtime detectors, formatters, loggers, and native search adapters.
 - [ ] **8. Shared Errors** → `.plan/8-shared-errors/orchestration.md`
   - Classification: `ISOLATED`
