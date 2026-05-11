@@ -39,10 +39,12 @@
     "!**/__tests__/"
   ],
   "scripts": {
+    "prebuild": "pnpm test:build-gate",
     "build": "tsup",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
     "test": "vitest",
+    "test:build-gate": "pnpm test:unit && pnpm test:integration && pnpm test:regression",
     "test:integration": "vitest run --project integration",
     "test:regression": "vitest run --project regression",
     "test:unit": "vitest run --project unit",

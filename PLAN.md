@@ -6,15 +6,15 @@ created: "2026-01-05T20:22:00Z"
 last_updated: "2026-01-05T20:22:00Z"
 status: "in_progress"
 total_units: 9
- completed_units: 7
+ completed_units: 8
  total_tasks_all_levels: 22
- completed_tasks_all_levels: 20
+ completed_tasks_all_levels: 21
   hierarchy_depth: 3
   max_hierarchy_depth: 4
   plan_directory: ".plan/"
-   resume_frontier_unit: "8"
-   resume_frontier_task: "8.1"
-   next_frontier_task: "8.1"
+   resume_frontier_unit: "9"
+   resume_frontier_task: "9.1"
+   next_frontier_task: "9.1"
  todo_window_default: "ACTIVE_ONLY"
 ---
 
@@ -25,12 +25,12 @@ total_units: 9
 - **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
 - **Overall Status:** in_progress
-- **Progress:** 20/22 tasks completed
+- **Progress:** 21/22 tasks completed
 
 ## Execution Frontier
-- **Resume Frontier Unit:** `8`
-- **Resume Frontier Task:** `8.1`
-- **Next Frontier Task:** `8.1`
+- **Resume Frontier Unit:** `9`
+- **Resume Frontier Task:** `9.1`
+- **Next Frontier Task:** `9.1`
 - **Todo Window Default:** `ACTIVE_ONLY`
 - **Frontier Rule:** First establish the shared inspection fixture foundation, then advance into the application and domain coverage slices.
 
@@ -70,9 +70,9 @@ total_units: 9
   - Classification: `MIXED`
   - Status: `done` | Tasks: 4 | Completed: 4
   - Summary: Covers filesystem helpers, streaming read cores, persistence stores, runtime detectors, formatters, loggers, and native search adapters.
-- [ ] **8. Shared Errors** → `.plan/8-shared-errors/orchestration.md`
+- [x] **8. Shared Errors** → `.plan/8-shared-errors/orchestration.md`
   - Classification: `ISOLATED`
-  - Status: `pending` | Tasks: 1 | Completed: 0
+  - Status: `done` | Tasks: 1 | Completed: 1
   - Summary: Covers error export aggregation, abort classification, normalization surfaces, and the public root entrypoint.
 - [ ] **9. Build Gating** → `.plan/9-build-gating/orchestration.md`
   - Classification: `WAITING`
@@ -84,7 +84,7 @@ total_units: 9
 |----|--------|--------|------|--------|-------------|--------------|
 | D1 | `1.1` | `4.2.1` | `WAITING` | `RESOLVED` | The fixed-string search family must consume the shared fixture registry, fixture loader, and result assertions from the shared test foundation before final endpoint-family coverage is added. | `test/shared/utils/inspection/search-fixture-registry.ts`, `test/shared/utils/inspection/search-fixture-loader.ts`, `test/shared/utils/inspection/search-result-assertions.ts` |
 | D2 | `1.1` | `4.2.2` | `WAITING` | `RESOLVED` | The regex search family must consume the same shared inspection fixture foundation to avoid inline duplicated search fixtures and assertion helpers. | `test/shared/utils/inspection/search-fixture-registry.ts`, `test/shared/utils/inspection/search-fixture-loader.ts`, `test/shared/utils/inspection/search-result-assertions.ts` |
-| D3 | `8.1` | `9.1` | `WAITING` | `UNRESOLVED` | The build-gating manifest change must follow the main test-coverage rollout so the new build precondition references the intended deterministic suite surface. | `package.json` |
+| D3 | `8.1` | `9.1` | `WAITING` | `RESOLVED` | The build-gating manifest change must follow the main test-coverage rollout so the new build precondition references the intended deterministic suite surface. | `package.json` |
 
 ## Notes for Orchestrating Agent
 - Ignore config, bootstrap, and boilerplate surfaces as requested by the user.
