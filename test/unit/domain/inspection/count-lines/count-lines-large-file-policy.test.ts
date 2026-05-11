@@ -102,17 +102,19 @@ describe("count_lines large-file policy", () => {
       pattern: "TODO",
     });
 
-    expect(mockedBuildUgrepCommand).toHaveBeenCalledWith({
-      candidatePath: "file.txt",
-      caseSensitive: true,
-      executionPolicy: expect.objectContaining({
-        fixedStringSyncCandidateBytesCap: 16 * 1_024 * 1_024,
+    expect(mockedBuildUgrepCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidatePaths: ["file.txt"],
+        caseSensitive: true,
+        executionPolicy: expect.objectContaining({
+          fixedStringSyncCandidateBytesCap: 48 * 1_024 * 1_024,
+        }),
+        patternClassification: expect.objectContaining({
+          classification: "literal",
+          supportsLiteralFastPath: true,
+        }),
       }),
-      patternClassification: expect.objectContaining({
-        classification: "literal",
-        supportsLiteralFastPath: true,
-      }),
-    });
+    );
     expect(command.args).toEqual([
       "--json",
       "--count",
@@ -120,7 +122,7 @@ describe("count_lines large-file policy", () => {
       "TODO",
       "file.txt",
     ]);
-    expect(command.syncCandidateBytesCap).toBe(16 * 1_024 * 1_024);
+    expect(command.syncCandidateBytesCap).toBe(48 * 1_024 * 1_024);
   });
 
   it("returns structured totals for recursive count-lines requests", async () => {

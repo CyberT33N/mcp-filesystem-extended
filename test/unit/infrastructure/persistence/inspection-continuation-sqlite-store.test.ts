@@ -12,8 +12,16 @@ import { InspectionContinuationSqliteStore } from "@infrastructure/persistence/i
 describe("inspection_continuation_sqlite_store", () => {
   let sandboxRootPath = "";
   let databasePath = "";
+  let stores: InspectionContinuationSqliteStore[] = [];
+
+  function createStore(): InspectionContinuationSqliteStore {
+    const store = new InspectionContinuationSqliteStore(databasePath);
+    stores.push(store);
+    return store;
+  }
 
   beforeEach(async () => {
+    stores = [];
     sandboxRootPath = await mkdtemp(
       join(tmpdir(), "mcp-fs-inspection-continuation-store-"),
     );
@@ -21,13 +29,17 @@ describe("inspection_continuation_sqlite_store", () => {
   });
 
   afterEach(async () => {
+    for (const store of stores) {
+      store.close();
+    }
+
     if (sandboxRootPath !== "") {
       await rm(sandboxRootPath, { recursive: true, force: true });
     }
   });
 
   it("creates, updates, and reloads active continuation sessions from the SQLite store", () => {
-    const store = new InspectionContinuationSqliteStore(databasePath);
+    const store = createStore();
     const createdAt = new Date("2026-05-01T00:00:00.000Z");
     const updatedAt = new Date("2026-05-02T00:00:00.000Z");
     const createdSession = store.createSession(
@@ -71,7 +83,7 @@ describe("inspection_continuation_sqlite_store", () => {
   });
 
   it("treats completed, cancelled, and expired continuation sessions as inactive", () => {
-    const store = new InspectionContinuationSqliteStore(databasePath);
+    const store = createStore();
     const createdAt = new Date("2026-01-01T00:00:00.000Z");
 
     const completedSession = store.createSession(

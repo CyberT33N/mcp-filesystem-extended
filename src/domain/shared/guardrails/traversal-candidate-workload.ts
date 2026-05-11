@@ -189,7 +189,10 @@ export async function collectTraversalCandidateWorkloadEvidence(
           + responseSurfaceEstimator.estimateEntryResponseChars(candidateRelativePath, entry);
       }
 
-      const candidateAbsolutePath = path.join(directoryPath, entry.name);
+      const candidateAbsolutePath = path.posix.join(
+        directoryPath.replaceAll("\\", "/"),
+        entry.name,
+      );
 
       if (entry.isDirectory()) {
         await collectDirectory(candidateAbsolutePath, rawRelativePath);

@@ -127,6 +127,15 @@ vi.mock("@application/server/tool-registration-presets", () => ({
     registerComparisonAndMutationToolCatalogTestState.idempotentAdditiveLocalToolAnnotations,
   DESTRUCTIVE_LOCAL_TOOL_ANNOTATIONS:
     registerComparisonAndMutationToolCatalogTestState.destructiveLocalToolAnnotations,
+  buildAppendFilesToolDescription: () => "Appends text content to one or more files.",
+  buildCopyPathsToolDescription: () => "Copies files or directories to new destinations.",
+  buildCreateDirectoriesToolDescription: () => "Creates one or more directory paths, including missing parent directories.",
+  buildCreateFilesToolDescription: () => "Creates one or more new text files.",
+  buildDeletePathsToolDescription: () => "Deletes files or directories.",
+  buildDiffFilesToolDescription: () => "Compares the contents of one or more file pairs and returns unified diffs.",
+  buildDiffTextContentToolDescription: () => "Compares one or more in-memory text content pairs and returns unified diffs.",
+  buildMovePathsToolDescription: () => "Moves or renames files or directories.",
+  buildReplaceFileLineRangesToolDescription: () => "Replaces one or more 1-based inclusive line ranges in existing text files using replacementText.",
 }));
 
 import { registerComparisonAndMutationToolCatalog } from "@application/server/register-comparison-and-mutation-tool-catalog";

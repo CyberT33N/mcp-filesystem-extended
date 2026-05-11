@@ -12,6 +12,8 @@ const registerServerScopeToolsTestState = vi.hoisted(() => ({
 vi.mock("@application/server/tool-registration-presets", () => ({
   READ_ONLY_LOCAL_TOOL_ANNOTATIONS:
     registerServerScopeToolsTestState.readOnlyLocalToolAnnotations,
+  buildListAllowedDirectoriesToolDescription: () =>
+    "Lists the directory roots this MCP server may access. Use this tool to discover the effective filesystem scope before other path-based calls. This server-scope surface has no caller-supplied request payload and returns a compact text-only scope list, so no additional numeric per-tool limit disclosure is prioritized here.",
 }));
 
 import { registerServerScopeTools } from "@application/server/register-server-scope-tools";
@@ -47,7 +49,7 @@ describe("register-server-scope-tools", () => {
     expect(registration).toEqual({
       title: "List allowed directories",
       description:
-        "Lists the directory roots this MCP server may access. Use this tool to discover the effective filesystem scope before other path-based calls.",
+        "Lists the directory roots this MCP server may access. Use this tool to discover the effective filesystem scope before other path-based calls. This server-scope surface has no caller-supplied request payload and returns a compact text-only scope list, so no additional numeric per-tool limit disclosure is prioritized here.",
       annotations:
         registerServerScopeToolsTestState.readOnlyLocalToolAnnotations,
     });

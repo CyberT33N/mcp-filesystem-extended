@@ -23,7 +23,7 @@ import { SERVER_INSTRUCTIONS } from "@application/server/server-instructions";
 describe("large-text search regression contract", () => {
   it("keeps preview-first and task-backed semantics visible in the shared server instructions", () => {
     expect(SERVER_INSTRUCTIONS).toContain(
-      "Large valid text workloads may degrade into preview-first or task-backed behavior under family guardrails, while unsupported or over-hard-gap workloads still refuse.",
+      "Explicit large text-compatible file search may proceed after content-state eligibility succeeds, while broad recursive search and discovery workloads may still degrade into preview-first or completion-backed behavior under family guardrails; resume-bearing responses keep primary result data in `content.text` and may append continuation guidance afterward, while unsupported surfaces and recursive workloads that still exceed server-owned lane budgets continue to refuse.",
     );
     expect(SERVER_INSTRUCTIONS).toContain(
       "search_file_contents_by_fixed_string",

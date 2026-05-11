@@ -24,10 +24,10 @@ describe("streaming_line_counter", () => {
     }
   });
 
-  it("counts every newline-separated segment, including the trailing empty line by default", async () => {
+  it("counts newline-delimited lines without inventing a trailing empty line by default", async () => {
     await writeFile(sampleFilePath, "alpha\nbeta\n", "utf8");
 
-    await expect(countTotalLinesInFile(sampleFilePath)).resolves.toBe(3);
+    await expect(countTotalLinesInFile(sampleFilePath)).resolves.toBe(2);
   });
 
   it("ignores blank lines when callers request that behavior", async () => {

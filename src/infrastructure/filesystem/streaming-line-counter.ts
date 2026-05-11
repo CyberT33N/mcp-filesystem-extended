@@ -70,7 +70,9 @@ async function countStreamedLines(
       bufferedText = bufferedText.slice(0, -1);
     }
 
-    await processLine(bufferedText);
+    if (bufferedText !== "") {
+      await processLine(bufferedText);
+    }
 
     return {
       matchingLines,

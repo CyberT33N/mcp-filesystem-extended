@@ -108,6 +108,10 @@ export class InspectionResumeSessionSqliteStore {
     return this.databasePath;
   }
 
+  close(): void {
+    this.database.close();
+  }
+
   cleanupExpiredSessions(now = new Date()): number {
     const statement = this.database.prepare(
       `DELETE FROM ${TABLE_NAME} WHERE expires_at <= ?`,
@@ -189,8 +193,6 @@ export class InspectionResumeSessionSqliteStore {
     familyMember: string,
     now = new Date(),
   ): InspectionResumeSessionRecord<TRequest, TState> | null {
-    this.cleanupExpiredSessions(now);
-
     logger.info({ resumeToken, endpointName, familyMember, databasePath: this.databasePath }, "Resume session lookup requested");
 
     const statement = this.database.prepare(

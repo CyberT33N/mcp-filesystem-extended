@@ -11,7 +11,7 @@ import {
 describe("text response budget", () => {
   it("projects token load and formatted character budgets from byte sizes", () => {
     expect(estimateTokenLoadFromBytes(7)).toBe(3);
-    expect(estimateLineNumberedResponseCharsFromBytes(100)).toBe(199);
+    expect(estimateLineNumberedResponseCharsFromBytes(100)).toBe(564);
     expect(estimateDiffResponseCharsFromByteSizes(100, 50)).toBe(752);
   });
 

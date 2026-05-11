@@ -814,7 +814,8 @@ export function resolveInspectionContentOperationCapability(
       return {
         operation,
         isAllowed: true,
-        reason: "The classified surface is text-confident for content-inspecting execution.",
+        reason:
+          "The classified surface is text-compatible and text-confident for content-inspecting execution.",
         requiresDecodedTextFallback:
           operation === INSPECTION_CONTENT_OPERATION_LITERALS.SEARCH_TEXT
           && classification.resolvedTextEncoding
@@ -841,7 +842,8 @@ export function resolveInspectionContentOperationCapability(
       return {
         operation,
         isAllowed: false,
-        reason: "The classified surface is binary-confident and therefore not eligible for text execution.",
+        reason:
+          "The classified surface belongs to a binary or container class and is therefore not eligible for text execution.",
         requiresDecodedTextFallback: false,
       };
     case INSPECTION_CONTENT_STATE_LITERALS.UNKNOWN_LARGE_SURFACE:

@@ -64,14 +64,27 @@ export async function handleMovePaths(
         }
         
         // Check if destination exists and handle based on overwrite flag
+        let destinationExists = false;
         try {
           childLog.debug({ validDestination }, "checking destination existence with fs.access");
           await fs.access(validDestination);
-          if (!overwrite) {
-            childLog.debug("destination exists and overwrite=false");
-            throw new Error(`Destination already exists: ${item.destination}`);
+          destinationExists = true;
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code === "ENOENT") {
+            childLog.debug("destination does not exist (ENOENT), continuing");
+          } else {
+            childLog.error({ err: error, code }, "unexpected error during destination access");
+            throw error;
           }
-          
+        }
+
+        if (destinationExists && !overwrite) {
+          childLog.debug("destination exists and overwrite=false");
+          throw new Error(`Destination already exists: ${item.destination}`);
+        }
+
+        if (destinationExists) {
           // If overwrite is true and destination exists, remove the destination
           // to avoid issues with fs.rename operation
           childLog.debug("destination exists and overwrite=true, removing destination");
@@ -80,16 +93,6 @@ export async function handleMovePaths(
             await fs.rm(validDestination, { recursive: true, force: true });
           } else {
             await fs.unlink(validDestination);
-          }
-        } catch (error) {
-          // If the error is due to destination not existing (ENOENT), that's fine
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code && code !== "ENOENT") {
-            childLog.error({ err: error, code }, "unexpected error during destination access");
-            throw error;
-          }
-          if (code === "ENOENT") {
-            childLog.debug("destination does not exist (ENOENT), continuing");
           }
         }
         

@@ -102,6 +102,10 @@ export class InspectionContinuationSqliteStore {
     return this.databasePath;
   }
 
+  close(): void {
+    this.database.close();
+  }
+
   cleanupExpiredSessions(now = new Date()): number {
     const statement = this.database.prepare(
       `DELETE FROM ${TABLE_NAME} WHERE expires_at <= ?`,
@@ -168,8 +172,6 @@ export class InspectionContinuationSqliteStore {
     familyMember: string,
     now = new Date(),
   ): InspectionContinuationSessionRecord<TRequest, TState> | null {
-    this.cleanupExpiredSessions(now);
-
     const statement = this.database.prepare(
       `SELECT * FROM ${TABLE_NAME}
        WHERE continuation_token = ? AND endpoint_name = ? AND family_member = ?`,

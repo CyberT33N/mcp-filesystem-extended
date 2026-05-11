@@ -113,7 +113,7 @@ describe("read_file_content", () => {
     mockedResolveSearchExecutionPolicy.mockReturnValue(
       TEST_SEARCH_EXECUTION_POLICY,
     );
-    mockedReadFile.mockResolvedValue("hello world!\n");
+    mockedReadFile.mockResolvedValue(Buffer.from("hello world!\n"));
     mockedReadFileContentLineRange.mockResolvedValue({
       content: "line one\nline two\n",
       endLine: 2,
@@ -201,7 +201,6 @@ describe("read_file_content", () => {
 
     expect(mockedReadFile).toHaveBeenCalledWith(
       "C:/allowed/docs/notes.txt",
-      "utf8",
     );
     expect(mockedAssertProjectedTextBudget).toHaveBeenCalledWith(
       READ_FILE_CONTENT_TOOL_NAME,
@@ -212,7 +211,7 @@ describe("read_file_content", () => {
     );
     expect(result).toEqual({
       content: "hello world!\n",
-      encoding: "utf-8",
+      encoding: "utf8",
       hasMore: false,
       mode: "full",
       path: "docs/notes.txt",
@@ -293,6 +292,7 @@ describe("read_file_content", () => {
       cursor: "cursor-1",
       totalFileBytes: 13,
       validPath: "C:/allowed/docs/notes.txt",
+      textEncoding: "utf8",
     });
     expect(output).toContain("mode: chunk_cursor");
     expect(output).toContain("cursor: cursor-1");
