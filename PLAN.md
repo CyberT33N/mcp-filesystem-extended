@@ -4,11 +4,11 @@ file_id: "mcp-filesystem-extended-unit-test-coverage-plan"
 plan_version: 2
 created: "2026-01-05T20:22:00Z"
 last_updated: "2026-01-05T20:22:00Z"
-status: "in_progress"
+status: "done"
 total_units: 9
- completed_units: 8
+ completed_units: 9
  total_tasks_all_levels: 22
- completed_tasks_all_levels: 21
+ completed_tasks_all_levels: 22
   hierarchy_depth: 3
   max_hierarchy_depth: 4
   plan_directory: ".plan/"
@@ -24,8 +24,8 @@ total_units: 9
 - **Plan Directory:** `.plan/`
 - **Total Units:** 9
 - **Hierarchy Depth:** 3 levels
-- **Overall Status:** in_progress
-- **Progress:** 21/22 tasks completed
+- **Overall Status:** done
+- **Progress:** 22/22 tasks completed
 
 ## Execution Frontier
 - **Resume Frontier Unit:** `9`
@@ -74,9 +74,9 @@ total_units: 9
   - Classification: `ISOLATED`
   - Status: `done` | Tasks: 1 | Completed: 1
   - Summary: Covers error export aggregation, abort classification, normalization surfaces, and the public root entrypoint.
-- [ ] **9. Build Gating** → `.plan/9-build-gating/orchestration.md`
+- [x] **9. Build Gating** → `.plan/9-build-gating/orchestration.md`
   - Classification: `WAITING`
-  - Status: `pending` | Tasks: 1 | Completed: 0
+  - Status: `done` | Tasks: 1 | Completed: 1
   - Summary: Gates the package build lifecycle so deterministic tests run before `build` and the build continues only on test success.
 
 ## Cross-Unit Dependencies
