@@ -172,6 +172,8 @@ The server may return:
 
 The execution contract for `complete-result` is therefore stricter than "keep the preview admission outcome and run one more preview chunk". The persisted frontier is reused, but preview-lane candidate-byte budgeting and preview-lane stop logic must not own the completion branch.
 
+For the preview-capable search families, the completion branch may also materialize the remaining native-eligible candidate set behind the persisted frontier and execute it through one large or a few manifest-backed native `ugrep` batches. Decoded-text fallback files stay in a smaller ordered side-lane so the server removes native mini-batch fragmentation without losing content-state correctness or additive frontier precision.
+
 For preview-capable families, the caller-visible completion ceiling is the global response fuse. Legacy local soft-time walls belong to bounded preview execution, not to the completion branch.
 
 ---

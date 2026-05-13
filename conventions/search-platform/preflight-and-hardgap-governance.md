@@ -132,6 +132,8 @@ After that parameter-aware correction, the preflight soft-time ceiling is intent
 
 The same target state also applies to preview-family completion: once the caller resumes with `resumeMode = 'complete-result'`, the completion branch must not inherit the legacy five-second local soft runtime timeout. The caller-visible completion ceiling is the global fuse, while deeper breadth safeguards remain internal emergency stabilizers only.
 
+For the search families, that same completion branch may materialize the remaining native-eligible candidate surface into one ordered execution plan and then search it through one large or a few manifest-backed native `ugrep` batches. Decoded-text fallback files remain a smaller ordered side-lane instead of forcing the entire completion pass back into many tiny native batch flushes.
+
 ---
 
 ## Non-Negotiable Prohibitions

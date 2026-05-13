@@ -156,9 +156,11 @@ The corrected target behavior is:
 - directory-root scopes still enter shared traversal admission,
 - per-file eligibility and decoded-text fallback decisions remain endpoint-owned,
 - but validated native-searchable file candidates are now grouped into ordered shell-free native `ugrep` batches for the inline lane instead of forcing one native process spawn per file.
+- when the preview-family completion branch owns the remaining work, native-eligible candidates may be materialized into one ordered execution plan and searched through one large or a few manifest-backed native `ugrep` batches,
+- and decoded-text fallback files remain an ordered side-lane instead of fragmenting completion back into many tiny per-directory native flushes.
 
 That batching correction matters because the older per-file execution shape could still burn runtime budget too quickly even after the admission layer had been tuned upward.
-The family therefore treats threshold calibration and native-lane batching as one coherent architecture correction.
+The family therefore treats threshold calibration, inline native-lane batching, and completion-plan batching as one coherent architecture correction.
 
 Preview-first continuation remains the bounded fallback when the admitted inline lane is no longer the correct delivery shape.
 

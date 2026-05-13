@@ -74,6 +74,8 @@ For this surface:
 - candidate aggregate evidence, traversal breadth, projected output surface, and caller narrowing signals such as include-glob constraints all participate,
 - preview-family resume modes are available where the family supports them,
 - the traversal preflight layer should not spend most of its budget in low-value non-matching branches when the caller has already supplied strong file-type narrowing intent,
+- once a preview-family caller explicitly resumes with `resumeMode = 'complete-result'`, the remaining native-eligible candidate surface may be materialized into one ordered execution plan and searched through one large or a few manifest-backed native `ugrep` batches instead of many tiny per-directory native spawns,
+- decoded-text fallback files remain an ordered side-lane beside that materialized native plan so completion does not lose per-file content-state correctness,
 - preview-family `complete-result` does not inherit the local soft runtime timeout that belongs to bounded preview execution,
 - and the deeper traversal runtime fuse remains a final emergency safeguard.
 

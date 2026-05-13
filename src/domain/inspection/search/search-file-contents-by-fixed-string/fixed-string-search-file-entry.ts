@@ -26,7 +26,7 @@ import {
   type SearchStopState,
 } from "../search-stop-state";
 
-function collectFixedStringMatchesFromDecodedText(
+export function collectFixedStringMatchesFromDecodedText(
   candidateEntry: FilesystemPreflightEntry,
   fixedString: string,
   caseSensitive: boolean,

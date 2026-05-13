@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -197,8 +197,8 @@ describe("getSearchRegexPathResult", () => {
     const sandboxRootPath = await mkdtemp(
       join(tmpdir(), "mcp-fs-regex-complete-result-batch-"),
     );
-    const alphaFilePath = join(sandboxRootPath, "alpha.ts");
-    const betaFilePath = join(sandboxRootPath, "beta.ts");
+    const primaryDirectoryPath = join(sandboxRootPath, "primary");
+    const secondaryDirectoryPath = join(sandboxRootPath, "secondary", "nested");
     const executionPolicy = {
       ...resolveSearchExecutionPolicy(DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE),
       traversalInlineEntryBudget: 0,
@@ -210,14 +210,30 @@ describe("getSearchRegexPathResult", () => {
     };
 
     try {
-      await writeFile(alphaFilePath, "export const needle = true;\n", "utf8");
-      await writeFile(betaFilePath, "export const needle = true;\n", "utf8");
+      await mkdir(primaryDirectoryPath, { recursive: true });
+      await mkdir(secondaryDirectoryPath, { recursive: true });
+      const filePaths = [
+        ...Array.from({ length: 12 }, (_, index) =>
+          join(primaryDirectoryPath, `alpha-${index + 1}.ts`)
+        ),
+        ...Array.from({ length: 8 }, (_, index) =>
+          join(secondaryDirectoryPath, `beta-${index + 1}.ts`)
+        ),
+      ];
+
+      await Promise.all(
+        filePaths.map((filePath) =>
+          writeFile(filePath, "export const needle = true;\n", "utf8")
+        ),
+      );
 
       mockedRunUgrepSearch.mockResolvedValueOnce({
         exitCode: 0,
         spawnErrorMessage: null,
         stderr: "",
-        stdout: `${alphaFilePath}:1:export const needle = true;\n${betaFilePath}:1:export const needle = true;`,
+        stdout: filePaths
+          .map((filePath) => `${filePath}:1:export const needle = true;`)
+          .join("\n"),
         timedOut: false,
       });
 
@@ -229,20 +245,72 @@ describe("getSearchRegexPathResult", () => {
         excludePatterns: [],
         includeExcludedGlobs: [],
         respectGitIgnore: false,
-        maxResults: 10,
+        maxResults: 50,
         caseSensitive: true,
         allowedDirectories: [sandboxRootPath],
         executionPolicy,
         requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
       });
 
-      expect(result.totalMatches).toBe(2);
+      expect(result.totalMatches).toBe(filePaths.length);
       expect(mockedRunUgrepSearch).toHaveBeenCalledTimes(1);
       expect(mockedRunUgrepSearch.mock.calls[0]?.[0]).toEqual(
         expect.objectContaining({
-          args: expect.arrayContaining([alphaFilePath, betaFilePath]),
+          args: expect.arrayContaining([expect.stringMatching(/^--from=/)]),
         }),
       );
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("persists a materialized completion plan when a manifest-backed batch truncates early", async () => {
+    const sandboxRootPath = await mkdtemp(
+      join(tmpdir(), "mcp-fs-regex-complete-result-plan-"),
+    );
+    const alphaFilePath = join(sandboxRootPath, "alpha.ts");
+    const betaFilePath = join(sandboxRootPath, "nested", "beta.ts");
+    const executionPolicy = {
+      ...resolveSearchExecutionPolicy(DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE),
+      traversalInlineEntryBudget: 0,
+      traversalInlineDirectoryBudget: 0,
+      traversalPreviewFirstEntryBudget: 100,
+      traversalPreviewFirstDirectoryBudget: 100,
+      traversalPreviewExecutionEntryBudget: 100,
+      traversalPreviewExecutionDirectoryBudget: 100,
+    };
+
+    try {
+      await mkdir(join(sandboxRootPath, "nested"), { recursive: true });
+      await writeFile(alphaFilePath, "export const needle = true;\n", "utf8");
+      await writeFile(betaFilePath, "export const needle = true;\n", "utf8");
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 0,
+        spawnErrorMessage: null,
+        stderr: "",
+        stdout: `${alphaFilePath}:1:export const needle = true;`,
+        timedOut: false,
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: ["**/*.ts"],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.nextContinuationState).not.toBeNull();
+      expect(result.nextContinuationState?.materializedExecutionPlan).not.toBeNull();
+      expect(result.nextContinuationState?.materializedExecutionPlan?.nextUnitIndex).toBe(1);
     } finally {
       await rm(sandboxRootPath, { recursive: true, force: true });
     }

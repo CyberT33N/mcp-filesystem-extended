@@ -92,6 +92,8 @@ When admission keeps a directory-root workload inline, the endpoint no longer de
 Validated native-searchable file candidates may now be grouped into ordered shell-free native `ugrep` batches, while decoded-text fallback and unsupported-surface handling still remain file-local.
 That split preserves per-file eligibility truth without leaving the inline lane trapped in avoidable process-spawn fragmentation.
 
+When the same directory-root workload later resumes through `resumeMode = 'complete-result'`, the remaining native-eligible candidates may be materialized into one ordered execution plan and searched through one large or a few manifest-backed native `ugrep` batches. Decoded-text fallback files remain a smaller ordered side-lane so the completion branch avoids per-directory native mini-batch churn without losing additive frontier precision.
+
 ### Content-state eligibility
 
 Fixed-string search is a text-oriented operation and consumes the shared capability matrix.

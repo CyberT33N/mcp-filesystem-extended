@@ -135,6 +135,8 @@ That differentiation is required because exact literal matching is narrower, che
 
 That `4,500 ms` value belongs only to the bounded preview lane. It exists because include-glob-narrowed enterprise literal search was still hitting the older `3,000 ms` wall before yielding a useful preview slice. The preview-family completion branch must not inherit the legacy five-second local soft runtime timeout.
 
+The same completion branch now also permits a materialized execution shape: remaining native-eligible candidates may be captured as one ordered completion plan and searched through one large or a few manifest-backed native `ugrep` batches, while decoded-text fallback files remain a smaller ordered side-lane. That is the architecture-correct way to remove per-directory native mini-batch fragmentation without losing additive frontier precision.
+
 ---
 
 ## Public Limit Disclosure Placement

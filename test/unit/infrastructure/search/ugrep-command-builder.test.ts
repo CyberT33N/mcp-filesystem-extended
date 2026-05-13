@@ -157,4 +157,37 @@ describe("buildUgrepCommand", () => {
       syncCandidateBytesCap: executionPolicy.regexSyncCandidateBytesCap,
     });
   });
+
+  it("builds manifest-backed candidate input for large native batches", () => {
+    const executionPolicy = createSearchExecutionPolicy();
+
+    const command = buildUgrepCommand({
+      candidatePathListFile: "C:/temp/candidate-paths.txt",
+      caseSensitive: true,
+      executionPolicy,
+      maxCount: 25,
+      patternClassification: createPatternClassification({
+        classification: PATTERN_CLASSIFICATION_LITERALS.automatonSafeRegex,
+        originalPattern: "needle",
+        supportsLiteralFastPath: false,
+      }),
+    });
+
+    expect(command).toEqual({
+      args: [
+        "--binary-files=without-match",
+        "--color=never",
+        "--line-number",
+        "--with-filename",
+        "--max-count=25",
+        "needle",
+        "--from=C:/temp/candidate-paths.txt",
+      ],
+      executable: "C:/tools/ugrep.exe",
+      fixedStringMode: false,
+      hybridLiteralSearchLane: false,
+      requiresPcre2: false,
+      syncCandidateBytesCap: executionPolicy.regexSyncCandidateBytesCap,
+    });
+  });
 });

@@ -24,7 +24,17 @@ export interface BuildUgrepCommandInput {
    * root, or one ordered batch of validated file candidates that already survived family-local
    * traversal and eligibility checks.
    */
-  candidatePaths: string[];
+  candidatePaths?: string[];
+
+  /**
+   * Optional newline-delimited candidate-path manifest consumed by the native backend.
+   *
+   * @remarks
+   * Large ordered candidate batches may be materialized into a temporary manifest file so the
+   * shared native-search lane can execute one large batch without inflating the process argument
+   * vector beyond platform-friendly bounds.
+   */
+  candidatePathListFile?: string;
   /**
    * Indicates whether literal search intentionally targets a hybrid-searchable surface.
    */
@@ -101,6 +111,20 @@ export function buildUgrepCommand(input: BuildUgrepCommandInput): UgrepCommand {
   const hybridLiteralSearchLane =
     input.patternClassification.supportsLiteralFastPath
     && input.hybridLiteralSearchLane === true;
+  const usesCandidatePathListFile = input.candidatePathListFile !== undefined;
+  const candidatePaths = input.candidatePaths ?? [];
+
+  if (usesCandidatePathListFile && candidatePaths.length > 0) {
+    throw new Error(
+      "buildUgrepCommand accepts either candidatePaths or candidatePathListFile, but not both.",
+    );
+  }
+
+  if (!usesCandidatePathListFile && candidatePaths.length === 0) {
+    throw new Error(
+      "buildUgrepCommand requires at least one candidate path or one candidate-path manifest file.",
+    );
+  }
 
   const args = [
     `--binary-files=${hybridLiteralSearchLane ? "text" : "without-match"}`,
@@ -133,7 +157,13 @@ export function buildUgrepCommand(input: BuildUgrepCommandInput): UgrepCommand {
     args.push("--perl-regexp");
   }
 
-  args.push(input.patternClassification.originalPattern, ...input.candidatePaths);
+  args.push(input.patternClassification.originalPattern);
+
+  if (usesCandidatePathListFile) {
+    args.push(`--from=${input.candidatePathListFile}`);
+  } else {
+    args.push(...candidatePaths);
+  }
 
   return {
     args,
