@@ -6,8 +6,15 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   assertFormattedFixedStringResponseBudget,
+  formatSearchFixedStringContinuationAwareTextOutput,
   formatSearchFixedStringPathOutput,
 } from "@domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-result";
+import {
+  INSPECTION_RESUME_ADMISSION_OUTCOMES,
+  INSPECTION_RESUME_MODES,
+  INSPECTION_RESUME_STATUSES,
+} from "@domain/shared/resume/inspection-resume-contract";
+import { SEARCH_STOP_REASON_LITERALS } from "@domain/inspection/search/search-stop-state";
 import {
   resolveExplicitFileScopeCsvFixturePaths,
   type ResolvedInspectionSearchFixturePaths,
@@ -71,6 +78,8 @@ describe("search-fixed-string-result", () => {
         totalMatches: 1,
         truncated: false,
         error: null,
+        stopReason: null,
+        stopMessage: null,
       },
       matchContract.expectedMatch,
       10,
@@ -92,6 +101,8 @@ describe("search-fixed-string-result", () => {
         totalMatches: 0,
         truncated: false,
         error: "Fixed-string native lane timed out.",
+        stopReason: null,
+        stopMessage: null,
       },
       "SearchFileContentsByFixedStringArgsSchema",
       25,
@@ -112,5 +123,104 @@ describe("search-fixed-string-result", () => {
         null,
       ),
     ).toBe(formattedOutput);
+  });
+
+  it("formats resumable fixed-string preview slices as preview progress instead of a hard refusal", () => {
+    const output = formatSearchFixedStringContinuationAwareTextOutput(
+      {
+        roots: [
+          {
+            root: "src",
+            matches: [
+              {
+                file: "src/feature.ts",
+                line: 12,
+                content: "const promptBindingState = buildState();",
+                match: "promptBindingState",
+              },
+            ],
+            filesSearched: 55,
+            totalMatches: 1,
+            truncated: true,
+            error: null,
+            stopReason: SEARCH_STOP_REASON_LITERALS.EXECUTION_RUNTIME_BUDGET_EXHAUSTED,
+            stopMessage: "Tool guardrail refusal: runtime budget exceeded.",
+          },
+        ],
+        totalLocations: 1,
+        totalMatches: 1,
+        truncated: true,
+        admission: {
+          outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+          guidanceText:
+            "Preview response. This payload already contains any matches reached inside the current bounded preview slice. Resume the same fixed-string-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
+          scopeReductionGuidanceText:
+            "Scope reduction alternative: narrow roots, add includeGlobs, or reduce the search to the relevant subtree.",
+        },
+        resume: {
+          resumeToken: "resume_123",
+          resumable: true,
+          status: INSPECTION_RESUME_STATUSES.ACTIVE,
+          expiresAt: "2026-05-14T12:00:00.000Z",
+          supportedResumeModes: [
+            INSPECTION_RESUME_MODES.NEXT_CHUNK,
+            INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+          ],
+          recommendedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+        },
+      },
+      "promptBindingState",
+      80,
+    );
+
+    expect(output).toContain("Found 1 matches in 1 locations");
+    expect(output).toContain("Fixed-string-search preview is available for 1 root with 1 matches already reached in this bounded preview slice.");
+    expect(output).not.toContain("Search stopped early: Tool guardrail refusal");
+  });
+
+  it("tells text-only callers that a fixed-string preview slice reached no matches yet instead of implying final absence", () => {
+    const output = formatSearchFixedStringContinuationAwareTextOutput(
+      {
+        roots: [
+          {
+            root: "src",
+            matches: [],
+            filesSearched: 55,
+            totalMatches: 0,
+            truncated: true,
+            error: null,
+            stopReason: SEARCH_STOP_REASON_LITERALS.EXECUTION_RUNTIME_BUDGET_EXHAUSTED,
+            stopMessage: "Tool guardrail refusal: runtime budget exceeded.",
+          },
+        ],
+        totalLocations: 0,
+        totalMatches: 0,
+        truncated: true,
+        admission: {
+          outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+          guidanceText:
+            "Preview response. This payload already contains any matches reached inside the current bounded preview slice. Resume the same fixed-string-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
+          scopeReductionGuidanceText:
+            "Scope reduction alternative: narrow roots, add includeGlobs, or reduce the search to the relevant subtree.",
+        },
+        resume: {
+          resumeToken: "resume_123",
+          resumable: true,
+          status: INSPECTION_RESUME_STATUSES.ACTIVE,
+          expiresAt: "2026-05-14T12:00:00.000Z",
+          supportedResumeModes: [
+            INSPECTION_RESUME_MODES.NEXT_CHUNK,
+            INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+          ],
+          recommendedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+        },
+      },
+      "promptBindingState",
+      80,
+    );
+
+    expect(output).toContain("No matches reached yet for fixed string: promptBindingState in this bounded preview slice");
+    expect(output).toContain("Searched 55 files in this bounded preview slice");
+    expect(output).not.toContain("No matches found for fixed string");
   });
 });

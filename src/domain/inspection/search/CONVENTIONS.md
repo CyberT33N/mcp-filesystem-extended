@@ -178,6 +178,12 @@ That tax is expensive in enterprise LLM-agent systems because it increases:
 
 This family therefore must not preserve overly conservative preview-first thresholds as a matter of inertia.
 
+### Preview-slice payload rule
+
+If the bounded preview lane has already reached caller-visible matches before the runtime checkpoint fires, those matches must be shown in the first preview response. Hiding them and only returning resume instructions would waste already paid traversal cost and increase prompt-roundtrip churn.
+
+If the preview lane has not yet reached any caller-visible matches, the response must state that no matches were reached **yet in this preview slice**. It must not read like a final "no matches found" conclusion while resumable continuation still exists.
+
 ---
 
 ## Probability Model Used by This Family

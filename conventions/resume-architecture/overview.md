@@ -136,6 +136,14 @@ Many autonomous agent workflows can terminate at the preview chunk alone:
 
 When the preview chunk satisfies the agent's current information need, no resume request is needed. This is the primary efficiency mechanism of the preview-first lane.
 
+### Preview payload truthfulness rule
+
+When bounded preview execution has already reached caller-visible matches, entries, or other primary result data before the preview lane pauses, those already reached results **must** be included in the first preview response.
+
+The preview response must not discard already collected primary data merely because the pause was caused by a runtime checkpoint. That would force the caller into an unnecessary follow-up request and waste both traversal work and prompt budget.
+
+If the bounded preview slice has not reached any caller-visible matches yet, the response must say so explicitly as a **slice-local** statement such as "no matches reached yet in this preview slice". It must not imply final absence for the whole workload while resumable continuation still exists.
+
 ---
 
 ## `complete-result` Is Additive, Not Redundant

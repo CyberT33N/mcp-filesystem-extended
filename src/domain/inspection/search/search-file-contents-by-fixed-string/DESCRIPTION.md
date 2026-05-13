@@ -248,6 +248,11 @@ When the response is resumable:
 - continuation guidance is appended after the full result data,
 - `structuredContent.admission` and `structuredContent.resume` remain the authoritative machine-readable envelope.
 
+For preview-first responses specifically:
+
+- any matches already reached before the bounded preview runtime pause must already be shown in that first preview response
+- if the bounded slice has not reached a match yet, the text must say so as a slice-local progress statement rather than implying final absence for the whole workload
+
 This keeps text-only consumers and structured consumers aligned on the same logical result.
 
 ---

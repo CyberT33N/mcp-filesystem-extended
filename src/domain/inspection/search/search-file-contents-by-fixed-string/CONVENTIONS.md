@@ -253,6 +253,8 @@ When the response is resumable:
 - the full match payload still appears in `content.text`,
 - a continuation block is appended afterward,
 - the continuation block must not replace the primary result data with compact summary text only.
+- if bounded preview execution already reached matches before the runtime checkpoint, those matches must remain visible in the first preview response
+- if bounded preview execution reached zero matches so far, the response must say "no matches reached yet in this bounded preview slice" instead of implying final absence for the full workload
 
 ### Response-cap rule
 

@@ -185,6 +185,57 @@ export function formatSearchFixedStringPathOutput(
   return output.trimEnd();
 }
 
+function formatSearchFixedStringPreviewPathOutput(
+  result: SearchFixedStringPathResult,
+  fixedString: string,
+  effectiveMaxResults: number,
+): string {
+  if (result.error !== null) {
+    if (result.error.startsWith("Preview-first traversal for root ")) {
+      return result.error;
+    }
+
+    return `Fixed-string search failed for root ${result.root}: ${result.error}`;
+  }
+
+  if (result.matches.length === 0) {
+    return [
+      `No matches reached yet for fixed string: ${fixedString} in this bounded preview slice`,
+      `Searched ${result.filesSearched} files in this bounded preview slice`,
+    ].join("\n");
+  }
+
+  let output = `Found ${result.totalMatches} matches in ${result.matches.length} locations`;
+
+  if (result.truncated && isSearchMaxResultsLimitReached(result.stopReason)) {
+    output += ` (limited to ${effectiveMaxResults} results)`;
+  }
+
+  output += "\n\n";
+
+  const fileGroups = new Map<string, FixedStringSearchMatch[]>();
+
+  for (const match of result.matches) {
+    if (!fileGroups.has(match.file)) {
+      fileGroups.set(match.file, []);
+    }
+
+    fileGroups.get(match.file)?.push(match);
+  }
+
+  for (const [file, fileResults] of fileGroups.entries()) {
+    output += `File: ${file}\n`;
+
+    for (const fileResult of fileResults) {
+      output += `  Line ${fileResult.line}: ${fileResult.content}\n`;
+    }
+
+    output += "\n";
+  }
+
+  return output.trimEnd();
+}
+
 /**
  * Formats the structured fixed-string search result into the public text response surface.
  *
@@ -229,11 +280,41 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
   const hasResumableContinuation =
     result.resume.resumable
     && result.resume.resumeToken !== null;
+  const previewSliceIsActive =
+    result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST
+    && hasResumableContinuation;
 
   // Always emit the full match data first — content.text must be the complete primary information
   // carrier regardless of delivery mode. Text-only consumers must never depend on structuredContent
   // to obtain result data. See conventions/mcp-response-contract/structured-content-contract.md.
-  const fullOutput = formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
+  const fullOutput = previewSliceIsActive
+    ? (
+        result.roots.length === 1
+          ? formatSearchFixedStringPreviewPathOutput(
+              result.roots[0] ?? {
+                root: "",
+                matches: [],
+                filesSearched: 0,
+                totalMatches: 0,
+                truncated: false,
+                error: null,
+                stopReason: null,
+                stopMessage: null,
+              },
+              fixedString,
+              effectiveMaxResults,
+            )
+          : result.roots
+              .map((rootResult) =>
+                formatSearchFixedStringPreviewPathOutput(
+                  rootResult,
+                  fixedString,
+                  effectiveMaxResults,
+                )
+              )
+              .join("\n\n")
+      )
+    : formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
 
   if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableContinuation) {
     return fullOutput;
@@ -248,7 +329,7 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
   const previewSummary =
     result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
       ? `Fixed-string-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
-      : `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
+      : `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches already reached in this bounded preview slice.${zeroMatchesClarification}`;
 
   const continuationBlock = formatInspectionPreviewChunkTextBlock(
     result.admission,

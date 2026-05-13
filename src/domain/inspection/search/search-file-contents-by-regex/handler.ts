@@ -1,7 +1,5 @@
 import { normalizeError } from "@shared/errors";
 
-import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
-
 import {
   createGuardrailedSearchRegexExecutionPlan,
   isRegexSearchPatternContractError,
@@ -36,7 +34,7 @@ import {
   type SearchRegexResult,
 } from "./search-regex-result";
 const SEARCH_REGEX_CONTINUATION_GUIDANCE =
-  "Resume the same regex-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.";
+  "Preview response. This payload already contains any matches reached inside the current bounded preview slice. Resume the same regex-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.";
 
 interface SearchRegexRequestPayload {
   searchPaths: string[];

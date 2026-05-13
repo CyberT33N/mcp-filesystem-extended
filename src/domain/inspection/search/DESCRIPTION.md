@@ -164,6 +164,8 @@ The family therefore treats threshold calibration, inline native-lane batching, 
 
 Preview-first continuation remains the bounded fallback when the admitted inline lane is no longer the correct delivery shape.
 
+That preview fallback also has one caller-visible payload rule: if the bounded preview slice has already reached matches, those matches belong in the first preview response. If it has reached none yet, the response must say "not reached yet in this preview slice" instead of implying a final negative result for the whole workload.
+
 ---
 
 ## Family-owned threshold philosophy

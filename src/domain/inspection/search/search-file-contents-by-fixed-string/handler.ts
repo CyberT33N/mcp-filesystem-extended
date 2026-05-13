@@ -12,13 +12,11 @@ import {
   INSPECTION_RESUME_STATUSES,
   type InspectionResumeMode,
 } from "@domain/shared/resume/inspection-resume-contract";
-import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
 import {
   assertFormattedFixedStringResponseBudget,
   formatSearchFixedStringContinuationAwareTextOutput,
-  formatSearchFixedStringPathOutput,
   type SearchFixedStringPathResult,
   type SearchFixedStringResult,
 } from "./search-fixed-string-result";
@@ -31,7 +29,7 @@ import { createFixedStringRootErrorResult } from "./fixed-string-search-support"
 
 const SEARCH_FIXED_STRING_TOOL_NAME = "search_file_contents_by_fixed_string";
 const SEARCH_FIXED_STRING_CONTINUATION_GUIDANCE =
-  "Resume the same fixed-string-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.";
+  "Preview response. This payload already contains any matches reached inside the current bounded preview slice. Resume the same fixed-string-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.";
 
 interface SearchFixedStringRequestPayload {
   searchPaths: string[];

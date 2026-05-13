@@ -83,6 +83,8 @@ All six resume-capable inspection endpoints whose handler calls `assertActualTex
 | Family-level response cap (Layer 5) | ✅ | Chunk text output is subject to family cap |
 | Global fuse (Layer 6) | ✅ | Always |
 
+When a preview-family `next-chunk` or base preview response pauses because of the bounded preview runtime checkpoint, the caller-visible response still remains a **preview payload**, not a hard-refusal payload, as long as resumable continuation exists. Any matches or entries already reached inside that bounded slice must stay visible in `content.text`, and zero-hit slices must be phrased as "not reached yet in this preview slice" rather than as a final negative result for the full workload.
+
 ### `complete-result` Mode (Preview Families)
 
 | Guardrail | Active? | Notes |
