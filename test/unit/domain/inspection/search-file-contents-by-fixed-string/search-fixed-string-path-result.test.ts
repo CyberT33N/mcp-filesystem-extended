@@ -1,5 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +22,10 @@ vi.mock("@infrastructure/runtime/ugrep-runtime-dependency", () => ({
 }));
 
 import { getSearchFixedStringPathResult } from "@domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-path-result";
+import { INSPECTION_RESUME_MODES } from "@domain/shared/resume/inspection-resume-contract";
+import { DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE } from "@domain/shared/runtime/io-capability-profile";
+import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
+import * as traversalRuntimeBudget from "@domain/shared/guardrails/traversal-runtime-budget";
 import {
   resolveExplicitFileScopeCsvFixturePaths,
   type ResolvedInspectionSearchFixturePaths,
@@ -135,5 +140,106 @@ describe("getSearchFixedStringPathResult", () => {
     assertDirectoryRootIncludeGlobFilteredResult(result);
     expect(result.nextContinuationState).toBeNull();
     expect(mockedRunUgrepSearch).not.toHaveBeenCalled();
+  });
+
+  it("disables the local soft runtime timeout for preview-family complete-result traversal", async () => {
+    const fixturePaths = explicitFileScopeFixturePaths;
+
+    if (fixturePaths === undefined) {
+      throw new Error("Expected shared explicit file-scope fixture state to be initialized.");
+    }
+
+    const assertTraversalRuntimeBudgetSpy = vi.spyOn(
+      traversalRuntimeBudget,
+      "assertTraversalRuntimeBudget",
+    );
+    const executionPolicy = {
+      ...resolveSearchExecutionPolicy(DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE),
+      traversalInlineEntryBudget: 0,
+      traversalInlineDirectoryBudget: 0,
+      traversalPreviewFirstEntryBudget: 100,
+      traversalPreviewFirstDirectoryBudget: 100,
+      traversalPreviewExecutionEntryBudget: 100,
+      traversalPreviewExecutionDirectoryBudget: 100,
+    };
+
+    try {
+      const result = await getSearchFixedStringPathResult({
+        searchPath: fixturePaths.rootRelativePath,
+        fixedString: fixturePaths.fixture.canonicalSearchToken,
+        filePatterns: ["**/*.json"],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [workspaceRootPath],
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.admissionOutcome).toBe("preview-first");
+      expect(
+        assertTraversalRuntimeBudgetSpy.mock.calls.some(([, , , , limits]) =>
+          limits?.softTimeBudgetMs === null
+        ),
+      ).toBe(true);
+    } finally {
+      assertTraversalRuntimeBudgetSpy.mockRestore();
+    }
+  });
+
+  it("uses native ugrep batching for complete-result traversal after preview-first admission", async () => {
+    const sandboxRootPath = await mkdtemp(
+      join(tmpdir(), "mcp-fs-fixed-string-complete-result-batch-"),
+    );
+    const alphaFilePath = join(sandboxRootPath, "alpha.ts");
+    const betaFilePath = join(sandboxRootPath, "beta.ts");
+    const executionPolicy = {
+      ...resolveSearchExecutionPolicy(DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE),
+      traversalInlineEntryBudget: 0,
+      traversalInlineDirectoryBudget: 0,
+      traversalPreviewFirstEntryBudget: 100,
+      traversalPreviewFirstDirectoryBudget: 100,
+      traversalPreviewExecutionEntryBudget: 100,
+      traversalPreviewExecutionDirectoryBudget: 100,
+    };
+
+    try {
+      await writeFile(alphaFilePath, "export const needle = true;\n", "utf8");
+      await writeFile(betaFilePath, "export const needle = true;\n", "utf8");
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 0,
+        spawnErrorMessage: null,
+        stderr: "",
+        stdout: `${alphaFilePath}:1:export const needle = true;\n${betaFilePath}:1:export const needle = true;`,
+        timedOut: false,
+      });
+
+      const result = await getSearchFixedStringPathResult({
+        searchPath: sandboxRootPath,
+        fixedString: "needle",
+        filePatterns: ["**/*.ts"],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.totalMatches).toBe(2);
+      expect(mockedRunUgrepSearch).toHaveBeenCalledTimes(1);
+      expect(mockedRunUgrepSearch.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          args: expect.arrayContaining([alphaFilePath, betaFilePath]),
+        }),
+      );
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
   });
 });

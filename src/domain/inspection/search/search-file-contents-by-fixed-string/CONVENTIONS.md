@@ -123,6 +123,7 @@ The fixed-string endpoint-local docs must explain that broad valid workloads may
 This endpoint is tuned by the search-family threshold policy from [`search-family-thresholds.ts`](../search-family-thresholds.ts).
 
 The endpoint-specific calibrated values are:
+- preview execution soft runtime budget = `4,500 ms`
 - inline execution budget override = `14,000 ms`
 - estimated per-candidate-file admission cost = `60 ms`
 
@@ -131,6 +132,8 @@ Without this correction, the endpoint would still enter preview-first too early 
 
 Fixed-string remains intentionally more permissive than regex.
 That differentiation is required because exact literal matching is narrower, cheaper, and more likely to justify inline completion when the projected caller-visible result surface stays compact.
+
+That `4,500 ms` value belongs only to the bounded preview lane. It exists because include-glob-narrowed enterprise literal search was still hitting the older `3,000 ms` wall before yielding a useful preview slice. The preview-family completion branch must not inherit the legacy five-second local soft runtime timeout.
 
 ---
 
@@ -253,6 +256,7 @@ When the response is resumable:
 
 - family-level response caps remain authoritative for inline and `next-chunk`,
 - `complete-result` uses the global fuse as the effective final ceiling instead of the family cap,
+- preview-family `complete-result` does not inherit the local five-second soft runtime timeout,
 - endpoint-local docs must not describe `complete-result` as a cap bypass.
 
 ### Single-execution response rule

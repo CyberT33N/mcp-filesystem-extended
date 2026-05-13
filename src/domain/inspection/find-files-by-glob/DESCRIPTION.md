@@ -146,7 +146,9 @@ If the caller explicitly targets a root inside one of those excluded trees, that
 
 ### Optional `.gitignore` participation
 
-`respectGitIgnore` adds optional root-local ignore rules on top of the server-owned baseline. It does not replace that baseline.
+`respectGitIgnore` adds optional directory-scoped hierarchical `.gitignore` rules on top of the server-owned baseline. It does not replace that baseline.
+
+When enabled, traversal starts from the validated requested root and lazily resolves nested `.gitignore` files as traversal descends into subdirectories. Each `.gitignore` layer applies only to its own subtree rather than globally to sibling branches.
 
 ---
 
@@ -252,5 +254,6 @@ This endpoint-local description exists because `find_files_by_glob` has endpoint
 - handler-owned traversal and truncation behavior
 - preview-first plus additive `complete-result` semantics on the same endpoint
 - glob-discovery-specific interpretation of the shared traversal hardening model
+- directory-scoped hierarchical `.gitignore` participation beneath the validated traversal root
 
 That endpoint-local detail belongs here, while broader cross-family guardrail ownership remains shared.

@@ -71,8 +71,10 @@ A recursive traversal search request names one or more directories and lets the 
 For this surface:
 
 - the shared traversal admission planner decides whether the workload is `inline`, `preview-first`, `completion-backed-required`, or `narrowing-required`,
-- candidate aggregate evidence, traversal breadth, and projected output surface all participate,
+- candidate aggregate evidence, traversal breadth, projected output surface, and caller narrowing signals such as include-glob constraints all participate,
 - preview-family resume modes are available where the family supports them,
+- the traversal preflight layer should not spend most of its budget in low-value non-matching branches when the caller has already supplied strong file-type narrowing intent,
+- preview-family `complete-result` does not inherit the local soft runtime timeout that belongs to bounded preview execution,
 - and the deeper traversal runtime fuse remains a final emergency safeguard.
 
 These surfaces must not be treated as the same hardgap boundary.

@@ -54,10 +54,7 @@ import {
   classifyPattern,
   type PatternClassification,
 } from "@domain/shared/search/pattern-classifier";
-import {
-  shouldExcludeTraversalScopePath,
-  shouldTraverseTraversalScopeDirectoryPath,
-} from "@domain/shared/guardrails/traversal-scope-policy";
+import { resolveTraversalScopeEntryPolicy } from "@domain/shared/guardrails/traversal-scope-policy";
 import {
   countMatchingLinesInFile,
   countTotalLinesInFile,
@@ -164,6 +161,15 @@ function cloneCountLinesTraversalFrames(
 
 function createInitialCountLinesTraversalFrames(): CountLinesTraversalFrame[] {
   return [{ directoryRelativePath: "", nextEntryIndex: 0 }];
+}
+
+function createCountLinesTraversalPreflightWorkloadPolicy(filePatterns: string[]) {
+  return {
+    shouldCountFileEntryTowardBudget: (
+      candidateRelativePath: string,
+      entry: import("fs").Dirent<string>,
+    ): boolean => !entry.isFile() || matchesIncludedFilePatterns(candidateRelativePath, filePatterns),
+  };
 }
 
 function createCompletedCountLinesPathContinuationState(
@@ -633,7 +639,7 @@ async function getCountLinesPathResult(
  * @param filePatterns - Glob-like file filters applied during recursive traversal.
  * @param excludePatterns - Glob-like exclusions removed before counting proceeds.
  * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
+ * @param respectGitIgnore - Whether optional directory-scoped hierarchical `.gitignore` enrichment participates in traversal.
  * @param ignoreEmptyLines - Whether blank lines should be excluded from totals.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @returns Human-readable count-lines output that respects the discovery-family text budget while preserving the split counting architecture.
@@ -689,7 +695,7 @@ export async function handleCountLines(
  * @param filePatterns - Glob-like file filters applied during recursive traversal.
  * @param excludePatterns - Glob-like exclusions removed before counting proceeds.
  * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
+ * @param respectGitIgnore - Whether optional directory-scoped hierarchical `.gitignore` enrichment participates in traversal.
  * @param ignoreEmptyLines - Whether blank lines should be excluded from totals.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @returns Structured per-path and aggregate line-count totals.
@@ -983,6 +989,8 @@ async function countLinesInDirectoryTaskBacked(
     respectGitIgnore,
     allowedDirectories,
     ["directory"],
+    true,
+    createCountLinesTraversalPreflightWorkloadPolicy(filePatterns),
   );
   const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
   const validatedRootPath = traversalPreflightContext.rootEntry.validPath;
@@ -1073,14 +1081,13 @@ async function countLinesInDirectoryTaskBacked(
 
       const fullPath = path.join(currentPath, entry.name);
       const relativePath = normalizeRelativePath(path.relative(validatedRootPath, fullPath));
-      const shouldTraverseExcludedDirectory =
-        entry.isDirectory()
-        && shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
+      const entryPolicy = await resolveTraversalScopeEntryPolicy(
+        relativePath,
+        entry.isDirectory(),
+        traversalScopePolicyResolution,
+      );
 
-      if (
-        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-        && !shouldTraverseExcludedDirectory
-      ) {
+      if (entryPolicy.excluded) {
         continue;
       }
 
@@ -1088,12 +1095,15 @@ async function countLinesInDirectoryTaskBacked(
         await validatePath(fullPath, allowedDirectories);
 
         if (entry.isDirectory()) {
-          traversalFrames.push({
-            directoryRelativePath: path.relative(validatedRootPath, fullPath),
-            nextEntryIndex: 0,
-          });
-          descendedIntoChildDirectory = true;
-          break;
+          if (entryPolicy.shouldTraverse) {
+            traversalFrames.push({
+              directoryRelativePath: path.relative(validatedRootPath, fullPath),
+              nextEntryIndex: 0,
+            });
+            descendedIntoChildDirectory = true;
+            break;
+          }
+          continue;
         }
 
         if (entry.isFile() && matchesIncludedFilePatterns(relativePath, filePatterns)) {
@@ -1169,6 +1179,8 @@ async function countLinesInDirectory(
     respectGitIgnore,
     allowedDirectories,
     ["directory"],
+    true,
+    createCountLinesTraversalPreflightWorkloadPolicy(filePatterns),
   );
   const executionPolicy = resolveSearchExecutionPolicy(detectIoCapabilityProfile());
   const candidateWorkloadEvidence = await collectTraversalCandidateWorkloadEvidence({
@@ -1239,17 +1251,13 @@ async function countLinesInDirectory(
 
         const fullPath = path.join(currentPath, entry.name);
         const relativePath = normalizeRelativePath(path.relative(validatedRootPath, fullPath));
-        const shouldTraverseExcludedDirectory =
-          entry.isDirectory() &&
-          shouldTraverseTraversalScopeDirectoryPath(
-            relativePath,
-            traversalScopePolicyResolution,
-          );
+        const entryPolicy = await resolveTraversalScopeEntryPolicy(
+          relativePath,
+          entry.isDirectory(),
+          traversalScopePolicyResolution,
+        );
 
-        if (
-          shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution) &&
-          !shouldTraverseExcludedDirectory
-        ) {
+        if (entryPolicy.excluded) {
           continue;
         }
         
@@ -1258,8 +1266,10 @@ async function countLinesInDirectory(
           await validatePath(fullPath, allowedDirectories);
           
           if (entry.isDirectory()) {
-            // Recursively process subdirectories
-            await processDirectory(fullPath);
+            if (entryPolicy.shouldTraverse) {
+              // Recursively process subdirectories
+              await processDirectory(fullPath);
+            }
           } else if (entry.isFile()) {
             if (matchesIncludedFilePatterns(relativePath, filePatterns)) {
               try {

@@ -7,6 +7,7 @@
  * that remain non-failure states while still requiring truthful reporting.
  */
 export const SEARCH_STOP_REASON_LITERALS = {
+  COMPLETION_CONTINUATION_AVAILABLE: "completion_continuation_available",
   EXECUTION_RUNTIME_BUDGET_EXHAUSTED: "execution_runtime_budget_exhausted",
   MAX_RESULTS_LIMIT_REACHED: "max_results_limit_reached",
   PREVIEW_CONTINUATION_AVAILABLE: "preview_continuation_available",
@@ -21,6 +22,7 @@ export const SEARCH_STOP_REASON_LITERALS = {
  * caller-visible stop-state contract remains a family-level single source of truth.
  */
 export const SEARCH_STOP_REASON_VALUES = [
+  SEARCH_STOP_REASON_LITERALS.COMPLETION_CONTINUATION_AVAILABLE,
   SEARCH_STOP_REASON_LITERALS.EXECUTION_RUNTIME_BUDGET_EXHAUSTED,
   SEARCH_STOP_REASON_LITERALS.MAX_RESULTS_LIMIT_REACHED,
   SEARCH_STOP_REASON_LITERALS.PREVIEW_CONTINUATION_AVAILABLE,
@@ -105,7 +107,6 @@ export function createSearchPreviewContinuationState(): SearchStopState {
     "Additional matches remain in the persisted continuation frontier for this search scope.",
   );
 }
-
 /**
  * Creates the bounded-stop state used when the deeper runtime execution safeguard stopped the search.
  *
@@ -118,6 +119,18 @@ export function createSearchExecutionRuntimeBudgetState(
   return createSearchStopState(
     SEARCH_STOP_REASON_LITERALS.EXECUTION_RUNTIME_BUDGET_EXHAUSTED,
     stopMessage,
+  );
+}
+
+/**
+ * Creates the bounded-stop state used when a server-owned `complete-result` pass remains resumable.
+ *
+ * @returns Shared stop state for bounded completion continuation.
+ */
+export function createSearchCompletionContinuationState(): SearchStopState {
+  return createSearchStopState(
+    SEARCH_STOP_REASON_LITERALS.COMPLETION_CONTINUATION_AVAILABLE,
+    "Additional matches remain in the persisted completion frontier for this search scope.",
   );
 }
 

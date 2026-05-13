@@ -52,6 +52,8 @@ Allowed outcomes:
 - `completion-backed-required`
 - `narrowing-required`
 
+The admission path must remain parameter-aware. Caller narrowing signals such as include-glob-constrained TypeScript search are not optional hints; they are part of the workload shape and must influence whether preflight cost is spent in a branch at all.
+
 ### Layer 4 — Explicit-file search entry rule
 
 Owner: search family runtime lane.
@@ -121,6 +123,14 @@ For directory-root search workloads:
 - preview-first and completion-backed behavior remain valid,
 - narrowing-required remains valid when the workload is truly too broad,
 - and the deeper traversal fuse remains the emergency safeguard.
+
+But the target architecture also requires that recursive preflight cost align with caller intent. If a request is already narrowed to `**/*.ts` / `**/*.tsx`, broad asset or icon branches must not dominate preflight cost as if they were equally relevant to the workload.
+
+The implementation path for that rule is a workload-aware traversal preflight policy: directory discovery still proceeds, but file-entry budget accounting may ignore non-matching file leaves when strong include-glob narrowing is already present.
+
+After that parameter-aware correction, the preflight soft-time ceiling is intentionally calibrated at `4,500 ms`. The old `3,000 ms` wall still rejected valid enterprise TypeScript and TSX broad-root search before the request could reach its proper admission lane, so the higher bounded value is now the architecture-correct preflight threshold.
+
+The same target state also applies to preview-family completion: once the caller resumes with `resumeMode = 'complete-result'`, the completion branch must not inherit the legacy five-second local soft runtime timeout. The caller-visible completion ceiling is the global fuse, while deeper breadth safeguards remain internal emergency stabilizers only.
 
 ---
 

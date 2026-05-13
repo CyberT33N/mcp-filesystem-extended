@@ -1,5 +1,8 @@
 import { minimatch } from "minimatch";
-import type { GitIgnoreTraversalEnrichment } from "./gitignore-traversal-enrichment";
+import {
+  isGitIgnoreTraversalHierarchyExcluded,
+  type GitIgnoreTraversalHierarchy,
+} from "./gitignore-traversal-enrichment";
 
 /**
  * Canonical traversal-scope policy helpers shared by traversal-based inspection endpoints.
@@ -28,6 +31,19 @@ export const DEFAULT_TRAVERSAL_SCOPE_EXCLUDED_DIRECTORY_CLASSES = [
   "dist",
   "build",
   "coverage",
+  ".turbo",
+  ".next",
+  ".nuxt",
+  ".cache",
+  ".parcel-cache",
+  "out",
+  "target",
+  ".gradle",
+  ".pytest_cache",
+  ".mypy_cache",
+  ".tox",
+  ".ruff_cache",
+  ".idea",
 ] as const satisfies readonly string[];
 
 /**
@@ -178,14 +194,14 @@ export interface TraversalScopePolicyResolution {
   callerExcludeGlobs: readonly string[];
 
   /**
-   * Indicates whether optional root-local `.gitignore` enrichment participates in this traversal.
+   * Indicates whether optional hierarchical `.gitignore` enrichment participates in this traversal.
    */
   gitIgnoreEnrichmentApplied: boolean;
 
   /**
-   * Optional parsed `.gitignore` enrichment surface carried forward for downstream traversal consumers.
+   * Optional directory-scoped hierarchical `.gitignore` enrichment carried forward for downstream traversal consumers.
    */
-  gitIgnoreTraversalEnrichment: GitIgnoreTraversalEnrichment | null;
+  gitIgnoreTraversalHierarchy: GitIgnoreTraversalHierarchy | null;
 
   /**
    * Indicates whether the caller explicitly enabled secondary `.gitignore` participation.
@@ -208,8 +224,9 @@ export interface TraversalScopePolicyResolution {
  * server-owned default exclusion baseline.
  *
  * @remarks
- * These options can reopen named descendants or layer root-local `.gitignore` behavior on top of
- * the server baseline, but they must not replace the canonical default exclusion model.
+ * These options can reopen named descendants or layer directory-scoped hierarchical `.gitignore`
+ * behavior on top of the server baseline, but they must not replace the canonical default
+ * exclusion model.
  */
 export interface TraversalScopePolicyOptions {
   /**
@@ -218,12 +235,12 @@ export interface TraversalScopePolicyOptions {
   readonly includeExcludedGlobs?: readonly string[];
 
   /**
-   * Parsed optional root-local `.gitignore` enrichment surface.
+   * Parsed optional directory-scoped hierarchical `.gitignore` enrichment surface.
    */
-  readonly gitIgnoreTraversalEnrichment?: GitIgnoreTraversalEnrichment | null;
+  readonly gitIgnoreTraversalHierarchy?: GitIgnoreTraversalHierarchy | null;
 
   /**
-   * Indicates whether optional root-local `.gitignore` enrichment should participate in this traversal.
+   * Indicates whether optional hierarchical `.gitignore` enrichment should participate in this traversal.
    */
   readonly respectGitIgnore?: boolean;
 }
@@ -335,14 +352,9 @@ export function shouldExcludeTraversalScopePath(
     return false;
   }
 
-  const excludedByEffectiveGlobs = resolution.effectiveExcludeGlobs.some((pattern) =>
+  return resolution.effectiveExcludeGlobs.some((pattern) =>
     matchesTraversalScopeExcludePattern(normalizedPath, pattern),
   );
-  const excludedByGitIgnore = resolution.gitIgnoreTraversalEnrichment?.matcher.ignores(
-    normalizedPath,
-  ) ?? false;
-
-  return excludedByEffectiveGlobs || excludedByGitIgnore;
 }
 
 /**
@@ -368,17 +380,76 @@ export function shouldTraverseTraversalScopeDirectoryPath(
 }
 
 /**
+ * Determines whether one traversal-relative path is excluded by the active hierarchical `.gitignore`
+ * enrichment stack.
+ *
+ * @param pathValue - Traversal-relative file or directory path currently being evaluated.
+ * @param isDirectory - Whether the current path represents a directory entry.
+ * @param resolution - Effective shared traversal policy for the active root.
+ * @returns `true` when the active hierarchical `.gitignore` layers exclude the path.
+ */
+export async function shouldExcludeTraversalScopePathByGitIgnore(
+  pathValue: string,
+  isDirectory: boolean,
+  resolution: TraversalScopePolicyResolution,
+): Promise<boolean> {
+  if (!resolution.gitIgnoreEnrichmentApplied || resolution.gitIgnoreTraversalHierarchy === null) {
+    return false;
+  }
+
+  return isGitIgnoreTraversalHierarchyExcluded(
+    pathValue,
+    isDirectory,
+    resolution.gitIgnoreTraversalHierarchy,
+  );
+}
+
+/**
+ * Resolves the effective traversal exclusion and descendant-traversal decision for one path.
+ *
+ * @param pathValue - Traversal-relative file or directory path currently being evaluated.
+ * @param isDirectory - Whether the current path represents a directory entry.
+ * @param resolution - Effective shared traversal policy for the active root.
+ * @returns The combined exclusion and traversal decision after baseline and hierarchical `.gitignore` evaluation.
+ */
+export async function resolveTraversalScopeEntryPolicy(
+  pathValue: string,
+  isDirectory: boolean,
+  resolution: TraversalScopePolicyResolution,
+): Promise<{
+  excluded: boolean;
+  shouldTraverse: boolean;
+}> {
+  const excludedByBaseline = shouldExcludeTraversalScopePath(pathValue, resolution);
+  const shouldTraverseByBaseline = isDirectory
+    && shouldTraverseTraversalScopeDirectoryPath(pathValue, resolution);
+  const excludedByGitIgnore = await shouldExcludeTraversalScopePathByGitIgnore(
+    pathValue,
+    isDirectory,
+    resolution,
+  );
+
+  return {
+    excluded:
+      excludedByGitIgnore
+      || (excludedByBaseline && !(isDirectory && shouldTraverseByBaseline)),
+    shouldTraverse:
+      !excludedByGitIgnore && (!excludedByBaseline || shouldTraverseByBaseline),
+  };
+}
+
+/**
  * Resolves the effective shared traversal policy for one caller-supplied root.
  *
  * @param requestedRoot - Caller-supplied root path that anchors the traversal.
  * @param callerExcludeGlobs - Caller-supplied exclude globs that remain additive to the shared policy.
  * @returns The normalized root, explicit-root classification, additive re-include state, optional
- * secondary `.gitignore` participation, and effective exclude globs for traversal.
+ * secondary hierarchical `.gitignore` participation, and effective exclude globs for traversal.
  *
  * @remarks
- * The resolved policy preserves explicit access to excluded roots, keeps `.gitignore` enrichment
- * secondary, and carries the additive override surface forward so downstream traversal endpoints do
- * not need to invent their own exclusion rules.
+ * The resolved policy preserves explicit access to excluded roots, keeps hierarchical `.gitignore`
+ * enrichment secondary, and carries the additive override surface forward so downstream traversal
+ * endpoints do not need to invent their own exclusion rules.
  */
 export function resolveTraversalScopePolicy(
   requestedRoot: string,
@@ -389,10 +460,10 @@ export function resolveTraversalScopePolicy(
   const explicitExcludedRoot = isExplicitTraversalRootInsideDefaultExcludedClass(normalizedRoot);
   const applyDefaultExcludedClasses = !explicitExcludedRoot;
   const respectGitIgnore = options.respectGitIgnore === true;
-  const gitIgnoreTraversalEnrichment = respectGitIgnore
-    ? options.gitIgnoreTraversalEnrichment ?? null
+  const gitIgnoreTraversalHierarchy = respectGitIgnore
+    ? options.gitIgnoreTraversalHierarchy ?? null
     : null;
-  const gitIgnoreEnrichmentApplied = gitIgnoreTraversalEnrichment !== null;
+  const gitIgnoreEnrichmentApplied = gitIgnoreTraversalHierarchy !== null;
   const effectiveIncludeExcludedGlobs = [...(options.includeExcludedGlobs ?? [])];
   const effectiveCallerExcludeGlobs = [...callerExcludeGlobs];
   const effectiveExcludeGlobs = applyDefaultExcludedClasses
@@ -407,7 +478,7 @@ export function resolveTraversalScopePolicy(
     defaultExcludedDirectoryClasses: DEFAULT_TRAVERSAL_SCOPE_EXCLUDED_DIRECTORY_CLASSES,
     callerExcludeGlobs: effectiveCallerExcludeGlobs,
     gitIgnoreEnrichmentApplied,
-    gitIgnoreTraversalEnrichment,
+    gitIgnoreTraversalHierarchy,
     respectGitIgnore,
     effectiveIncludeExcludedGlobs,
     effectiveExcludeGlobs,

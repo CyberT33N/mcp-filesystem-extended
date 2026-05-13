@@ -111,8 +111,9 @@ export const CountLinesArgsSchema = z.object({
    * Optional `.gitignore` enrichment toggle.
    *
    * @remarks
-   * Enable this property only when root-local `.gitignore` rules should augment
-   * the server-owned default traversal exclusions for the current count-lines request.
+   * Enable this property only when directory-scoped hierarchical `.gitignore`
+   * rules should augment the server-owned default traversal exclusions for the
+   * current count-lines request.
    *
    * @example
    * ```ts
@@ -126,7 +127,7 @@ export const CountLinesArgsSchema = z.object({
     .optional()
     .default(false)
     .describe(
-      "Whether optional root-local `.gitignore` enrichment should add more exclusions to the default traversal policy for this count-lines request.",
+      "Whether optional directory-scoped hierarchical `.gitignore` enrichment should add more exclusions to the default traversal policy for this count-lines request.",
     ),
   /**
    * Explicit descendant re-include globs.

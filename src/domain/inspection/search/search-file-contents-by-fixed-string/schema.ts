@@ -69,7 +69,7 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
     .optional()
     .default(false)
     .describe(
-      "Whether optional root-local `.gitignore` enrichment should add more exclusions to the default traversal policy for this fixed-string search request."
+      "Whether optional directory-scoped hierarchical `.gitignore` enrichment should add more exclusions to the default traversal policy for this fixed-string search request."
     ),
   includeExcludedGlobs: z
     .array(z.string().max(GLOB_PATTERN_MAX_CHARS))

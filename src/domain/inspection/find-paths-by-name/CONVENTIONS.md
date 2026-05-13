@@ -38,7 +38,7 @@ Instead, it answers one question only:
 - `nameContains` is a plain-text, case-insensitive substring filter over entry names. It is not a regex and not a glob.
 - `excludeGlobs` is additive and narrows traversal.
 - `includeExcludedGlobs` reopens explicitly named descendants without widening the full traversal baseline.
-- `respectGitIgnore` is optional and secondary. It layers root-local `.gitignore` rules on top of the server-owned traversal policy rather than replacing it.
+- `respectGitIgnore` is optional and secondary. It layers directory-scoped hierarchical `.gitignore` rules on top of the server-owned traversal policy rather than replacing it.
 - `maxResults` limits retained matches per root before truncation is reported.
 
 ### Resume-only requests

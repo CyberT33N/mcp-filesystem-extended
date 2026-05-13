@@ -32,15 +32,13 @@ import {
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
   assertTraversalRuntimeBudget,
+  COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
   createTraversalRuntimeBudgetState,
   isTraversalRuntimeBudgetExceededError,
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
-import {
-  shouldExcludeTraversalScopePath,
-  shouldTraverseTraversalScopeDirectoryPath,
-} from "@domain/shared/guardrails/traversal-scope-policy";
+import { resolveTraversalScopeEntryPolicy } from "@domain/shared/guardrails/traversal-scope-policy";
 import { DISCOVERY_RESPONSE_CAP_CHARS, GLOBAL_RESPONSE_HARD_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
@@ -467,6 +465,9 @@ async function getFindFilesByGlobRootResult(
           softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
         }
       : undefined;
+  const effectiveTraversalRuntimeBudgetLimits = completeResultRequested
+    ? COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS
+    : previewExecutionRuntimeBudgetLimits;
 
   const results: string[] = [];
   let searchAborted = false;
@@ -493,7 +494,7 @@ async function getFindFilesByGlobRootResult(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
-          previewExecutionRuntimeBudgetLimits,
+          effectiveTraversalRuntimeBudgetLimits,
         );
       } catch (error) {
         if (isTraversalRuntimeBudgetExceededError(error)) {
@@ -524,7 +525,7 @@ async function getFindFilesByGlobRootResult(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
-          previewExecutionRuntimeBudgetLimits,
+          effectiveTraversalRuntimeBudgetLimits,
         );
       } catch (error) {
         if (isTraversalRuntimeBudgetExceededError(error)) {
@@ -546,17 +547,13 @@ async function getFindFilesByGlobRootResult(
         ? entry.name
         : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
       const relativePath = normalizeRelativePath(rawRelativePath);
-      const shouldTraverseExcludedDirectory =
-        entry.isDirectory()
-        && shouldTraverseTraversalScopeDirectoryPath(
-          relativePath,
-          traversalScopePolicyResolution,
-        );
+      const entryPolicy = await resolveTraversalScopeEntryPolicy(
+        relativePath,
+        entry.isDirectory(),
+        traversalScopePolicyResolution,
+      );
 
-      if (
-        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-        && !shouldTraverseExcludedDirectory
-      ) {
+      if (entryPolicy.excluded) {
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
@@ -579,7 +576,7 @@ async function getFindFilesByGlobRootResult(
         break;
       }
 
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() && entryPolicy.shouldTraverse) {
         traversalFrames.push({
           directoryRelativePath: rawRelativePath,
           nextEntryIndex: 0,
@@ -624,7 +621,7 @@ async function getFindFilesByGlobRootResult(
  * @param pattern - Glob expression applied to relative paths beneath each root.
  * @param excludePatterns - Glob patterns removed from traversal before result collection.
  * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates.
+ * @param respectGitIgnore - Whether optional directory-scoped hierarchical `.gitignore` enrichment participates.
  * @param maxResults - Maximum number of matches retained per root before truncation.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @returns Structured per-root glob-search results and aggregate totals.
@@ -746,7 +743,7 @@ export async function getFindFilesByGlobResult(
  * @param pattern - Glob expression applied to relative paths beneath each root.
  * @param excludePatterns - Glob patterns removed from traversal before result collection.
  * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates.
+ * @param respectGitIgnore - Whether optional directory-scoped hierarchical `.gitignore` enrichment participates.
  * @param maxResults - Maximum number of matches retained per root before truncation.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @returns Human-readable glob-search output respecting the mode-appropriate response ceiling.

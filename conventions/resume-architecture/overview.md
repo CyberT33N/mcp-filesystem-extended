@@ -161,11 +161,18 @@ The `admission.guidanceText` field in the `complete-result` response **must** co
 - disable any guardrail
 - bypass the global response fuse
 - guarantee delivery in a single call
+- reuse preview-lane candidate-byte planning as if completion were only another preview chunk
+- inherit the preview-lane or family-local soft runtime timeout as if completion were only another bounded preview slice
+- terminate with preview-lane stop semantics such as `preview_lane_budget_exhausted`
 
 The server may return:
 - the final complete result (if it fits within the global fuse)
 - a renewed resumable session (if more work remains after the next bounded pass)
 - narrowing guidance (if even the bounded pass cannot make safe progress)
+
+The execution contract for `complete-result` is therefore stricter than "keep the preview admission outcome and run one more preview chunk". The persisted frontier is reused, but preview-lane candidate-byte budgeting and preview-lane stop logic must not own the completion branch.
+
+For preview-capable families, the caller-visible completion ceiling is the global response fuse. Legacy local soft-time walls belong to bounded preview execution, not to the completion branch.
 
 ---
 

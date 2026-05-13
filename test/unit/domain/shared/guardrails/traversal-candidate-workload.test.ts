@@ -17,6 +17,7 @@ vi.mock("fs/promises", () => ({
   stat: mockedStat,
 }));
 
+import { createGitIgnoreTraversalHierarchy } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import { resolveTraversalScopePolicy } from "@domain/shared/guardrails/traversal-scope-policy";
 
@@ -151,6 +152,129 @@ describe("traversal candidate workload", () => {
     expect(result.probeTruncated).toBe(false);
   });
 
+  it("applies nested gitignore exclusions during workload probing only inside the owning subtree", async () => {
+    const createDirent = (name: string, kind: "file" | "directory") => ({
+      name,
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isDirectory: () => kind === "directory",
+      isFIFO: () => false,
+      isFile: () => kind === "file",
+      isSocket: () => false,
+      isSymbolicLink: () => false,
+    });
+
+    mockedReaddir.mockImplementation(async (directoryPath: string) => {
+      if (directoryPath === "C:/workspace/root") {
+        return [
+          createDirent("packages", "directory"),
+          createDirent("coverage", "directory"),
+        ];
+      }
+
+      if (directoryPath === "C:/workspace/root/packages") {
+        return [
+          createDirent("app", "directory"),
+          createDirent("other", "directory"),
+        ];
+      }
+
+      if (directoryPath === "C:/workspace/root/packages/app") {
+        return [
+          createDirent("secret", "directory"),
+          createDirent("visible.ts", "file"),
+        ];
+      }
+
+      if (directoryPath === "C:/workspace/root/packages/other") {
+        return [
+          createDirent("secret", "directory"),
+          createDirent("other.ts", "file"),
+        ];
+      }
+
+      if (directoryPath === "C:/workspace/root/packages/app/secret") {
+        return [createDirent("hidden.ts", "file")];
+      }
+
+      if (directoryPath === "C:/workspace/root/packages/other/secret") {
+        return [createDirent("visible-secret.ts", "file")];
+      }
+
+      if (directoryPath === "C:/workspace/root/coverage") {
+        return [createDirent("ignored.ts", "file")];
+      }
+
+      return [];
+    });
+
+    mockedStat.mockImplementation(async (candidatePath: string) => {
+      if (candidatePath === "C:/workspace/root/packages/app/visible.ts") {
+        return { size: 3 };
+      }
+
+      if (candidatePath === "C:/workspace/root/packages/other/other.ts") {
+        return { size: 4 };
+      }
+
+      if (candidatePath === "C:/workspace/root/packages/other/secret/visible-secret.ts") {
+        return { size: 5 };
+      }
+
+      throw new Error(`Unexpected stat path: ${candidatePath}`);
+    });
+
+    const gitIgnoreTraversalHierarchy = createGitIgnoreTraversalHierarchy(
+      "C:/workspace/root",
+    );
+    gitIgnoreTraversalHierarchy.layerCache.set(
+      ".",
+      {
+        sourcePath: ".gitignore",
+        matcher: {
+          test: (candidatePath: string) => ({
+            ignored: candidatePath === "coverage" || candidatePath.startsWith("coverage/"),
+            unignored: false,
+          }),
+        } as never,
+      },
+    );
+    gitIgnoreTraversalHierarchy.layerCache.set(
+      "packages/app",
+      {
+        sourcePath: "packages/app/.gitignore",
+        matcher: {
+          test: (candidatePath: string) => ({
+            ignored: candidatePath === "secret" || candidatePath.startsWith("secret/"),
+            unignored: false,
+          }),
+        } as never,
+      },
+    );
+    gitIgnoreTraversalHierarchy.layerCache.set("packages", null);
+    gitIgnoreTraversalHierarchy.layerCache.set("packages/other", null);
+    gitIgnoreTraversalHierarchy.layerCache.set("packages/other/secret", null);
+
+    const result = await collectTraversalCandidateWorkloadEvidence({
+      validRootPath: "C:/workspace/root",
+      traversalScopePolicyResolution: resolveTraversalScopePolicy(".", [], {
+        respectGitIgnore: true,
+        gitIgnoreTraversalHierarchy,
+      }),
+      runtimeBudgetLimits: {
+        maxVisitedEntries: 50,
+        maxVisitedDirectories: 50,
+        softTimeBudgetMs: 10_000,
+      },
+      inlineCandidateByteBudget: 100,
+      fileMatcher: (candidateRelativePath) => candidateRelativePath.endsWith(".ts"),
+    });
+
+    expect(result.estimatedCandidateBytes).toBe(12);
+    expect(result.matchedCandidateFiles).toBe(3);
+    expect(result.probeTruncated).toBe(false);
+  });
+
   it("marks the probe as truncated when the inline candidate-byte budget is exceeded", async () => {
     const createDirent = (name: string) => ({
       name,
@@ -186,6 +310,43 @@ describe("traversal candidate workload", () => {
     expect(result.estimatedCandidateBytes).toBe(12);
     expect(result.matchedCandidateFiles).toBe(2);
     expect(result.probeTruncated).toBe(true);
+  });
+
+  it("prioritizes matcher-relevant file entries before lower-value siblings during workload probing", async () => {
+    const createDirent = (name: string) => ({
+      name,
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isDirectory: () => false,
+      isFIFO: () => false,
+      isFile: () => true,
+      isSocket: () => false,
+      isSymbolicLink: () => false,
+    });
+
+    mockedReaddir.mockResolvedValue([
+      createDirent("notes.md"),
+      createDirent("keep.ts"),
+    ]);
+    mockedStat.mockResolvedValue({ size: 5 });
+
+    const result = await collectTraversalCandidateWorkloadEvidence({
+      validRootPath: "C:/workspace/root",
+      traversalScopePolicyResolution: resolveTraversalScopePolicy("."),
+      runtimeBudgetLimits: {
+        maxVisitedEntries: 1,
+        maxVisitedDirectories: 20,
+        softTimeBudgetMs: 10_000,
+      },
+      inlineCandidateByteBudget: 100,
+      fileMatcher: (candidateRelativePath) => candidateRelativePath.endsWith(".ts"),
+    });
+
+    expect(result.estimatedCandidateBytes).toBe(5);
+    expect(result.matchedCandidateFiles).toBe(1);
+    expect(result.probeTruncated).toBe(true);
+    expect(mockedStat).toHaveBeenCalledOnce();
+    expect(mockedStat).toHaveBeenCalledWith("C:/workspace/root/keep.ts");
   });
 
   it("marks the probe as truncated when the runtime traversal budget is exhausted before the next entry can execute", async () => {

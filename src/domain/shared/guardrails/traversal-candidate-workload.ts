@@ -10,8 +10,7 @@ import {
   type TraversalRuntimeBudgetLimits,
 } from "./traversal-runtime-budget";
 import {
-  shouldExcludeTraversalScopePath,
-  shouldTraverseTraversalScopeDirectoryPath,
+  resolveTraversalScopeEntryPolicy,
   type TraversalScopePolicyResolution,
 } from "./traversal-scope-policy";
 
@@ -103,6 +102,17 @@ export async function collectTraversalCandidateWorkloadEvidence(
   let estimatedResponseChars = responseSurfaceEstimator === null ? null : 0;
   let probeTruncated = false;
 
+  function rankCandidateEntry(
+    candidateRelativePath: string,
+    entry: import("fs").Dirent<string>,
+  ): number {
+    if (entry.isDirectory()) {
+      return 2;
+    }
+
+    return entry.isFile() && input.fileMatcher(candidateRelativePath) ? 1 : 0;
+  }
+
   async function collectDirectory(
     directoryPath: string,
     currentRelativePath: string,
@@ -139,7 +149,30 @@ export async function collectTraversalCandidateWorkloadEvidence(
       return;
     }
 
-    for (const entry of entries) {
+    const sortedEntries = [...entries].sort((leftEntry, rightEntry) => {
+      const leftRawRelativePath = currentRelativePath === ""
+        ? leftEntry.name
+        : path.join(currentRelativePath, leftEntry.name);
+      const rightRawRelativePath = currentRelativePath === ""
+        ? rightEntry.name
+        : path.join(currentRelativePath, rightEntry.name);
+      const leftRank = rankCandidateEntry(
+        leftRawRelativePath.split(path.sep).join("/"),
+        leftEntry,
+      );
+      const rightRank = rankCandidateEntry(
+        rightRawRelativePath.split(path.sep).join("/"),
+        rightEntry,
+      );
+
+      if (leftRank !== rightRank) {
+        return rightRank - leftRank;
+      }
+
+      return leftEntry.name.localeCompare(rightEntry.name);
+    });
+
+    for (const entry of sortedEntries) {
       if (probeTruncated) {
         break;
       }
@@ -167,16 +200,13 @@ export async function collectTraversalCandidateWorkloadEvidence(
         ? entry.name
         : path.join(currentRelativePath, entry.name);
       const candidateRelativePath = rawRelativePath.split(path.sep).join("/");
-      const shouldTraverseExcludedDirectory = entry.isDirectory()
-        && shouldTraverseTraversalScopeDirectoryPath(
-          candidateRelativePath,
-          input.traversalScopePolicyResolution,
-        );
+      const entryPolicy = await resolveTraversalScopeEntryPolicy(
+        candidateRelativePath,
+        entry.isDirectory(),
+        input.traversalScopePolicyResolution,
+      );
 
-      if (
-        shouldExcludeTraversalScopePath(candidateRelativePath, input.traversalScopePolicyResolution)
-        && !shouldTraverseExcludedDirectory
-      ) {
+      if (entryPolicy.excluded) {
         continue;
       }
 
@@ -195,7 +225,9 @@ export async function collectTraversalCandidateWorkloadEvidence(
       );
 
       if (entry.isDirectory()) {
-        await collectDirectory(candidateAbsolutePath, rawRelativePath);
+        if (entryPolicy.shouldTraverse) {
+          await collectDirectory(candidateAbsolutePath, rawRelativePath);
+        }
         continue;
       }
 

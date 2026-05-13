@@ -13,22 +13,20 @@ import {
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
   assertTraversalRuntimeBudget,
+  COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
   createTraversalRuntimeBudgetState,
   isTraversalRuntimeBudgetExceededError,
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
+  type TraversalRuntimeBudgetLimits,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
 import {
-  shouldExcludeTraversalScopePath,
-  shouldTraverseTraversalScopeDirectoryPath,
+  resolveTraversalScopeEntryPolicy,
   type TraversalScopePolicyResolution,
 } from "@domain/shared/guardrails/traversal-scope-policy";
 import {
   DISCOVERY_RESPONSE_CAP_CHARS,
   GLOBAL_RESPONSE_HARD_CAP_CHARS,
-  TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
-  TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
-  TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
@@ -251,19 +249,26 @@ async function estimateNonRecursiveListDirectoryEntriesInlineTextChars(
 ): Promise<number> {
   const entries = await readSortedDirectoryEntries(rootAbsolutePath);
 
-  const estimatedEntryChars = entries.reduce((totalChars, entry) => {
-    const relativePath = normalizeRelativePath(entry.name);
+  let estimatedEntryChars = 0;
 
-    if (
-      shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-      && !shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution)
-    ) {
-      return totalChars;
+  for (const entry of entries) {
+    const relativePath = normalizeRelativePath(entry.name);
+    const entryPolicy = await resolveTraversalScopeEntryPolicy(
+      relativePath,
+      entry.isDirectory(),
+      traversalScopePolicyResolution,
+    );
+
+    if (entryPolicy.excluded) {
+      continue;
     }
 
-    return totalChars
-      + estimateListDirectoryEntryInlineResponseChars(relativePath, entry.name, metadataSelection);
-  }, 0);
+    estimatedEntryChars += estimateListDirectoryEntryInlineResponseChars(
+      relativePath,
+      entry.name,
+      metadataSelection,
+    );
+  }
 
   return LIST_DIRECTORY_ENTRIES_INLINE_RESPONSE_OVERHEAD_CHARS + estimatedEntryChars;
 }
@@ -491,11 +496,7 @@ async function collectDirectoryEntriesPreviewChunk(
   traversalScopePolicyResolution: TraversalScopePolicyResolution,
   traversalRuntimeBudgetState: ReturnType<typeof createTraversalRuntimeBudgetState>,
   traversalNarrowingGuidance: string,
-  previewExecutionRuntimeBudgetLimits: {
-    maxVisitedEntries: number;
-    maxVisitedDirectories: number;
-    softTimeBudgetMs: number;
-  },
+  previewExecutionRuntimeBudgetLimits: TraversalRuntimeBudgetLimits,
   maxPreviewTextResponseChars: number,
   continuationState: ListDirectoryEntriesRootContinuationState | null,
 ): Promise<{
@@ -583,15 +584,13 @@ async function collectDirectoryEntriesPreviewChunk(
         ? entry.name
         : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
       const relativePath = normalizeRelativePath(rawRelativePath);
-      const shouldTraverseExcludedDirectory =
-        recursive
-        && entry.isDirectory()
-        && shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
+      const entryPolicy = await resolveTraversalScopeEntryPolicy(
+        relativePath,
+        entry.isDirectory(),
+        traversalScopePolicyResolution,
+      );
 
-      if (
-        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-        && !shouldTraverseExcludedDirectory
-      ) {
+      if (entryPolicy.excluded) {
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
@@ -610,13 +609,6 @@ async function collectDirectoryEntriesPreviewChunk(
         break;
       }
 
-      if (
-        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-        && !shouldTraverseExcludedDirectory
-      ) {
-        continue;
-      }
-
       const listedEntry = await createListedDirectoryEntry(
         entryAbsolutePath,
         entry.name,
@@ -627,7 +619,7 @@ async function collectDirectoryEntriesPreviewChunk(
       estimatedResponseChars += estimatedEntryResponseChars;
       commitInspectionResumeTraversalEntry(currentTraversalFrame);
 
-      if (recursive && entry.isDirectory()) {
+      if (recursive && entry.isDirectory() && entryPolicy.shouldTraverse) {
         traversalFrames.push({
           directoryRelativePath: rawRelativePath,
           nextEntryIndex: 0,
@@ -692,15 +684,13 @@ async function collectDirectoryEntries(
       );
     }
 
-    const shouldTraverseExcludedDirectory =
-      recursive
-      && entry.isDirectory()
-      && shouldTraverseTraversalScopeDirectoryPath(relativePath, traversalScopePolicyResolution);
+    const entryPolicy = await resolveTraversalScopeEntryPolicy(
+      relativePath,
+      entry.isDirectory(),
+      traversalScopePolicyResolution,
+    );
 
-    if (
-      shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-      && !shouldTraverseExcludedDirectory
-    ) {
+    if (entryPolicy.excluded) {
       continue;
     }
 
@@ -711,7 +701,7 @@ async function collectDirectoryEntries(
       metadataSelection,
     );
 
-    if (recursive && entry.isDirectory()) {
+    if (recursive && entry.isDirectory() && entryPolicy.shouldTraverse) {
       listedEntry.children = await collectDirectoryEntries(
         entryAbsolutePath,
         rawRelativePath,
@@ -826,12 +816,8 @@ async function buildListedDirectoryRoot(
       // Continue from the persisted frontier position, not from the root.
       // Using collectDirectoryEntriesPreviewChunk with the continuationState ensures the
       // response is additive — it delivers only the entries not yet seen in the preview chunk.
-      // The deep emergency runtime budget applies here instead of the bounded preview budget.
-      const completeResultRuntimeBudgetLimits = {
-        maxVisitedEntries: TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
-        maxVisitedDirectories: TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
-        softTimeBudgetMs: TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
-      };
+      // The completion branch keeps only the deep breadth safeguards here; the local soft-time
+      // timeout stays disabled so the caller-visible completion contract is owned by the global fuse.
 
       const continuationChunk = await collectDirectoryEntriesPreviewChunk(
         traversalPreflightContext.rootEntry.validPath,
@@ -840,7 +826,7 @@ async function buildListedDirectoryRoot(
         traversalPreflightContext.traversalScopePolicyResolution,
         traversalRuntimeBudgetState,
         traversalNarrowingGuidance,
-        completeResultRuntimeBudgetLimits,
+        COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
         GLOBAL_RESPONSE_HARD_CAP_CHARS,
         continuationState,
       );
@@ -916,7 +902,7 @@ async function buildListedDirectoryRoot(
  * @param metadataSelection - Which metadata fields to include for each returned entry.
  * @param excludePatterns - Glob patterns that remove candidate paths from traversal.
  * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
+ * @param respectGitIgnore - Whether optional directory-scoped hierarchical `.gitignore` enrichment participates in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param inspectionResumeSessionStore - Server-owned SQLite session store for persisting and
  * loading resume state. Required for any request that may produce or consume a resume token.
@@ -1044,7 +1030,7 @@ export async function getListDirectoryEntriesResult(
  * @param metadataSelection - Which metadata fields to include for each returned entry.
  * @param excludePatterns - Glob patterns that remove candidate paths from traversal.
  * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates in traversal.
+ * @param respectGitIgnore - Whether optional directory-scoped hierarchical `.gitignore` enrichment participates in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param inspectionResumeSessionStore - Server-owned SQLite session store for persisting and
  * loading resume state. Required for any request that may produce or consume a resume token.

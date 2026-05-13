@@ -38,7 +38,7 @@ Instead, it answers one question only:
 - `glob` is a path-oriented pattern applied beneath each requested root. It is not a regex and not a plain substring filter.
 - `excludeGlobs` is additive and narrows traversal.
 - `includeExcludedGlobs` reopens explicitly named descendants without widening the full traversal baseline.
-- `respectGitIgnore` is optional and secondary. It layers root-local `.gitignore` rules on top of the server-owned traversal policy rather than replacing it.
+- `respectGitIgnore` is optional and secondary. It layers directory-scoped hierarchical `.gitignore` rules on top of the server-owned traversal policy rather than replacing it.
 - `maxResults` limits retained matches per root before truncation is reported.
 
 ### Resume-only requests

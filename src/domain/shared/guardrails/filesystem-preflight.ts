@@ -16,13 +16,16 @@ import { normalizeError } from "@shared/errors";
 import type { FileSystemEntryType } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
+import { createModuleLogger } from "@infrastructure/logging/logger";
 
-import { readGitIgnoreTraversalEnrichmentForRoot } from "./gitignore-traversal-enrichment";
+import {
+  createGitIgnoreTraversalHierarchy,
+  ROOT_LOCAL_GITIGNORE_TRAVERSAL_SOURCE_PATH,
+} from "./gitignore-traversal-enrichment";
 import {
   normalizeTraversalScopePath,
+  resolveTraversalScopeEntryPolicy,
   resolveTraversalScopePolicy,
-  shouldExcludeTraversalScopePath,
-  shouldTraverseTraversalScopeDirectoryPath,
   type TraversalScopePolicyResolution,
 } from "./traversal-scope-policy";
 
@@ -79,9 +82,32 @@ export interface TraversalPreflightContext {
   traversalScopePolicyResolution: TraversalScopePolicyResolution;
 
   /**
+   * Whether a traversal-root-local `.gitignore` file is available as an optional refinement hint.
+   */
+  rootLocalGitIgnoreAvailable: boolean;
+
+  /**
    * Breadth evidence gathered before recursive traversal begins.
    */
   traversalPreflightAdmissionEvidence: TraversalPreflightAdmissionEvidence | null;
+}
+
+/**
+ * Optional workload-aware policy used by traversal preflight before recursive execution begins.
+ *
+ * @remarks
+ * Include-glob-heavy search requests may use this surface to avoid spending preflight entry budget
+ * on obviously irrelevant file entries while still preserving the server-owned baseline traversal
+ * contract and explicit access to excluded roots.
+ */
+export interface TraversalPreflightWorkloadPolicy {
+  /**
+   * Indicates whether one file entry should count toward the preflight entry budget.
+   */
+  shouldCountFileEntryTowardBudget?: (
+    candidateRelativePath: string,
+    entry: import("fs").Dirent<string>,
+  ) => boolean;
 }
 
 /**
@@ -107,6 +133,21 @@ export interface TraversalPreflightAdmissionEvidence {
    * Elapsed wall-clock time spent by the bounded preflight probe.
    */
   elapsedMs: number;
+
+  /**
+   * Indicates whether the bounded preflight probe stopped early after reaching its own budget.
+   */
+  probeTruncated: boolean;
+
+  /**
+   * Canonical stop surface when the bounded preflight probe stopped early.
+   */
+  stopReason: "directories" | "entries" | "time" | null;
+
+  /**
+   * Relative path of the last directory or candidate surface observed before the bounded probe stopped.
+   */
+  stopRelativePath: string | null;
 }
 
 interface TraversalScopePreflightProbeState {
@@ -119,6 +160,8 @@ interface TraversalScopePreflightProbeDirectory {
   readonly absolutePath: string;
   readonly relativePath: string;
 }
+
+const logger = createModuleLogger("shared/guardrails/filesystem-preflight");
 
 /**
  * Builds canonical narrowing guidance for traversal-heavy requests.
@@ -147,46 +190,96 @@ function throwTraversalScopePreflightRejectedFailure(
   );
 }
 
-function assertTraversalScopePreflightBudget(
-  toolName: string,
-  requestedRoot: string,
+function buildOptionalTraversalGitIgnoreRefinementHint(
+  rootLocalGitIgnoreAvailable: boolean,
+  traversalScopePolicyResolution: TraversalScopePolicyResolution,
+): string {
+  if (
+    !rootLocalGitIgnoreAvailable
+    || traversalScopePolicyResolution.gitIgnoreEnrichmentApplied
+  ) {
+    return "";
+  }
+
+  return " Optional narrowing refinement: repository-local .gitignore rules are available for this root but currently inactive. Retry with respectGitIgnore=true to layer directory-scoped .gitignore exclusions on top of the server-owned default traversal baseline.";
+}
+
+function getTraversalScopePreflightBudgetStop(
   state: TraversalScopePreflightProbeState,
   nowMs: number = Date.now(),
-): void {
+): {
+  limitValue: number;
+  measuredValue: number;
+  reason: string;
+  stopReason: "directories" | "entries" | "time";
+  unit: string;
+} | null {
   if (state.visitedEntries > TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES) {
-    throwTraversalScopePreflightRejectedFailure(
-      toolName,
-      requestedRoot,
-      state.visitedEntries,
-      TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES,
-      "entries",
-      "Projected traversal entry breadth exceeds the shared preflight ceiling before recursive execution begins.",
-    );
+    return {
+      stopReason: "entries",
+      measuredValue: state.visitedEntries,
+      limitValue: TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES,
+      unit: "entries",
+      reason:
+        "Projected traversal entry breadth exceeds the shared preflight ceiling before recursive execution begins.",
+    };
   }
 
   if (state.visitedDirectories > TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES) {
-    throwTraversalScopePreflightRejectedFailure(
-      toolName,
-      requestedRoot,
-      state.visitedDirectories,
-      TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES,
-      "directories",
-      "Projected traversal directory breadth exceeds the shared preflight ceiling before recursive execution begins.",
-    );
+    return {
+      stopReason: "directories",
+      measuredValue: state.visitedDirectories,
+      limitValue: TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES,
+      unit: "directories",
+      reason:
+        "Projected traversal directory breadth exceeds the shared preflight ceiling before recursive execution begins.",
+    };
   }
 
   const elapsedMs = nowMs - state.startedAtMs;
 
   if (elapsedMs > TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS) {
-    throwTraversalScopePreflightRejectedFailure(
-      toolName,
-      requestedRoot,
-      elapsedMs,
-      TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS,
-      "milliseconds",
-      "Traversal-scope admission exceeded the shared preflight time budget before recursive execution began.",
-    );
+    return {
+      stopReason: "time",
+      measuredValue: elapsedMs,
+      limitValue: TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS,
+      unit: "milliseconds",
+      reason:
+        "Traversal-scope admission exceeded the shared preflight time budget before recursive execution began.",
+    };
   }
+
+  return null;
+}
+
+function shouldCountTraversalPreflightFileEntryTowardBudget(
+  relativePath: string,
+  entry: import("fs").Dirent<string>,
+  workloadPolicy: TraversalPreflightWorkloadPolicy,
+): boolean {
+  if (!entry.isFile()) {
+    return true;
+  }
+
+  return workloadPolicy.shouldCountFileEntryTowardBudget?.(relativePath, entry) ?? true;
+}
+
+function rankTraversalPreflightEntry(
+  candidateRelativePath: string,
+  entry: import("fs").Dirent<string>,
+  workloadPolicy: TraversalPreflightWorkloadPolicy,
+): number {
+  if (entry.isDirectory()) {
+    return 2;
+  }
+
+  return shouldCountTraversalPreflightFileEntryTowardBudget(
+    candidateRelativePath,
+    entry,
+    workloadPolicy,
+  )
+    ? 1
+    : 0;
 }
 
 async function assertTraversalScopePreflightAdmission(
@@ -194,7 +287,27 @@ async function assertTraversalScopePreflightAdmission(
   requestedRoot: string,
   validRootPath: string,
   traversalScopePolicyResolution: TraversalScopePolicyResolution,
+  rootLocalGitIgnoreAvailable: boolean,
+  workloadPolicy: TraversalPreflightWorkloadPolicy = {},
 ): Promise<TraversalPreflightAdmissionEvidence> {
+  logger.info(
+    {
+      requestedRoot,
+      validRootPath,
+      explicitExcludedRoot: traversalScopePolicyResolution.explicitExcludedRoot,
+      applyDefaultExcludedClasses:
+        traversalScopePolicyResolution.applyDefaultExcludedClasses,
+      gitIgnoreEnrichmentApplied:
+        traversalScopePolicyResolution.gitIgnoreEnrichmentApplied,
+      rootLocalGitIgnoreAvailable,
+      effectiveExcludeGlobCount:
+        traversalScopePolicyResolution.effectiveExcludeGlobs.length,
+      effectiveIncludeExcludedGlobCount:
+        traversalScopePolicyResolution.effectiveIncludeExcludedGlobs.length,
+    },
+    "Traversal-scope preflight started",
+  );
+
   const state: TraversalScopePreflightProbeState = {
     startedAtMs: Date.now(),
     visitedEntries: 0,
@@ -213,7 +326,35 @@ async function assertTraversalScopePreflightAdmission(
     }
 
     state.visitedDirectories += 1;
-    assertTraversalScopePreflightBudget(toolName, requestedRoot, state);
+
+    const directoryBudgetStop = getTraversalScopePreflightBudgetStop(state);
+
+    if (directoryBudgetStop !== null) {
+      logger.warn(
+        {
+          requestedRoot,
+          currentDirectoryRelativePath: currentDirectory.relativePath,
+          currentDirectoryAbsolutePath: currentDirectory.absolutePath,
+          visitedEntries: state.visitedEntries,
+          visitedDirectories: state.visitedDirectories,
+          elapsedMs: Date.now() - state.startedAtMs,
+          stopReason: directoryBudgetStop.stopReason,
+        },
+        "Traversal-scope preflight stopped at directory-budget checkpoint",
+      );
+
+      throwTraversalScopePreflightRejectedFailure(
+        toolName,
+        requestedRoot,
+        directoryBudgetStop.measuredValue,
+        directoryBudgetStop.limitValue,
+        directoryBudgetStop.unit,
+        `${directoryBudgetStop.reason} Preflight stopped near '${currentDirectory.relativePath === "" ? requestedRoot : currentDirectory.relativePath}'.${buildOptionalTraversalGitIgnoreRefinementHint(
+          rootLocalGitIgnoreAvailable,
+          traversalScopePolicyResolution,
+        )}`,
+      );
+    }
 
     let entries: import("fs").Dirent<string>[];
 
@@ -237,28 +378,87 @@ async function assertTraversalScopePreflightAdmission(
       continue;
     }
 
-    for (const entry of entries) {
+    const sortedEntries = [...entries].sort((leftEntry, rightEntry) => {
+      const leftRawRelativePath = currentDirectory.relativePath === ""
+        ? leftEntry.name
+        : path.join(currentDirectory.relativePath, leftEntry.name);
+      const rightRawRelativePath = currentDirectory.relativePath === ""
+        ? rightEntry.name
+        : path.join(currentDirectory.relativePath, rightEntry.name);
+      const leftRank = rankTraversalPreflightEntry(
+        normalizeTraversalScopePath(leftRawRelativePath),
+        leftEntry,
+        workloadPolicy,
+      );
+      const rightRank = rankTraversalPreflightEntry(
+        normalizeTraversalScopePath(rightRawRelativePath),
+        rightEntry,
+        workloadPolicy,
+      );
+
+      if (leftRank !== rightRank) {
+        return rightRank - leftRank;
+      }
+
+      return leftEntry.name.localeCompare(rightEntry.name);
+    });
+
+    for (const entry of sortedEntries) {
       const rawRelativePath = currentDirectory.relativePath === ""
         ? entry.name
         : path.join(currentDirectory.relativePath, entry.name);
       const relativePath = normalizeTraversalScopePath(rawRelativePath);
-      const shouldTraverseExcludedDirectory = entry.isDirectory()
-        && shouldTraverseTraversalScopeDirectoryPath(
-          relativePath,
-          traversalScopePolicyResolution,
-        );
+      const entryPolicy = await resolveTraversalScopeEntryPolicy(
+        relativePath,
+        entry.isDirectory(),
+        traversalScopePolicyResolution,
+      );
 
-      if (
-        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-        && !shouldTraverseExcludedDirectory
-      ) {
+      if (entryPolicy.excluded) {
         continue;
       }
 
-      state.visitedEntries += 1;
-      assertTraversalScopePreflightBudget(toolName, requestedRoot, state);
+      const countTowardBudget = shouldCountTraversalPreflightFileEntryTowardBudget(
+        relativePath,
+        entry,
+        workloadPolicy,
+      );
 
-      if (entry.isDirectory()) {
+      if (countTowardBudget) {
+        state.visitedEntries += 1;
+
+        const entryBudgetStop = getTraversalScopePreflightBudgetStop(state);
+
+        if (entryBudgetStop !== null) {
+          logger.warn(
+            {
+              requestedRoot,
+              currentDirectoryRelativePath: currentDirectory.relativePath,
+              currentDirectoryAbsolutePath: currentDirectory.absolutePath,
+              candidateRelativePath: relativePath,
+              visitedEntries: state.visitedEntries,
+              visitedDirectories: state.visitedDirectories,
+              elapsedMs: Date.now() - state.startedAtMs,
+              stopReason: entryBudgetStop.stopReason,
+            },
+            "Traversal-scope preflight stopped at entry-budget checkpoint",
+          );
+
+          throwTraversalScopePreflightRejectedFailure(
+            toolName,
+            requestedRoot,
+            entryBudgetStop.measuredValue,
+            entryBudgetStop.limitValue,
+            entryBudgetStop.unit,
+            `${entryBudgetStop.reason} Preflight stopped near '${relativePath}'.${buildOptionalTraversalGitIgnoreRefinementHint(
+              rootLocalGitIgnoreAvailable,
+              traversalScopePolicyResolution,
+            )}`,
+          );
+        }
+      }
+
+      if (entry.isDirectory() && entryPolicy.shouldTraverse) {
         pendingDirectories.push({
           absolutePath: path.join(currentDirectory.absolutePath, entry.name),
           relativePath: rawRelativePath,
@@ -268,13 +468,19 @@ async function assertTraversalScopePreflightAdmission(
   }
 
   const finishedAtMs = Date.now();
-
-  return {
+  const result: TraversalPreflightAdmissionEvidence = {
     requestedRoot,
     visitedEntries: state.visitedEntries,
     visitedDirectories: state.visitedDirectories,
     elapsedMs: finishedAtMs - state.startedAtMs,
+    probeTruncated: false,
+    stopReason: null,
+    stopRelativePath: null,
   };
+
+  logger.info(result, "Traversal-scope preflight completed");
+
+  return result;
 }
 
 function throwMetadataPreflightRejectedFailure(
@@ -371,11 +577,20 @@ export async function collectValidatedFilesystemPreflightEntries(
  * @param requestedRoot - Caller-supplied root path that anchors the traversal.
  * @param excludePatterns - Caller-supplied exclude globs used by the traversal policy.
  * @param includeExcludedGlobs - Additive re-include globs that reopen excluded descendants.
- * @param respectGitIgnore - Whether optional root-local `.gitignore` enrichment participates.
+ * @param respectGitIgnore - Whether optional directory-scoped hierarchical `.gitignore` enrichment participates.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param allowedTypes - Filesystem entry types that the current traversal surface accepts.
  * @returns Validated root metadata plus the effective traversal-scope policy.
  */
+async function hasRootLocalGitIgnoreFile(rootAbsolutePath: string): Promise<boolean> {
+  try {
+    await fs.access(path.join(rootAbsolutePath, ROOT_LOCAL_GITIGNORE_TRAVERSAL_SOURCE_PATH));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveTraversalPreflightContext(
   toolName: string,
   requestedRoot: string,
@@ -385,6 +600,7 @@ export async function resolveTraversalPreflightContext(
   allowedDirectories: string[],
   allowedTypes: Array<"file" | "directory"> = ["file", "directory"],
   recursiveTraversal: boolean = true,
+  workloadPolicy: TraversalPreflightWorkloadPolicy = {},
 ): Promise<TraversalPreflightContext> {
   const entries = await collectValidatedFilesystemPreflightEntries(
     toolName,
@@ -399,9 +615,13 @@ export async function resolveTraversalPreflightContext(
 
   assertExpectedFileTypes(toolName, [rootEntry], allowedTypes);
 
-  const gitIgnoreTraversalEnrichment =
+  const rootLocalGitIgnoreAvailable =
+    rootEntry.type === "directory"
+      ? await hasRootLocalGitIgnoreFile(rootEntry.validPath)
+      : false;
+  const gitIgnoreTraversalHierarchy =
     rootEntry.type === "directory" && respectGitIgnore
-      ? await readGitIgnoreTraversalEnrichmentForRoot(rootEntry.validPath)
+      ? createGitIgnoreTraversalHierarchy(rootEntry.validPath)
       : null;
   const traversalScopePolicyResolution = resolveTraversalScopePolicy(
     requestedRoot,
@@ -409,23 +629,26 @@ export async function resolveTraversalPreflightContext(
     {
       includeExcludedGlobs: [...includeExcludedGlobs],
       respectGitIgnore,
-      gitIgnoreTraversalEnrichment,
+      gitIgnoreTraversalHierarchy,
     },
   );
 
   const traversalPreflightAdmissionEvidence =
     rootEntry.type === "directory" && recursiveTraversal
       ? await assertTraversalScopePreflightAdmission(
-        toolName,
-        requestedRoot,
-        rootEntry.validPath,
-        traversalScopePolicyResolution,
-      )
+          toolName,
+          requestedRoot,
+          rootEntry.validPath,
+          traversalScopePolicyResolution,
+          rootLocalGitIgnoreAvailable,
+          workloadPolicy,
+        )
       : null;
 
   return {
     rootEntry,
     traversalScopePolicyResolution,
+    rootLocalGitIgnoreAvailable,
     traversalPreflightAdmissionEvidence,
   };
 }

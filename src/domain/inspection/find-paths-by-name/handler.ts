@@ -374,7 +374,7 @@ function formatFindPathsByNameRootOutput(
  * @param pattern - Case-insensitive name substring applied to files and directories.
  * @param excludePatterns - Glob patterns removed from traversal before result collection.
  * @param includeExcludedGlobs - Explicit descendant re-include globs that may reopen excluded subtrees.
- * @param respectGitIgnore - Indicates whether optional root-local `.gitignore` enrichment should participate in traversal.
+ * @param respectGitIgnore - Indicates whether optional directory-scoped hierarchical `.gitignore` enrichment should participate in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param maxResults - Maximum number of matches retained per root before truncation.
  * @returns Structured per-root name-search results and aggregate totals.
@@ -499,7 +499,7 @@ export async function getFindPathsByNameResult(
  * @param pattern - Case-insensitive name substring applied to files and directories.
  * @param excludePatterns - Glob patterns removed from traversal before result collection.
  * @param includeExcludedGlobs - Explicit descendant re-include globs that may reopen excluded subtrees.
- * @param respectGitIgnore - Indicates whether optional root-local `.gitignore` enrichment should participate in traversal.
+ * @param respectGitIgnore - Indicates whether optional directory-scoped hierarchical `.gitignore` enrichment should participate in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param maxResults - Maximum number of matches retained per root before truncation.
  * @returns Human-readable name-search output respecting the mode-appropriate response ceiling.

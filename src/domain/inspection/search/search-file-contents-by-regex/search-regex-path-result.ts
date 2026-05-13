@@ -17,6 +17,7 @@ import {
   cloneInspectionResumeTraversalFrames,
   commitInspectionResumeTraversalEntry,
 } from "@domain/shared/resume/inspection-resume-frontier";
+import { INSPECTION_RESUME_MODES } from "@domain/shared/resume/inspection-resume-contract";
 import {
   assertRegexRuntimeBudget,
   createRegexBackendDialectRejectedError,
@@ -27,15 +28,13 @@ import {
 } from "@domain/shared/guardrails/regex-search-safety";
 import {
   assertTraversalRuntimeBudget,
+  COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
   createTraversalRuntimeBudgetState,
   isTraversalRuntimeBudgetExceededError,
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
-import {
-  shouldExcludeTraversalScopePath,
-  shouldTraverseTraversalScopeDirectoryPath,
-} from "@domain/shared/guardrails/traversal-scope-policy";
+import { resolveTraversalScopeEntryPolicy } from "@domain/shared/guardrails/traversal-scope-policy";
 import {
   resolveTraversalPreviewLanePlan,
   shouldStopTraversalPreviewLane,
@@ -49,6 +48,7 @@ import {
 } from "@domain/shared/search/inspection-content-state";
 
 import {
+  SEARCH_FAMILY_PREVIEW_EXECUTION_SOFT_TIME_BUDGET_MS,
   SEARCH_FAMILY_REGEX_ESTIMATED_PER_CANDIDATE_FILE_COST_MS,
   SEARCH_FAMILY_REGEX_INLINE_EXECUTION_BUDGET_MS,
 } from "../search-family-thresholds";
@@ -66,10 +66,12 @@ import {
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { buildUgrepCommand } from "@infrastructure/search/ugrep-command-builder";
 import { formatUgrepSpawnFailure, runUgrepSearch } from "@infrastructure/search/ugrep-runner";
+import { createModuleLogger } from "@infrastructure/logging/logger";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import { minimatch } from "minimatch";
 
 import {
+  createSearchCompletionContinuationState,
   createSearchExecutionRuntimeBudgetState,
   createSearchMaxResultsLimitReachedState,
   createSearchPreviewContinuationState,
@@ -83,6 +85,7 @@ import { type RegexSearchMatch, type SearchRegexPathResult } from "./search-rege
 const SEARCH_REGEX_INLINE_RESPONSE_OVERHEAD_CHARS = 96;
 const SEARCH_REGEX_INLINE_MATCH_RESPONSE_CHARS = 400;
 const SEARCH_REGEX_NATIVE_INLINE_BATCH_SIZE = 16;
+const logger = createModuleLogger("inspection/search/search-file-contents-by-regex/search-regex-path-result");
 
 /**
  * Mutable aggregate budget state shared across all requested regex roots.
@@ -161,6 +164,17 @@ function matchesIncludedFilePatterns(candidateRelativePath: string, filePatterns
 
     return minimatch(fileName, normalizedFilePattern, { dot: true, nocase: true });
   });
+}
+
+function createRegexTraversalPreflightWorkloadPolicy(
+  filePatterns: string[],
+) {
+  return {
+    shouldCountFileEntryTowardBudget: (
+      candidateRelativePath: string,
+      entry: import("fs").Dirent<string>,
+    ): boolean => !entry.isFile() || matchesIncludedFilePatterns(candidateRelativePath, filePatterns),
+  };
 }
 
 function getLineMatchContext(
@@ -292,6 +306,17 @@ function parseUgrepMatchLine(outputLine: string): {
   };
 }
 
+function normalizeBatchCandidatePath(candidatePath: string): string {
+  return candidatePath.replaceAll("\\", "/").toLowerCase();
+}
+
+function sumRegexNativeBatchBytes(batchEntries: RegexNativeBatchEntry[]): number {
+  return batchEntries.reduce(
+    (totalBytes, batchEntry) => totalBytes + batchEntry.candidateEntry.size,
+    0,
+  );
+}
+
 function isNativeRegexBackendPatternSyntaxFailure(runtimeError: string): boolean {
   const normalizedRuntimeError = runtimeError.toLowerCase();
 
@@ -310,6 +335,8 @@ interface RegexNativeBatchSearchResult {
   totalMatches: number;
   truncated: boolean;
   stopState: SearchStopState;
+  activeBatchEntryIndex: number | null;
+  activeBatchEntryMatchOffset: number;
 }
 
 interface GetSearchRegexPathResultOptions {
@@ -366,6 +393,8 @@ async function collectRegexMatchesFromNativeBatch(
       matches: [],
       totalMatches: 0,
       truncated: maxAdditionalResults <= 0,
+      activeBatchEntryIndex: null,
+      activeBatchEntryMatchOffset: 0,
       stopState: maxAdditionalResults <= 0
         ? createSearchMaxResultsLimitReachedState(maxAdditionalResults)
         : createUnstoppedSearchState(),
@@ -413,6 +442,8 @@ async function collectRegexMatchesFromNativeBatch(
       matches: [],
       totalMatches: 0,
       truncated: false,
+      activeBatchEntryIndex: null,
+      activeBatchEntryMatchOffset: 0,
       stopState: createUnstoppedSearchState(),
     };
   }
@@ -420,6 +451,15 @@ async function collectRegexMatchesFromNativeBatch(
   const matches: RegexSearchMatch[] = [];
   let totalMatches = 0;
   let truncated = false;
+  let activeBatchEntryIndex: number | null = null;
+  let activeBatchEntryMatchOffset = 0;
+  const batchEntryIndexByPath = new Map<string, number>(
+    batchEntries.map((batchEntry, index) => [
+      normalizeBatchCandidatePath(batchEntry.candidateEntry.validPath),
+      index,
+    ]),
+  );
+  const emittedMatchCountsByBatchEntryIndex = new Map<number, number>();
   const matchedLines = executionResult.stdout
     .split(/\r?\n/u)
     .filter((outputLine) => outputLine.trim() !== "");
@@ -430,6 +470,10 @@ async function collectRegexMatchesFromNativeBatch(
     if (parsedLine === null) {
       continue;
     }
+
+    const parsedBatchEntryIndex = batchEntryIndexByPath.get(
+      normalizeBatchCandidatePath(parsedLine.file),
+    );
 
     let lineMatch: RegExpExecArray | null;
 
@@ -444,6 +488,17 @@ async function collectRegexMatchesFromNativeBatch(
         content: normalizeRegexMatchExcerpt(parsedLine.lineContent, lineMatch[0]),
         match: lineMatch[0],
       });
+
+      if (parsedBatchEntryIndex !== undefined) {
+        const nextEmittedMatchCount =
+          (emittedMatchCountsByBatchEntryIndex.get(parsedBatchEntryIndex) ?? 0) + 1;
+        emittedMatchCountsByBatchEntryIndex.set(
+          parsedBatchEntryIndex,
+          nextEmittedMatchCount,
+        );
+        activeBatchEntryIndex = parsedBatchEntryIndex;
+        activeBatchEntryMatchOffset = nextEmittedMatchCount;
+      }
 
       assertRegexRuntimeBudget(
         toolName,
@@ -466,6 +521,8 @@ async function collectRegexMatchesFromNativeBatch(
     matches,
     totalMatches,
     truncated,
+    activeBatchEntryIndex,
+    activeBatchEntryMatchOffset,
     stopState: truncated
       ? createSearchMaxResultsLimitReachedState(maxAdditionalResults)
       : createUnstoppedSearchState(),
@@ -485,6 +542,7 @@ async function collectRegexMatchesFromFileEntry(
   aggregateBudgetState: RegexSearchAggregateBudgetState,
   enforceAggregateCandidateByteBudget: boolean,
   refuseUnsupportedFileScope: boolean,
+  allowPreviewFirstResponseCap: boolean,
   maxAdditionalResults: number,
   matchesToSkipBeforeCollecting: number,
   totalBytesScannedBeforeRead: number,
@@ -565,7 +623,8 @@ async function collectRegexMatchesFromFileEntry(
     };
   }
 
-  const previewFirstTriggered = nextAggregateBytesScanned > executionPolicy.regexSyncCandidateBytesCap;
+  const previewFirstTriggered = allowPreviewFirstResponseCap
+    && nextAggregateBytesScanned > executionPolicy.regexSyncCandidateBytesCap;
   const effectiveLocationCap = previewFirstTriggered
     ? Math.max(
         1,
@@ -761,6 +820,17 @@ export async function getSearchRegexPathResult(
     continuationState = null,
     requestedResumeMode = null,
   } = options;
+  const diagnostics = {
+    directoriesQueued: 0,
+    excludedByBaseline: 0,
+    excludedByGitIgnore: 0,
+    excludedNodeModules: 0,
+    filesRejectedByContentState: 0,
+    filesSkippedByIncludeGlobs: 0,
+    filesUsingDecodedTextFallback: 0,
+    nativeBatchCandidates: 0,
+    nativeBatchExecutions: 0,
+  };
 
   const traversalPreflightContext = await resolveTraversalPreflightContext(
     toolName,
@@ -769,6 +839,9 @@ export async function getSearchRegexPathResult(
     includeExcludedGlobs,
     respectGitIgnore,
     allowedDirectories,
+    ["file", "directory"],
+    true,
+    createRegexTraversalPreflightWorkloadPolicy(filePatterns),
   );
   const searchScopeEntry = traversalPreflightContext.rootEntry;
   const regexExecutionPlan = options.regexExecutionPlan
@@ -779,7 +852,7 @@ export async function getSearchRegexPathResult(
   const previewExecutionRuntimeBudgetLimits = {
     maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
     maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
-    softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+    softTimeBudgetMs: SEARCH_FAMILY_PREVIEW_EXECUTION_SOFT_TIME_BUDGET_MS,
   };
   const candidateWorkloadEvidence = searchScopeEntry.type === "directory"
     ? await collectTraversalCandidateWorkloadEvidence({
@@ -821,7 +894,10 @@ export async function getSearchRegexPathResult(
   });
   const previewFirstAdmissionActive =
     traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST;
-  const admissionAdjustedMaxResults = previewFirstAdmissionActive
+  const completeResultRequested =
+    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
+    && requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
+  const admissionAdjustedMaxResults = previewFirstAdmissionActive && !completeResultRequested
     ? Math.max(
       1,
       Math.min(
@@ -832,15 +908,77 @@ export async function getSearchRegexPathResult(
       ),
     )
     : effectiveMaxResults;
-  const completeResultRequested =
-    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
-    && requestedResumeMode === "complete-result";
-  const previewLanePlan = resolveTraversalPreviewLanePlan(
-    searchPath,
-    toolName,
-    traversalAdmissionDecision,
-    executionPolicy,
-    executionPolicy.regexSyncCandidateBytesCap,
+  const previewLanePlan = completeResultRequested
+    ? {
+        candidateByteBudget: null,
+        guidanceText: null,
+        runtimeBudgetLimits: null,
+      }
+    : (() => {
+        const resolvedPreviewLanePlan = resolveTraversalPreviewLanePlan(
+          searchPath,
+          toolName,
+          traversalAdmissionDecision,
+          executionPolicy,
+          executionPolicy.regexSyncCandidateBytesCap,
+        );
+
+        if (resolvedPreviewLanePlan.runtimeBudgetLimits === null) {
+          return resolvedPreviewLanePlan;
+        }
+
+        return {
+          ...resolvedPreviewLanePlan,
+          runtimeBudgetLimits: {
+            ...resolvedPreviewLanePlan.runtimeBudgetLimits,
+            softTimeBudgetMs: SEARCH_FAMILY_PREVIEW_EXECUTION_SOFT_TIME_BUDGET_MS,
+          },
+        };
+      })();
+  const effectiveTraversalRuntimeBudgetLimits = completeResultRequested
+    ? COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS
+    : previewLanePlan.runtimeBudgetLimits ?? undefined;
+  const useBatchedNativeExecutionPath = !previewFirstAdmissionActive || completeResultRequested;
+
+  logger.info(
+    {
+      searchPath,
+      requestedResumeMode,
+      admissionOutcome: traversalAdmissionDecision.outcome,
+      completeResultRequested,
+      gitIgnoreEnrichmentApplied:
+        traversalPreflightContext.traversalScopePolicyResolution.gitIgnoreEnrichmentApplied,
+      explicitExcludedRoot:
+        traversalPreflightContext.traversalScopePolicyResolution.explicitExcludedRoot,
+      includeGlobs: filePatterns,
+      excludePatterns,
+      includeExcludedGlobs,
+      previewLaneCandidateByteBudget: previewLanePlan.candidateByteBudget,
+      previewLaneRuntimeBudgetLimits: previewLanePlan.runtimeBudgetLimits,
+      requestedMaxResults: maxResults,
+      effectiveMaxResults: admissionAdjustedMaxResults,
+      traversalPreflightEvidence:
+        traversalPreflightContext.traversalPreflightAdmissionEvidence,
+      candidateWorkloadEvidence,
+      executionPolicy: {
+        regexSyncCandidateBytesCap: executionPolicy.regexSyncCandidateBytesCap,
+        regexServiceHardGapBytes: executionPolicy.regexServiceHardGapBytes,
+        traversalInlineEntryBudget: executionPolicy.traversalInlineEntryBudget,
+        traversalInlineDirectoryBudget: executionPolicy.traversalInlineDirectoryBudget,
+        traversalInlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+        traversalInlineExecutionBudgetMs: executionPolicy.traversalInlineExecutionBudgetMs,
+        traversalPreviewFirstEntryBudget: executionPolicy.traversalPreviewFirstEntryBudget,
+        traversalPreviewFirstDirectoryBudget:
+          executionPolicy.traversalPreviewFirstDirectoryBudget,
+        traversalPreviewExecutionEntryBudget:
+          executionPolicy.traversalPreviewExecutionEntryBudget,
+        traversalPreviewExecutionDirectoryBudget:
+          executionPolicy.traversalPreviewExecutionDirectoryBudget,
+        traversalPreviewExecutionTimeBudgetMs:
+          executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+      },
+    },
+    "Regex search root execution context resolved",
   );
 
   if (
@@ -881,6 +1019,7 @@ export async function getSearchRegexPathResult(
       executionPolicy,
       aggregateBudgetState,
       false,
+      true,
       true,
       admissionAdjustedMaxResults,
       activeFileMatchOffset,
@@ -932,6 +1071,15 @@ export async function getSearchRegexPathResult(
   let activeFileRelativePath = continuationState?.activeFileRelativePath ?? null;
   let activeFileMatchOffset = continuationState?.activeFileMatchOffset ?? 0;
   const pendingNativeBatch: RegexNativeBatchEntry[] = [];
+  const traversalDecisionDiagnostics = {
+    directoriesExcludedByEntryPolicy: 0,
+    directoriesTraversedByEntryPolicy: 0,
+    directoriesNotTraversedByEntryPolicy: 0,
+    filesExcludedByEntryPolicy: 0,
+    includePatternEligibleFiles: 0,
+    includePatternRejectedFiles: 0,
+    candidateByteBudgetStops: 0,
+  };
 
   function markTraversalBudgetExceeded(error: unknown): boolean {
     if (!isTraversalRuntimeBudgetExceededError(error)) {
@@ -946,11 +1094,15 @@ export async function getSearchRegexPathResult(
     return true;
   }
 
-  async function flushPendingNativeBatch(): Promise<void> {
+  async function flushPendingNativeBatch(
+    currentTraversalFrame?: SearchRegexTraversalFrame,
+  ): Promise<void> {
     if (pendingNativeBatch.length === 0 || searchAborted) {
       return;
     }
 
+    diagnostics.nativeBatchExecutions += 1;
+    diagnostics.nativeBatchCandidates += pendingNativeBatch.length;
     const batchEntries = pendingNativeBatch.splice(0, pendingNativeBatch.length);
     const batchSearchResult = await collectRegexMatchesFromNativeBatch(
       toolName,
@@ -964,11 +1116,34 @@ export async function getSearchRegexPathResult(
       results.length,
     );
 
-    filesSearched += batchEntries.length;
+    const processedBatchEntryCount = batchSearchResult.truncated
+      ? Math.max(0, (batchSearchResult.activeBatchEntryIndex ?? -1) + 1)
+      : batchEntries.length;
+
+    filesSearched += processedBatchEntryCount;
     matchesFound += batchSearchResult.totalMatches;
     results.push(...batchSearchResult.matches);
 
     if (batchSearchResult.truncated) {
+      if (
+        completeResultRequested
+        && currentTraversalFrame !== undefined
+        && batchSearchResult.activeBatchEntryIndex !== null
+      ) {
+        const activeBatchEntry = batchEntries[batchSearchResult.activeBatchEntryIndex];
+
+        if (activeBatchEntry !== undefined) {
+          const unprocessedBatchEntries = batchEntries.slice(processedBatchEntryCount);
+          const unprocessedBatchBytes = sumRegexNativeBatchBytes(unprocessedBatchEntries);
+
+          totalBytesScanned -= unprocessedBatchBytes;
+          aggregateBudgetState.totalCandidateBytesScanned -= unprocessedBatchBytes;
+          currentTraversalFrame.nextEntryIndex = activeBatchEntry.entryIndexAfter;
+          activeFileRelativePath = activeBatchEntry.candidateRelativePath;
+          activeFileMatchOffset = batchSearchResult.activeBatchEntryMatchOffset;
+        }
+      }
+
       searchStopState = batchSearchResult.stopState;
       searchAborted = true;
     }
@@ -998,6 +1173,7 @@ export async function getSearchRegexPathResult(
       aggregateBudgetState,
       activeFileRelativePath !== "",
       false,
+      !completeResultRequested,
       admissionAdjustedMaxResults,
       activeFileMatchOffset,
       totalBytesScanned,
@@ -1048,7 +1224,7 @@ export async function getSearchRegexPathResult(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
-          previewLanePlan.runtimeBudgetLimits ?? undefined,
+          effectiveTraversalRuntimeBudgetLimits,
         );
       } catch (error) {
         if (markTraversalBudgetExceeded(error)) {
@@ -1078,7 +1254,7 @@ export async function getSearchRegexPathResult(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
-          previewLanePlan.runtimeBudgetLimits ?? undefined,
+          effectiveTraversalRuntimeBudgetLimits,
         );
       } catch (error) {
         if (markTraversalBudgetExceeded(error)) {
@@ -1098,18 +1274,31 @@ export async function getSearchRegexPathResult(
         ? entry.name
         : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
       const relativePath = normalizeRelativePath(rawRelativePath);
-      const shouldTraverseExcludedDirectory = entry.isDirectory()
-        && shouldTraverseTraversalScopeDirectoryPath(
-          relativePath,
-          traversalScopePolicyResolution,
-        );
+      const entryPolicy = await resolveTraversalScopeEntryPolicy(
+        relativePath,
+        entry.isDirectory(),
+        traversalScopePolicyResolution,
+      );
 
-      if (
-        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-        && !shouldTraverseExcludedDirectory
-      ) {
+      if (entryPolicy.excluded) {
+        if (entry.isDirectory()) {
+          traversalDecisionDiagnostics.directoriesExcludedByEntryPolicy += 1;
+        } else {
+          traversalDecisionDiagnostics.filesExcludedByEntryPolicy += 1;
+        }
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
+      }
+
+      if (entry.isFile()) {
+        if (!matchesIncludedFilePatterns(relativePath, filePatterns)) {
+          diagnostics.filesSkippedByIncludeGlobs += 1;
+          traversalDecisionDiagnostics.includePatternRejectedFiles += 1;
+          commitInspectionResumeTraversalEntry(currentTraversalFrame);
+          continue;
+        }
+
+        traversalDecisionDiagnostics.includePatternEligibleFiles += 1;
       }
 
       const fullPath = path.join(currentPath, entry.name);
@@ -1123,13 +1312,26 @@ export async function getSearchRegexPathResult(
       }
 
       if (candidateEntry.type === "directory") {
+        if (completeResultRequested && pendingNativeBatch.length > 0) {
+          await flushPendingNativeBatch(currentTraversalFrame);
+
+          if (searchAborted) {
+            break;
+          }
+        }
+
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
-        traversalFrames.push({
-          directoryRelativePath: rawRelativePath,
-          nextEntryIndex: 0,
-        });
-        descendedIntoChildDirectory = true;
-        break;
+        if (entryPolicy.shouldTraverse) {
+          traversalDecisionDiagnostics.directoriesTraversedByEntryPolicy += 1;
+          traversalFrames.push({
+            directoryRelativePath: rawRelativePath,
+            nextEntryIndex: 0,
+          });
+          descendedIntoChildDirectory = true;
+          break;
+        }
+        traversalDecisionDiagnostics.directoriesNotTraversedByEntryPolicy += 1;
+        continue;
       }
 
       if (candidateEntry.type !== "file") {
@@ -1145,6 +1347,7 @@ export async function getSearchRegexPathResult(
         )
       ) {
         searchAborted = true;
+        traversalDecisionDiagnostics.candidateByteBudgetStops += 1;
 
         if (unsupportedStateReason === null) {
           unsupportedStateReason = previewLanePlan.guidanceText;
@@ -1158,12 +1361,7 @@ export async function getSearchRegexPathResult(
         break;
       }
 
-      if (!previewFirstAdmissionActive) {
-        if (!matchesIncludedFilePatterns(relativePath, filePatterns)) {
-          commitInspectionResumeTraversalEntry(currentTraversalFrame);
-          continue;
-        }
-
+      if (useBatchedNativeExecutionPath) {
         const nextTotalBytesScanned = totalBytesScanned + candidateEntry.size;
         const nextAggregateBytesScanned = aggregateBudgetState.totalCandidateBytesScanned + candidateEntry.size;
 
@@ -1187,6 +1385,7 @@ export async function getSearchRegexPathResult(
         );
 
         if (!searchCapability.isAllowed) {
+          diagnostics.filesRejectedByContentState += 1;
           if (unsupportedStateReason === null) {
             unsupportedStateReason = searchCapability.reason;
           }
@@ -1196,7 +1395,8 @@ export async function getSearchRegexPathResult(
         }
 
         if (searchCapability.requiresDecodedTextFallback) {
-          await flushPendingNativeBatch();
+          diagnostics.filesUsingDecodedTextFallback += 1;
+          await flushPendingNativeBatch(currentTraversalFrame);
 
           const fileSearchResult = await collectRegexMatchesFromFileEntry(
             toolName,
@@ -1211,6 +1411,7 @@ export async function getSearchRegexPathResult(
             aggregateBudgetState,
             false,
             false,
+            !completeResultRequested,
             admissionAdjustedMaxResults - results.length,
             0,
             totalBytesScanned - candidateEntry.size,
@@ -1235,6 +1436,10 @@ export async function getSearchRegexPathResult(
           if (fileSearchResult.truncated) {
             searchStopState = fileSearchResult.stopState;
             searchAborted = true;
+            if (completeResultRequested) {
+              activeFileRelativePath = relativePath;
+              activeFileMatchOffset = fileSearchResult.matches.length;
+            }
             commitInspectionResumeTraversalEntry(currentTraversalFrame);
             break;
           }
@@ -1252,7 +1457,7 @@ export async function getSearchRegexPathResult(
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
 
         if (pendingNativeBatch.length >= SEARCH_REGEX_NATIVE_INLINE_BATCH_SIZE) {
-          await flushPendingNativeBatch();
+          await flushPendingNativeBatch(currentTraversalFrame);
 
           if (searchAborted) {
             break;
@@ -1275,6 +1480,7 @@ export async function getSearchRegexPathResult(
         aggregateBudgetState,
         true,
         false,
+        true,
         admissionAdjustedMaxResults - results.length,
         0,
         totalBytesScanned,
@@ -1308,18 +1514,27 @@ export async function getSearchRegexPathResult(
       commitInspectionResumeTraversalEntry(currentTraversalFrame);
     }
 
+    if (completeResultRequested && pendingNativeBatch.length > 0 && !searchAborted) {
+      await flushPendingNativeBatch(currentTraversalFrame);
+    }
+
+    if (searchAborted) {
+      break;
+    }
+
     if (!descendedIntoChildDirectory && currentTraversalFrame.nextEntryIndex >= entries.length) {
       traversalFrames.pop();
     }
   }
 
-  if (!previewFirstAdmissionActive && !searchAborted) {
+  if (useBatchedNativeExecutionPath && !searchAborted && pendingNativeBatch.length > 0) {
     await flushPendingNativeBatch();
   }
 
+  const hasRemainingTraversalWork =
+    traversalFrames.length > 0 || activeFileRelativePath !== null;
   const nextContinuationState = previewFirstAdmissionActive
-    && !completeResultRequested
-    && (traversalFrames.length > 0 || activeFileRelativePath !== null)
+    && hasRemainingTraversalWork
     ? {
         traversalFrames: cloneSearchRegexTraversalFrames(traversalFrames),
         activeFileRelativePath,
@@ -1328,12 +1543,39 @@ export async function getSearchRegexPathResult(
     : null;
 
   const rootStopState = nextContinuationState !== null
-    && (
-      searchStopState.stopReason === null
-      || searchStopState.stopReason === SEARCH_STOP_REASON_LITERALS.MAX_RESULTS_LIMIT_REACHED
-    )
-    ? createSearchPreviewContinuationState()
+    ? completeResultRequested
+      ? createSearchCompletionContinuationState()
+      : (
+          searchStopState.stopReason === null
+          || searchStopState.stopReason === SEARCH_STOP_REASON_LITERALS.MAX_RESULTS_LIMIT_REACHED
+        )
+        ? createSearchPreviewContinuationState()
+        : searchStopState
     : searchStopState;
+  logger.info(
+    {
+      searchPath,
+      requestedResumeMode,
+      admissionOutcome: traversalAdmissionDecision.outcome,
+      completeResultRequested,
+      filesSearched,
+      totalMatches: matchesFound,
+      returnedLocations: results.length,
+      searchAborted,
+      stopReason: rootStopState.stopReason,
+      stopMessage: rootStopState.stopMessage,
+      unsupportedStateReason,
+      totalBytesScanned,
+      nextContinuationStateActive: nextContinuationState !== null,
+      diagnostics,
+      traversalDecisionDiagnostics,
+      traversalFramesRemaining: traversalFrames.length,
+      activeFileRelativePath,
+      activeFileMatchOffset,
+    },
+    "Regex search root execution completed",
+  );
+
   return {
     root: searchPath,
     matches: results,

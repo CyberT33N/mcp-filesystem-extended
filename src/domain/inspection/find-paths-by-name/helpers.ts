@@ -12,15 +12,13 @@ import {
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
   assertTraversalRuntimeBudget,
+  COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
   createTraversalRuntimeBudgetState,
   isTraversalRuntimeBudgetExceededError,
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
-import {
-  shouldExcludeTraversalScopePath,
-  shouldTraverseTraversalScopeDirectoryPath,
-} from "@domain/shared/guardrails/traversal-scope-policy";
+import { resolveTraversalScopeEntryPolicy } from "@domain/shared/guardrails/traversal-scope-policy";
 import {
   createInlineResumeEnvelope,
   createPersistedResumeEnvelope,
@@ -261,7 +259,7 @@ function buildFindPathsByNameResumeEnvelope(
  * @param pattern - Case-insensitive substring matched against entry names.
  * @param excludePatterns - Glob-like exclusion patterns applied to relative paths.
  * @param includeExcludedGlobs - Explicit descendant re-include globs that may reopen excluded subtrees.
- * @param respectGitIgnore - Indicates whether optional root-local `.gitignore` enrichment should participate in traversal.
+ * @param respectGitIgnore - Indicates whether optional directory-scoped hierarchical `.gitignore` enrichment should participate in traversal.
  * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
  * @param maxResults - Maximum number of collected matches before truncation.
  * @param batchRootCount - Number of roots participating in the current caller-visible batch surface.
@@ -363,6 +361,9 @@ export async function searchFiles(
           softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
         }
       : undefined;
+  const effectiveTraversalRuntimeBudgetLimits = completeResultRequested
+    ? COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS
+    : previewExecutionRuntimeBudgetLimits;
   const traversalFrames = continuationState === null
     ? createInitialFindPathsByNameTraversalFrames()
     : cloneFindPathsByNameTraversalFrames(continuationState.traversalFrames);
@@ -386,7 +387,7 @@ export async function searchFiles(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
-          previewExecutionRuntimeBudgetLimits,
+          effectiveTraversalRuntimeBudgetLimits,
         );
       } catch (error) {
         if (isTraversalRuntimeBudgetExceededError(error)) {
@@ -413,7 +414,7 @@ export async function searchFiles(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
-          previewExecutionRuntimeBudgetLimits,
+          effectiveTraversalRuntimeBudgetLimits,
         );
       } catch (error) {
         if (isTraversalRuntimeBudgetExceededError(error)) {
@@ -439,17 +440,13 @@ export async function searchFiles(
         ? entry.name
         : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
       const relativePath = normalizeRelativePath(rawRelativePath);
-      const shouldTraverseExcludedDirectory =
-        entry.isDirectory() &&
-        shouldTraverseTraversalScopeDirectoryPath(
-          relativePath,
-          traversalScopePolicyResolution,
-        );
+      const entryPolicy = await resolveTraversalScopeEntryPolicy(
+        relativePath,
+        entry.isDirectory(),
+        traversalScopePolicyResolution,
+      );
 
-      if (
-        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-        && !shouldTraverseExcludedDirectory
-      ) {
+      if (entryPolicy.excluded) {
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
       }
@@ -472,7 +469,7 @@ export async function searchFiles(
         break;
       }
 
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() && entryPolicy.shouldTraverse) {
         traversalFrames.push({
           directoryRelativePath: rawRelativePath,
           nextEntryIndex: 0,

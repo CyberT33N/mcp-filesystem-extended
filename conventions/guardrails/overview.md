@@ -89,6 +89,14 @@ The tier is resolved from the detected `IoCapabilityProfile`. Inline entry and t
 
 ---
 
+### Parameter-aware preflight rule
+
+The candidate probe and the traversal admission layer must remain sensitive to caller narrowing intent. Include-glob constraints are part of the workload contract and should prevent low-value non-matching branches from dominating preflight cost where architectural prioritization is possible.
+
+At the traversal-scope preflight layer, this means broad recursive search and counting requests may supply a workload-aware preflight policy that keeps directory discovery intact while counting only file entries that are structurally eligible for the caller's include-glob intent toward the preflight entry budget.
+
+The shared preflight soft-time ceiling is therefore calibrated at `4,500 ms`, not the earlier `3,000 ms`. After the parameter-aware preflight change, valid enterprise TypeScript and TSX broad-root search that is already narrowed by include globs must still reach admission-lane routing instead of failing at the old wall-clock checkpoint.
+
 ## Layer 4: Preview-Lane Runtime Budget
 
 **Source:** [`src/domain/shared/guardrails/traversal-runtime-budget.ts`](../../src/domain/shared/guardrails/traversal-runtime-budget.ts)
@@ -97,17 +105,17 @@ The tier is resolved from the detected `IoCapabilityProfile`. Inline entry and t
 
 **Active in:** `next-chunk` delivery mode (preview traversal loop).
 
-**NOT active in:** `complete-result` delivery mode. In `complete-result`, the full traversal uses the deeper emergency runtime safeguard instead (see Layer 6 context).
+**NOT active in:** `complete-result` delivery mode. Preview-family `complete-result` does not inherit the bounded preview-lane soft runtime timeout.
 
-**Deep emergency runtime safeguard (separate from preview-lane):**
+**Preview-family completion runtime contract (separate from preview-lane):**
 
 | Constant | Value |
 |---|---|
 | `TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES` | 500,000 |
 | `TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES` | 50,000 |
-| `TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS` | 5,000ms |
+| local soft runtime timeout | disabled |
 
-This safeguard fires only for truly pathological traversals that bypassed all earlier admission bands. It is not the primary caller-facing control.
+The breadth ceilings remain internal emergency stabilizers for pathological completion traversals, but the caller-visible completion ceiling is the global fuse. The legacy five-second soft runtime wall must not terminate preview-family `complete-result`.
 
 ---
 
@@ -172,6 +180,16 @@ For non-resume endpoints (`read_files_with_line_numbers`, `diff_files`, mutation
 | `search_file_contents_by_regex` | ✅ | ✅ | ✅ | ✅ next-chunk only | ✅ inline + next-chunk only | ✅ always |
 | `search_file_contents_by_fixed_string` | ✅ | ✅ | ✅ | ✅ next-chunk only | ✅ inline + next-chunk only | ✅ always |
 | `count_lines` | ✅ | ✅ | ✅ | ❌ no preview mode | ✅ inline + complete-result final output | ✅ always |
+
+### Hierarchical `.gitignore` note
+
+When `respectGitIgnore = true`, traversal-capable inspection families do not stop at one root-local `.gitignore` file anymore in the target architecture. They must evaluate directory-scoped hierarchical `.gitignore` layers beneath the validated traversal root while still preserving the server-owned default exclusion baseline and the additive caller exclusion controls.
+
+The baseline/default contract split is therefore:
+- server-owned baseline exclusions are the default traversal contract for broad roots,
+- directory-scoped hierarchical `.gitignore` rules are additive opt-in refinement only,
+- explicit roots and explicit reopened descendants remain stronger than the broad-root baseline.
+
 | `read_files_with_line_numbers` | ✅ | ❌ | ❌ | ❌ | ✅ unconditional | ✅ always |
 | `read_file_content` | ✅ | ❌ | ❌ | ❌ | ✅ unconditional | ✅ always |
 | All metadata endpoints | ✅ | ❌ | ❌ | ❌ | ✅ unconditional | ✅ always |

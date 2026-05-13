@@ -50,8 +50,12 @@ export interface TraversalRuntimeBudgetLimits {
 
   /**
    * Soft wall-clock runtime budget in milliseconds for the current traversal lane.
+   *
+   * @remarks
+   * Use `null` only for completion lanes whose contract must not be governed by a local soft-time
+   * timeout. Breadth ceilings may still remain active in those lanes.
    */
-  softTimeBudgetMs: number;
+  softTimeBudgetMs: number | null;
 }
 
 const DEFAULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS: TraversalRuntimeBudgetLimits = {
@@ -59,6 +63,23 @@ const DEFAULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS: TraversalRuntimeBudgetLimits = {
   maxVisitedDirectories: TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
   softTimeBudgetMs: TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS,
 };
+
+/**
+ * Runtime-budget limits for preview-family `complete-result` traversal.
+ *
+ * @remarks
+ * Once a caller explicitly resumes with `resumeMode = 'complete-result'`, the completion contract
+ * must not be owned by the legacy five-second soft-time wall that exists for bounded preview or
+ * emergency runtime lanes. The persisted frontier still keeps breadth safeguards active, while the
+ * caller-visible completion ceiling is owned by the global response fuse instead of a family-local
+ * soft timeout.
+ */
+export const COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS:
+  Readonly<TraversalRuntimeBudgetLimits> = Object.freeze({
+    maxVisitedEntries: TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES,
+    maxVisitedDirectories: TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES,
+    softTimeBudgetMs: null,
+  });
 
 /**
  * Structured error raised when the shared traversal runtime safeguard aborts one recursive workload.
@@ -221,7 +242,7 @@ export function assertTraversalRuntimeBudget(
 
   const elapsedMs = getTraversalRuntimeElapsedMs(state, nowMs);
 
-  if (elapsedMs > limits.softTimeBudgetMs) {
+  if (limits.softTimeBudgetMs !== null && elapsedMs > limits.softTimeBudgetMs) {
     throwTraversalRuntimeBudgetExceededFailure(
       toolName,
       "traversal soft runtime budget",

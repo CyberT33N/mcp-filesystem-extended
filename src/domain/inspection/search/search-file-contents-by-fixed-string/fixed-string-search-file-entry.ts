@@ -114,6 +114,7 @@ export async function collectFixedStringMatchesFromFileEntry(
   aggregateBudgetState: FixedStringSearchAggregateBudgetState,
   enforceAggregateCandidateByteBudget: boolean,
   refuseUnsupportedFileScope: boolean,
+  allowPreviewFirstResponseCap: boolean,
   maxAdditionalResults: number,
   matchesToSkipBeforeCollecting: number,
   totalBytesScannedBeforeRead: number,
@@ -182,7 +183,8 @@ export async function collectFixedStringMatchesFromFileEntry(
     };
   }
 
-  const previewFirstTriggered = nextAggregateBytesScanned > executionPolicy.fixedStringSyncCandidateBytesCap;
+  const previewFirstTriggered = allowPreviewFirstResponseCap
+    && nextAggregateBytesScanned > executionPolicy.fixedStringSyncCandidateBytesCap;
   const effectiveLocationCap = previewFirstTriggered
     ? Math.max(
         1,

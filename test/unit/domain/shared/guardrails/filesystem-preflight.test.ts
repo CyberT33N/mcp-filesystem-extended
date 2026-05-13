@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -94,6 +98,32 @@ describe("filesystem preflight", () => {
     });
     expect(result.traversalPreflightAdmissionEvidence).toBeNull();
     expect(result.traversalScopePolicyResolution).toBeDefined();
+    expect(result.traversalScopePolicyResolution.gitIgnoreEnrichmentApplied).toBe(false);
+  });
+
+  it("creates a hierarchical gitignore traversal state for recursive directory roots when requested", async () => {
+    mockedValidatePath.mockResolvedValueOnce("C:/allowed/root");
+    mockedGetFileSystemEntryMetadata.mockResolvedValueOnce({
+      size: 0,
+      type: "directory",
+    });
+
+    const result = await resolveTraversalPreflightContext(
+      "find_files_by_glob",
+      "root",
+      [],
+      [],
+      true,
+      ["C:/allowed"],
+      ["directory"],
+      false,
+    );
+
+    expect(result.traversalScopePolicyResolution.gitIgnoreEnrichmentApplied).toBe(true);
+    expect(result.traversalScopePolicyResolution.gitIgnoreTraversalHierarchy).not.toBeNull();
+    expect(
+      result.traversalScopePolicyResolution.gitIgnoreTraversalHierarchy?.rootAbsolutePath,
+    ).toBe("C:/allowed/root");
   });
 
   it("rejects requested path batches that exceed the shared metadata preflight ceiling", async () => {
@@ -138,5 +168,84 @@ describe("filesystem preflight", () => {
     ).toThrow(
       "Candidate byte budget exceeds the preflight ceiling before content execution begins.",
     );
+  });
+
+  it("counts only workload-relevant file entries during traversal preflight when a workload policy is provided", async () => {
+    const sandboxRootPath = await mkdtemp(
+      join(tmpdir(), "mcp-fs-preflight-workload-policy-"),
+    );
+    const matchingFilePath = join(sandboxRootPath, "keep.ts");
+    const ignoredFilePath = join(sandboxRootPath, "skip.md");
+
+    try {
+      await writeFile(matchingFilePath, "export const keep = true;", "utf8");
+      await writeFile(ignoredFilePath, "# ignored", "utf8");
+
+      mockedValidatePath.mockResolvedValueOnce(sandboxRootPath);
+      mockedGetFileSystemEntryMetadata.mockResolvedValueOnce({
+        size: 0,
+        type: "directory",
+      });
+
+      const result = await resolveTraversalPreflightContext(
+        "search_file_contents_by_regex",
+        "root",
+        [],
+        [],
+        false,
+        [sandboxRootPath],
+        ["directory"],
+        true,
+        {
+          shouldCountFileEntryTowardBudget: (candidateRelativePath, entry) =>
+            !entry.isFile() || candidateRelativePath.endsWith(".ts"),
+        },
+      );
+
+      expect(result.traversalPreflightAdmissionEvidence?.visitedEntries).toBe(1);
+      expect(result.traversalPreflightAdmissionEvidence?.visitedDirectories).toBe(1);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("mentions optional respectGitIgnore narrowing when preflight fails and a root-local gitignore is available but inactive", async () => {
+    const sandboxRootPath = await mkdtemp(
+      join(tmpdir(), "mcp-fs-preflight-gitignore-hint-"),
+    );
+
+    try {
+      await writeFile(join(sandboxRootPath, ".gitignore"), "coverage/\n", "utf8");
+      mockedValidatePath.mockResolvedValueOnce(sandboxRootPath);
+      mockedGetFileSystemEntryMetadata.mockResolvedValueOnce({
+        size: 0,
+        type: "directory",
+      });
+
+      const dateNowSpy = vi.spyOn(Date, "now").mockImplementation(() => {
+        const stack = new Error().stack ?? "";
+
+        return stack.includes("getTraversalScopePreflightBudgetStop")
+          ? 4_501
+          : 0;
+      });
+
+      await expect(
+        resolveTraversalPreflightContext(
+          "search_file_contents_by_regex",
+          "root",
+          [],
+          [],
+          false,
+          [sandboxRootPath],
+          ["directory"],
+          true,
+        ),
+      ).rejects.toThrow("respectGitIgnore=true");
+
+      dateNowSpy.mockRestore();
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
   });
 });

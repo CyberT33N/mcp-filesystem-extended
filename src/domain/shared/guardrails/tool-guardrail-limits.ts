@@ -654,15 +654,22 @@ export const TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES = 10_000;
  *
  * @remarks
  * This budget constrains only the early server-side admission probe, not the deeper guarded
- * traversal itself. The probe window is intentionally higher because the shared admission planner
- * now performs richer downstream cost modeling before execution begins, but it remains materially
- * below the later runtime safeguard so preflight-first refusal semantics stay intact for broad
- * invalid traversal roots.
+ * traversal itself. It is intentionally lower than the later runtime safeguard, but it must still
+ * leave enough room for legitimate broad-root enterprise search workloads whose narrowing signal is
+ * already strong (for example include-glob-constrained TypeScript search across a `src` tree).
+ *
+ * The current target-state value therefore moves to 4,500 milliseconds so preflight can remain a
+ * proactive routing layer without becoming an over-eager blocker for valid prompt-efficient search
+ * requests. The stronger architectural correction is still parameter-aware preflight behavior, but
+ * this ceiling must be high enough that legitimate broad-root code search can reach the admission
+ * lane decision instead of failing at the first soft-time checkpoint. The budget stays bounded and
+ * far below the global response-fuse architecture, while removing the avoidable 3,000-millisecond
+ * friction point that still rejected valid enterprise TypeScript and TSX search workloads.
  *
  * @example
  * `assertTraversalScopePreflightBudget(toolName, requestedRoot, state)`
  */
-export const TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS = 1_500;
+export const TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS = 4_500;
 
 /**
  * Maximum number of filesystem entries that one guarded traversal may visit before the shared
@@ -701,8 +708,12 @@ export const TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES = 50_000;
  * @remarks
  * This soft budget remains the deeper emergency safeguard after server-side preflight and
  * traversal-scope handling have already admitted the workload. The breadth ceilings above are
- * intentionally higher, but this wall-clock fuse stays unchanged so the final runtime backstop
- * still trips deterministically before pathological traversal can destabilize the process.
+ * intentionally higher, but this wall-clock fuse stays unchanged so the runtime backstop still
+ * trips deterministically before pathological traversal can destabilize the process.
+ *
+ * Preview-family `complete-result` intentionally does not inherit this local soft-time wall. In
+ * that branch, the caller-visible completion ceiling is the shared global fuse while the deeper
+ * breadth ceilings remain available as internal emergency stabilizers.
  *
  * @example
  * `assertTraversalRuntimeBudget(toolName, state)`

@@ -88,7 +88,7 @@ The following rules are non-negotiable across the entire codebase:
 
 2. **Family-level response caps apply only in inline and `next-chunk` delivery modes.** They must not block responses in `complete-result` mode. The global fuse is the ceiling for `complete-result` responses.
 
-3. **Admission-layer timeouts and budgets are routing logic, not blocking guards for `complete-result`.** They remain active and correct for all modes because they determine which delivery lane is needed. They do not block `complete-result` execution.
+3. **Admission-layer timeouts and budgets are routing logic, not blocking guards for `complete-result`.** They remain active and correct because they determine which delivery lane is needed. Preview-lane and family-local soft runtime timeouts likewise must not own preview-family `complete-result` execution once the caller explicitly asks the server to continue toward completion.
 
 4. **`count_lines` is completion-backed only.** It never exposes preview-style partial totals and never supports `resumeMode = 'next-chunk'`.
 

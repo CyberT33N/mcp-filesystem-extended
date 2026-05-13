@@ -215,7 +215,9 @@ function buildSearchFixedStringContinuationEnvelope(
     ? INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
   const guidanceText = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
-    ? "Resume the same fixed-string-search request by sending only resumeToken with resumeMode='complete-result' to the same endpoint so the server can continue the persisted completion attempt toward a final complete result."
+    ? nextContinuationState === null
+      ? "Continuation response. This payload contains entries from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset."
+      : "Continuation response. This payload contains entries from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset. More work remains; resume the same fixed-string-search request by sending only resumeToken with resumeMode='complete-result' to continue the server-owned completion attempt."
     : SEARCH_FIXED_STRING_CONTINUATION_GUIDANCE;
   const scopeReductionGuidanceText =
     "Scope reduction alternative: narrow roots, add includeGlobs, or reduce the search to the relevant subtree.";

@@ -91,7 +91,8 @@ All six resume-capable inspection endpoints whose handler calls `assertActualTex
 | Admission decision (Layer 2) | ✅ | Re-evaluated; still routes to PREVIEW_FIRST, which activates the complete-result branch |
 | Candidate workload probe (Layer 3) | ✅ | Re-run for admission input |
 | Preview runtime budget (Layer 4) | ❌ | Not used; full traversal path is active |
-| Deep traversal emergency budget | ✅ | 500K entries, 50K dirs, 5s — emergency safeguard during full traversal |
+| Deep traversal breadth safeguards | ✅ internal only | 500K entries and 50K directories remain last-resort stabilizers |
+| Local soft runtime timeout | ❌ | Preview-family `complete-result` must not inherit the legacy 5-second soft-time wall |
 | Family-level response cap (Layer 5) | ❌ | **Must not fire** — see mode-aware rule above |
 | Global fuse (Layer 6) | ✅ | Always — this is the only ceiling in this mode |
 
@@ -119,6 +120,12 @@ The proactive admission decision (Layer 2) re-runs on every resume request, incl
 
 The admission timeouts that informed the original `PREVIEW_FIRST` routing decision are part of this logic and remain architecturally correct. They were never designed to block `complete-result` execution — that conflict arose only when the family-level response cap was applied unconditionally without checking the delivery mode.
 
+However, preflight soft-time budgeting must still be calibrated against real enterprise workloads. When broad-root code search already carries strong include-glob narrowing, preflight must not become so aggressive that the workload dies before preview-first routing can even become visible to the caller.
+
+This also means the preflight layer itself must be parameter-aware: if the caller already constrained the workload to `**/*.ts` or `**/*.tsx`, low-value non-matching file entries must not consume preflight entry budget as if they were equally relevant to the intended search surface.
+
+The same ownership rule continues into the preview-family completion branch: the global fuse is the caller-visible completion ceiling, while the local five-second traversal soft timeout belongs to bounded preview execution and must not terminate `complete-result`.
+
 ---
 
 ## The Global Fuse as the Exclusive `complete-result` Ceiling
@@ -141,4 +148,4 @@ This is the intended behavior. A response of, for example, 163,215 characters (a
 
 **Fix:** Make the cap selection conditional on `requestedResumeMode`. In `complete-result` mode, use `GLOBAL_RESPONSE_HARD_CAP_CHARS` as the effective cap. In all other modes, use the family-specific cap. The global fuse remains active as the absolute non-bypassable ceiling in all modes.
 
-**What does not change:** The admission-layer timeouts, the preview runtime budget, the deep traversal emergency budget, the global fuse, and all schema-level caps remain unchanged and continue to serve their correct architectural roles.
+**What does not change:** The admission-layer timeouts, the preview runtime budget, the deep traversal breadth safeguards, the global fuse, and all schema-level caps remain unchanged and continue to serve their correct architectural roles.

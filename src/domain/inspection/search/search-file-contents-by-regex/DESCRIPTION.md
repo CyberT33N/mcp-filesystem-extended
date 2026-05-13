@@ -86,6 +86,8 @@ They first enter the shared traversal admission planner, which decides whether t
 
 This means recursive workload breadth is a server-owned admission question, not an endpoint-local ad hoc guess.
 
+When `respectGitIgnore` is enabled, the recursive directory lane also applies directory-scoped hierarchical `.gitignore` layers beneath the validated requested root. Nested `.gitignore` files are resolved lazily during descent and affect only their own subtree.
+
 When admission keeps a directory-root workload inline, the endpoint no longer depends only on one native process per file.
 Validated native-searchable file candidates may now be grouped into ordered shell-free native `ugrep` batches, while decoded-text fallback and unsupported-surface handling still remain file-local.
 That split preserves per-file eligibility truth without leaving the inline lane trapped in avoidable process-spawn fragmentation.
@@ -137,11 +139,12 @@ If a pattern cannot satisfy that combined contract, the endpoint raises a reques
 This endpoint consumes the family-owned threshold surface from [`search-family-thresholds.ts`](../search-family-thresholds.ts).
 
 Its current endpoint-specific values are:
+- preview execution soft runtime budget = `4,500 ms`
 - inline execution budget override = `12,000 ms`
 - estimated per-candidate-file admission cost = `90 ms`
 
 These values are intentionally stricter than fixed-string search but materially less preview-eager than the earlier posture.
-The goal is to stop moderate recursive code-search workloads from falling into preview-first so early that many callers immediately need a second `complete-result` request.
+The goal is to stop moderate recursive code-search workloads from falling into preview-first so early that many callers immediately need a second `complete-result` request, while also allowing valid include-glob-narrowed enterprise TypeScript and TSX search to reach a useful preview slice instead of failing at the older `3,000 ms` wall.
 
 ---
 
@@ -233,6 +236,8 @@ Use `resumeMode = 'next-chunk'` when the caller wants the next bounded preview s
 Use `resumeMode = 'complete-result'` when the caller wants the server to continue the same persisted session toward a final complete result.
 
 `complete-result` does not bypass guardrails. It changes the delivery intent while keeping the same server-owned session and the same global final fuse.
+
+For this preview-capable family, `complete-result` also does not inherit the local five-second soft runtime timeout that belongs to bounded preview execution. The caller-visible completion ceiling is the shared global fuse.
 
 ### Continuation guidance placement
 
@@ -335,5 +340,6 @@ This endpoint-local description exists because `search_file_contents_by_regex` h
 - preview-capable same-endpoint resume behavior
 - text-first regex semantics without unrestricted hybrid support
 - family-cap versus global-fuse behavior for continuation-aware output
+- directory-scoped hierarchical `.gitignore` participation beneath the validated traversal root
 
 That endpoint-local detail belongs here, while broader cross-family ownership remains shared.

@@ -86,8 +86,9 @@ export const FindFilesByGlobArgsSchema = z.object({
    * Optional `.gitignore` enrichment toggle.
    *
    * @remarks
-   * Enable this property only when root-local `.gitignore` rules should augment
-   * the server-owned default traversal exclusions for the current request.
+   * Enable this property only when directory-scoped hierarchical `.gitignore`
+   * rules should augment the server-owned default traversal exclusions for the
+   * current request.
    *
    * @example
    * ```ts
@@ -101,7 +102,7 @@ export const FindFilesByGlobArgsSchema = z.object({
     .optional()
     .default(false)
     .describe(
-      "Whether optional root-local `.gitignore` enrichment should add more exclusions to the default traversal policy for this glob request."
+      "Whether optional directory-scoped hierarchical `.gitignore` enrichment should add more exclusions to the default traversal policy for this glob request."
     ),
   /**
    * Explicit descendant re-include globs.

@@ -129,6 +129,7 @@ The regex endpoint-local docs must explain that broad valid workloads may degrad
 This endpoint is tuned by the search-family threshold policy from [`search-family-thresholds.ts`](../search-family-thresholds.ts).
 
 The endpoint-specific calibrated values are:
+- preview execution soft runtime budget = `4,500 ms`
 - inline execution budget override = `12,000 ms`
 - estimated per-candidate-file admission cost = `90 ms`
 
@@ -143,6 +144,8 @@ That is architecturally undesirable because it increases:
 
 Regex remains intentionally stricter than fixed-string search.
 The sibling fixed-string endpoint keeps a slightly more permissive inline posture because exact literal matching is narrower and operationally cheaper.
+
+That `4,500 ms` value is a bounded preview-lane calibration only. It exists because include-glob-narrowed enterprise code search was still hitting the older `3,000 ms` wall before yielding a useful preview slice. The same correction must **not** be misread as permission for preview-family `complete-result` to inherit the legacy five-second local soft runtime timeout.
 
 ---
 
@@ -255,6 +258,7 @@ When the response is resumable:
 
 - family-level response caps remain authoritative for inline and `next-chunk`
 - `complete-result` uses the global fuse as the effective final cap instead of the regex-family cap
+- preview-family `complete-result` does not inherit the local five-second soft runtime timeout
 - endpoint-local docs must not describe `complete-result` as a cap bypass
 
 ### Single-execution response rule

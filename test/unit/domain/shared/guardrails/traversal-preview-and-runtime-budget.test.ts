@@ -155,12 +155,12 @@ describe("traversal preview and runtime budget", () => {
       assertTraversalRuntimeBudget(
         "search_file_contents_by_regex",
         state,
-        1_800,
+        4_100,
         "Narrow the traversal root.",
         {
           maxVisitedEntries: 5,
           maxVisitedDirectories: 5,
-          softTimeBudgetMs: 500,
+          softTimeBudgetMs: 3_000,
         },
       );
       throw new Error("Expected runtime budget exhaustion");
@@ -175,6 +175,23 @@ describe("traversal preview and runtime budget", () => {
       expect(error.message).toContain("traversal soft runtime budget");
       expect(error.message).toContain("milliseconds");
     }
+  });
+
+  it("skips the soft runtime wall when the current lane disables local timeout ownership", () => {
+    const state = createTraversalRuntimeBudgetState(1_000);
+
+    expect(() =>
+      assertTraversalRuntimeBudget(
+        "search_file_contents_by_regex",
+        state,
+        10_000,
+        "Narrow the traversal root.",
+        {
+          maxVisitedEntries: 5,
+          maxVisitedDirectories: 5,
+          softTimeBudgetMs: null,
+        },
+      )).not.toThrow();
   });
 
   it("keeps the default conservative capability profile at the lowest search execution tiers", () => {

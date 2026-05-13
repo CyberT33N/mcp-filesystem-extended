@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { createGitIgnoreTraversalEnrichment } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
+import {
+  createGitIgnoreTraversalEnrichment,
+  createGitIgnoreTraversalHierarchy,
+} from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import {
   DEFAULT_TRAVERSAL_SCOPE_EXCLUDED_DIRECTORY_CLASSES,
   isExplicitTraversalRootInsideDefaultExcludedClass,
   isPathInsideDefaultTraversalScopeExclusion,
   normalizeTraversalScopePath,
+  resolveTraversalScopeEntryPolicy,
   resolveTraversalScopePolicy,
   shouldExcludeTraversalScopePath,
   shouldTraverseTraversalScopeDirectoryPath,
@@ -21,16 +25,22 @@ describe("traversal scope and admission", () => {
   it("normalizes traversal paths and detects default-excluded roots deterministically", () => {
     expect(normalizeTraversalScopePath("./dist//nested/")).toBe("dist/nested");
     expect(DEFAULT_TRAVERSAL_SCOPE_EXCLUDED_DIRECTORY_CLASSES).toContain("node_modules");
+    expect(DEFAULT_TRAVERSAL_SCOPE_EXCLUDED_DIRECTORY_CLASSES).toContain(".turbo");
+    expect(DEFAULT_TRAVERSAL_SCOPE_EXCLUDED_DIRECTORY_CLASSES).toContain(".next");
     expect(isPathInsideDefaultTraversalScopeExclusion("src/node_modules/pkg")).toBe(true);
     expect(isExplicitTraversalRootInsideDefaultExcludedClass("dist")).toBe(true);
   });
 
-  it("applies the shared exclusion baseline, includeExcluded globs, and optional gitignore enrichment for broad roots", () => {
-    const gitIgnoreTraversalEnrichment = createGitIgnoreTraversalEnrichment("coverage/\n");
+  it("applies the shared exclusion baseline, includeExcluded globs, and optional gitignore enrichment for broad roots", async () => {
+    const gitIgnoreTraversalHierarchy = createGitIgnoreTraversalHierarchy("C:/workspace/root");
+    gitIgnoreTraversalHierarchy.layerCache.set(
+      ".",
+      createGitIgnoreTraversalEnrichment("coverage/\n"),
+    );
     const resolution = resolveTraversalScopePolicy(".", ["custom/**"], {
       includeExcludedGlobs: ["dist/keep.ts"],
       respectGitIgnore: true,
-      gitIgnoreTraversalEnrichment,
+      gitIgnoreTraversalHierarchy,
     });
 
     expect(resolution.explicitExcludedRoot).toBe(false);
@@ -39,7 +49,49 @@ describe("traversal scope and admission", () => {
     expect(shouldExcludeTraversalScopePath("node_modules/pkg/index.js", resolution)).toBe(true);
     expect(shouldTraverseTraversalScopeDirectoryPath("dist", resolution)).toBe(true);
     expect(shouldExcludeTraversalScopePath("dist/keep.ts", resolution)).toBe(false);
-    expect(shouldExcludeTraversalScopePath("coverage/report.txt", resolution)).toBe(true);
+    await expect(
+      resolveTraversalScopeEntryPolicy("coverage/report.txt", false, resolution),
+    ).resolves.toEqual({
+      excluded: true,
+      shouldTraverse: false,
+    });
+  });
+
+  it("applies nested gitignore layers only to their owning subtree", async () => {
+    const gitIgnoreTraversalHierarchy = createGitIgnoreTraversalHierarchy("C:/workspace/root");
+    gitIgnoreTraversalHierarchy.layerCache.set(
+      ".",
+      createGitIgnoreTraversalEnrichment("coverage/\n"),
+    );
+    gitIgnoreTraversalHierarchy.layerCache.set(
+      "packages/app",
+      createGitIgnoreTraversalEnrichment("secret/\n", {
+        sourcePath: "packages/app/.gitignore",
+      }),
+    );
+    const resolution = resolveTraversalScopePolicy(".", [], {
+      respectGitIgnore: true,
+      gitIgnoreTraversalHierarchy,
+    });
+
+    await expect(
+      resolveTraversalScopeEntryPolicy("packages/app/secret/token.txt", false, resolution),
+    ).resolves.toEqual({
+      excluded: true,
+      shouldTraverse: false,
+    });
+    await expect(
+      resolveTraversalScopeEntryPolicy("packages/other/secret/token.txt", false, resolution),
+    ).resolves.toEqual({
+      excluded: false,
+      shouldTraverse: true,
+    });
+    await expect(
+      resolveTraversalScopeEntryPolicy("packages/app", true, resolution),
+    ).resolves.toEqual({
+      excluded: false,
+      shouldTraverse: true,
+    });
   });
 
   it("preserves explicit access to roots inside excluded trees without reapplying the default exclusion baseline", () => {

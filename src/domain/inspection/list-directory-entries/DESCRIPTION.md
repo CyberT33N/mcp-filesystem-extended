@@ -125,7 +125,9 @@ If the caller explicitly targets a root inside one of those excluded trees, that
 
 ### Optional `.gitignore` participation
 
-`respectGitIgnore` adds optional root-local ignore rules on top of the server-owned baseline. It does not replace that baseline.
+`respectGitIgnore` adds optional directory-scoped hierarchical `.gitignore` rules on top of the server-owned baseline. It does not replace that baseline.
+
+When enabled, traversal starts from the validated requested root and lazily resolves nested `.gitignore` files as traversal descends into subdirectories. Each `.gitignore` layer applies only to its own subtree rather than globally to sibling branches.
 
 ---
 
@@ -227,5 +229,6 @@ This endpoint-local description exists because `list_directory_entries` has endp
 - preview-first text surfacing of bounded directory-entry payloads
 - additive completion semantics for the same endpoint
 - directory-listing-specific interpretation of the shared traversal hardening model
+- directory-scoped hierarchical `.gitignore` participation beneath the validated traversal root
 
 That endpoint-local detail belongs here, while broader cross-family guardrail ownership remains shared.

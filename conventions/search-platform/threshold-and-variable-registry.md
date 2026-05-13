@@ -52,10 +52,10 @@ Source: [`src/domain/shared/guardrails/tool-guardrail-limits.ts`](../../src/doma
 | `GLOBAL_RESPONSE_HARD_CAP_CHARS` | final application-shell fuse | remains valid and unchanged |
 | `TRAVERSAL_PREFLIGHT_MAX_VISITED_ENTRIES` | recursive preflight breadth ceiling | remains valid |
 | `TRAVERSAL_PREFLIGHT_MAX_VISITED_DIRECTORIES` | recursive preflight breadth ceiling | remains valid |
-| `TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS` | recursive preflight time ceiling | remains valid |
+| `TRAVERSAL_PREFLIGHT_SOFT_TIME_BUDGET_MS` | recursive preflight time ceiling | calibrated to `4,500 ms` so include-glob-narrowed enterprise TS/TSX broad-root search can reach lane routing instead of failing at the former `3,000 ms` wall |
 | `TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES` | deeper traversal safeguard | remains valid |
 | `TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES` | deeper traversal safeguard | remains valid |
-| `TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS` | deeper traversal safeguard | remains valid |
+| `TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS` | deeper traversal safeguard | remains valid for bounded preview and generic runtime surfaces, but preview-family `complete-result` intentionally disables this local soft-time wall so the global fuse owns the caller-visible completion ceiling |
 
 ---
 
@@ -77,7 +77,7 @@ Source: [`src/domain/shared/resume/inspection-resume-contract.ts`](../../src/dom
 ## Ownership Rules
 
 1. Response caps remain response-shaping controls.
-2. Recursive traversal budgets remain recursive admission and preview-lane controls.
+2. Recursive traversal budgets remain recursive admission and preview-lane controls; preview-family `complete-result` does not inherit the legacy local soft runtime timeout.
 3. Content-state classification remains the text-eligibility authority.
 4. Explicit-file search eligibility must not be defined solely by the generic candidate-byte hardgap constant.
 5. Global cap ownership remains in the shared guardrail registry and the application shell.

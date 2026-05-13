@@ -29,6 +29,19 @@
 export const SEARCH_FAMILY_REGEX_INLINE_EXECUTION_BUDGET_MS = 12_000;
 
 /**
+ * Family-owned preview-lane soft runtime budget for search-family bounded traversal execution.
+ *
+ * @remarks
+ * Broad-root enterprise code search often reaches a valid preview-first lane only after the
+ * parameter-aware preflight has already filtered the workload into relevant TypeScript or TSX
+ * subtrees. The previous 3,000-millisecond preview execution budget still forced many of those
+ * valid workloads into avoidable early-stop churn. This family-level override raises the bounded
+ * preview execution lane to 4,500 milliseconds without weakening the deeper completion/runtime
+ * safeguard or the global response fuse.
+ */
+export const SEARCH_FAMILY_PREVIEW_EXECUTION_SOFT_TIME_BUDGET_MS = 4_500;
+
+/**
  * Family-owned inline execution budget override for fixed-string search.
  *
  * @remarks

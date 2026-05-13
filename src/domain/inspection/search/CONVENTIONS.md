@@ -244,6 +244,7 @@ The family-owned threshold module is [`search-family-thresholds.ts`](./search-fa
 
 | Value | Regex | Fixed string | Why |
 |---|---:|---:|---|
+| Preview execution soft runtime budget | `4,500 ms` | `4,500 ms` | Broad-root enterprise code search that is already narrowed by include globs should still deliver a meaningful bounded preview slice instead of tripping the older `3,000 ms` wall before the family can surface useful continuation state. |
 | Inline execution budget override | `12,000 ms` | `14,000 ms` | Moderate recursive code-search workloads should stay inline more often when the projected result surface is still compact. Fixed-string gets a slightly larger inline budget because literal search is narrower and cheaper. |
 | Estimated per-candidate-file cost | `90 ms` | `60 ms` | The previous values were too pessimistic for enterprise code-search workloads and caused premature preview-first routing. Fixed-string remains cheaper than regex because exact matching is operationally narrower. |
 
@@ -263,6 +264,8 @@ Fixed-string has:
 - and a somewhat higher chance that a preview slice is already enough.
 
 The values therefore must differ.
+
+The same family contract also draws one hard boundary: the `4,500 ms` calibration belongs to bounded preview execution only. Once the caller explicitly resumes with `resumeMode = 'complete-result'`, the preview-family completion branch must not inherit the legacy five-second local soft runtime timeout. The caller-visible completion ceiling is the global fuse.
 
 ---
 

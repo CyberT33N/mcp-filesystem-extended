@@ -11,6 +11,13 @@ const loggerTestState = vi.hoisted(() => ({
   writeFileSync: vi.fn(),
 }));
 
+vi.mock("os", () => ({
+  default: {
+    tmpdir: vi.fn(() => "C:/diagnostics-temp"),
+  },
+  tmpdir: vi.fn(() => "C:/diagnostics-temp"),
+}));
+
 vi.mock("pino", () => {
   const mockedPino = Object.assign(loggerTestState.pinoFactory, {
     destination: loggerTestState.destination,
@@ -57,9 +64,12 @@ describe("logger", () => {
     loggerTestState.existsSync.mockReturnValue(false);
 
     const loggerModule = await import("@infrastructure/logging/logger");
-    const projectRootPath = path.resolve(process.cwd());
-    const logsDirectoryPath = path.join(projectRootPath, "logs");
-    const logFilePath = path.join(logsDirectoryPath, "log.txt");
+    const logsDirectoryPath = path.join(
+      "C:/diagnostics-temp",
+      "mcp-filesystem-extended",
+      "diagnostics",
+    );
+    const logFilePath = path.join(logsDirectoryPath, "mcp-filesystem-extended-logs.txt");
 
     loggerModule.initializeLogger();
 
@@ -73,6 +83,8 @@ describe("logger", () => {
       dest: logFilePath,
       sync: false,
     });
+    expect(loggerModule.DIAGNOSTIC_LOG_DIRECTORY_PATH).toBe(logsDirectoryPath);
+    expect(loggerModule.DIAGNOSTIC_LOG_FILE_PATH).toBe(logFilePath);
     expect(loggerModule.createModuleLogger("filesystem")).toEqual({
       bindings: { module: "filesystem" },
     });
@@ -93,7 +105,9 @@ describe("logger", () => {
     expect(loggerTestState.destination).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        dest: expect.stringContaining(path.join("logs", "log.txt")),
+        dest: expect.stringContaining(
+          path.join("mcp-filesystem-extended", "diagnostics", "mcp-filesystem-extended-logs.txt"),
+        ),
         sync: false,
       }),
     );

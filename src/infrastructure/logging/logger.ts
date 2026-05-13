@@ -1,20 +1,49 @@
 import pino from "pino";
+import os from "os";
 import path from "path";
 import fs from "fs";
 
-const projectRoot = path.resolve(process.cwd());
-const logsDir = path.join(projectRoot, "logs");
+const DIAGNOSTIC_LOG_ROOT_DIRECTORY_NAME = "mcp-filesystem-extended";
+const DIAGNOSTIC_LOG_DIRECTORY_NAME = "diagnostics";
+const DIAGNOSTIC_LOG_FILE_NAME = "mcp-filesystem-extended-logs.txt";
 
-// Ensure logs directory exists synchronously before creating the logger
+/**
+ * Stable root directory for cross-platform diagnostics log output.
+ *
+ * @remarks
+ * This path is intentionally derived from `os.tmpdir()` instead of `process.cwd()` so the active
+ * MCP server process always writes into one deterministic per-machine temporary diagnostics area
+ * regardless of which working directory launched the server.
+ */
+export const DIAGNOSTIC_LOG_ROOT_PATH = path.join(
+  os.tmpdir(),
+  DIAGNOSTIC_LOG_ROOT_DIRECTORY_NAME,
+);
+
+/**
+ * Stable diagnostics log directory shared by all runtime logger instances on the same machine.
+ */
+export const DIAGNOSTIC_LOG_DIRECTORY_PATH = path.join(
+  DIAGNOSTIC_LOG_ROOT_PATH,
+  DIAGNOSTIC_LOG_DIRECTORY_NAME,
+);
+
+/**
+ * Stable diagnostics log file path used by the MCP server runtime.
+ */
+export const DIAGNOSTIC_LOG_FILE_PATH = path.join(
+  DIAGNOSTIC_LOG_DIRECTORY_PATH,
+  DIAGNOSTIC_LOG_FILE_NAME,
+);
+
+// Ensure the diagnostics directory exists synchronously before creating the logger.
 try {
-  if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
+  if (!fs.existsSync(DIAGNOSTIC_LOG_DIRECTORY_PATH)) {
+    fs.mkdirSync(DIAGNOSTIC_LOG_DIRECTORY_PATH, { recursive: true });
   }
 } catch {
-  // If log directory cannot be created, fallback to stdout
+  // If the diagnostics directory cannot be created, fallback to stdout.
 }
-
-const logFilePath = path.join(logsDir, "log.txt");
 
 /**
  * Truncates the active log file at startup so each server process begins with a clean log surface.
@@ -25,17 +54,17 @@ const logFilePath = path.join(logsDir, "log.txt");
  */
 function truncateLogFileOnStartup(): void {
   try {
-    fs.writeFileSync(logFilePath, "", { flag: "w" });
+    fs.writeFileSync(DIAGNOSTIC_LOG_FILE_PATH, "", { flag: "w" });
   } catch {
     // Silently ignore — log rotation failure must never block server startup.
   }
 }
 
-truncateLogFileOnStartup();
+let logFileInitialized = false;
 
 const destination = (() => {
   try {
-    return pino.destination({ dest: logFilePath, sync: false });
+    return pino.destination({ dest: DIAGNOSTIC_LOG_FILE_PATH, sync: false });
   } catch {
     // Fallback to stdout if destination cannot be created
     return pino.destination(1);
@@ -65,6 +94,11 @@ export default logger;
  * @returns Nothing. The call exists to make logger bootstrap explicit at the application entrypoint.
  */
 export function initializeLogger(): void {
+  if (!logFileInitialized) {
+    truncateLogFileOnStartup();
+    logFileInitialized = true;
+  }
+
   void logger;
 }
 

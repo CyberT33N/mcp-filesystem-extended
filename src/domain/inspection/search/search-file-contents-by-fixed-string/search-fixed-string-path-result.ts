@@ -14,15 +14,14 @@ import {
 } from "@domain/shared/guardrails/traversal-workload-admission";
 import {
   assertTraversalRuntimeBudget,
+  COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
   createTraversalRuntimeBudgetState,
   isTraversalRuntimeBudgetExceededError,
   recordTraversalDirectoryVisit,
   recordTraversalEntryVisit,
 } from "@domain/shared/guardrails/traversal-runtime-budget";
-import {
-  shouldExcludeTraversalScopePath,
-  shouldTraverseTraversalScopeDirectoryPath,
-} from "@domain/shared/guardrails/traversal-scope-policy";
+import { INSPECTION_RESUME_MODES } from "@domain/shared/resume/inspection-resume-contract";
+import { resolveTraversalScopeEntryPolicy } from "@domain/shared/guardrails/traversal-scope-policy";
 import {
   cloneInspectionResumeTraversalFrames,
   commitInspectionResumeTraversalEntry,
@@ -44,8 +43,10 @@ import {
 import {
   SEARCH_FAMILY_FIXED_STRING_ESTIMATED_PER_CANDIDATE_FILE_COST_MS,
   SEARCH_FAMILY_FIXED_STRING_INLINE_EXECUTION_BUDGET_MS,
+  SEARCH_FAMILY_PREVIEW_EXECUTION_SOFT_TIME_BUDGET_MS,
 } from "../search-family-thresholds";
 import {
+  createSearchCompletionContinuationState,
   createSearchExecutionRuntimeBudgetState,
   createSearchMaxResultsLimitReachedState,
   createSearchPreviewContinuationState,
@@ -99,6 +100,9 @@ export interface SearchFixedStringRootContinuationState {
 
 interface FixedStringNativeBatchEntry {
   candidateEntry: FilesystemPreflightEntry;
+  candidateRelativePath: string;
+  entryIndexBefore: number;
+  entryIndexAfter: number;
 }
 
 interface FixedStringNativeBatchSearchResult {
@@ -106,6 +110,8 @@ interface FixedStringNativeBatchSearchResult {
   totalMatches: number;
   truncated: boolean;
   stopState: SearchStopState;
+  activeBatchEntryIndex: number | null;
+  activeBatchEntryMatchOffset: number;
 }
 
 function cloneSearchFixedStringTraversalFrames(
@@ -116,6 +122,17 @@ function cloneSearchFixedStringTraversalFrames(
 
 function createInitialSearchFixedStringTraversalFrames(): SearchFixedStringTraversalFrame[] {
   return [{ directoryRelativePath: "", nextEntryIndex: 0 }];
+}
+
+function normalizeBatchCandidatePath(candidatePath: string): string {
+  return candidatePath.replaceAll("\\", "/").toLowerCase();
+}
+
+function sumFixedStringNativeBatchBytes(batchEntries: FixedStringNativeBatchEntry[]): number {
+  return batchEntries.reduce(
+    (totalBytes, batchEntry) => totalBytes + batchEntry.candidateEntry.size,
+    0,
+  );
 }
 
 function matchesPreviewLaneFilePatterns(
@@ -141,6 +158,17 @@ function matchesPreviewLaneFilePatterns(
 
     return minimatch(fileName, normalizedFilePattern, { dot: true, nocase: true });
   });
+}
+
+function createFixedStringTraversalPreflightWorkloadPolicy(
+  filePatterns: string[],
+) {
+  return {
+    shouldCountFileEntryTowardBudget: (
+      candidateRelativePath: string,
+      entry: import("fs").Dirent<string>,
+    ): boolean => !entry.isFile() || matchesPreviewLaneFilePatterns(candidateRelativePath, filePatterns),
+  };
 }
 
 interface GetSearchFixedStringPathResultOptions {
@@ -172,6 +200,8 @@ async function collectFixedStringMatchesFromNativeBatch(
       matches: [],
       totalMatches: 0,
       truncated: maxAdditionalResults <= 0,
+      activeBatchEntryIndex: null,
+      activeBatchEntryMatchOffset: 0,
       stopState: maxAdditionalResults <= 0
         ? createSearchMaxResultsLimitReachedState(maxAdditionalResults)
         : createUnstoppedSearchState(),
@@ -210,6 +240,8 @@ async function collectFixedStringMatchesFromNativeBatch(
       matches: [],
       totalMatches: 0,
       truncated: false,
+      activeBatchEntryIndex: null,
+      activeBatchEntryMatchOffset: 0,
       stopState: createUnstoppedSearchState(),
     };
   }
@@ -217,6 +249,15 @@ async function collectFixedStringMatchesFromNativeBatch(
   const matches: FixedStringSearchMatch[] = [];
   let totalMatches = 0;
   let truncated = false;
+  let activeBatchEntryIndex: number | null = null;
+  let activeBatchEntryMatchOffset = 0;
+  const batchEntryIndexByPath = new Map<string, number>(
+    batchEntries.map((batchEntry, index) => [
+      normalizeBatchCandidatePath(batchEntry.candidateEntry.validPath),
+      index,
+    ]),
+  );
+  const emittedMatchCountsByBatchEntryIndex = new Map<number, number>();
   const matchedLines = executionResult.stdout
     .split(/\r?\n/u)
     .filter((outputLine) => outputLine.trim() !== "");
@@ -227,6 +268,10 @@ async function collectFixedStringMatchesFromNativeBatch(
     if (parsedLine === null) {
       continue;
     }
+
+    const parsedBatchEntryIndex = batchEntryIndexByPath.get(
+      normalizeBatchCandidatePath(parsedLine.file),
+    );
 
     for (const matchedText of collectFixedStringLineMatches(
       parsedLine.lineContent,
@@ -245,6 +290,17 @@ async function collectFixedStringMatchesFromNativeBatch(
         match: matchedText,
       });
 
+      if (parsedBatchEntryIndex !== undefined) {
+        const nextEmittedMatchCount =
+          (emittedMatchCountsByBatchEntryIndex.get(parsedBatchEntryIndex) ?? 0) + 1;
+        emittedMatchCountsByBatchEntryIndex.set(
+          parsedBatchEntryIndex,
+          nextEmittedMatchCount,
+        );
+        activeBatchEntryIndex = parsedBatchEntryIndex;
+        activeBatchEntryMatchOffset = nextEmittedMatchCount;
+      }
+
       if (matches.length >= maxAdditionalResults) {
         truncated = true;
         break;
@@ -260,6 +316,8 @@ async function collectFixedStringMatchesFromNativeBatch(
     matches,
     totalMatches,
     truncated,
+    activeBatchEntryIndex,
+    activeBatchEntryMatchOffset,
     stopState: truncated
       ? createSearchMaxResultsLimitReachedState(maxAdditionalResults)
       : createUnstoppedSearchState(),
@@ -304,6 +362,9 @@ export async function getSearchFixedStringPathResult(
     includeExcludedGlobs,
     respectGitIgnore,
     allowedDirectories,
+    ["file", "directory"],
+    true,
+    createFixedStringTraversalPreflightWorkloadPolicy(filePatterns),
   );
   const searchScopeEntry = traversalPreflightContext.rootEntry;
   const effectiveMaxResults = Math.min(maxResults, REGEX_SEARCH_MAX_RESULTS_HARD_CAP);
@@ -311,7 +372,7 @@ export async function getSearchFixedStringPathResult(
   const previewExecutionRuntimeBudgetLimits = {
     maxVisitedEntries: executionPolicy.traversalPreviewExecutionEntryBudget,
     maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
-    softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
+    softTimeBudgetMs: SEARCH_FAMILY_PREVIEW_EXECUTION_SOFT_TIME_BUDGET_MS,
   };
   const candidateWorkloadEvidence = searchScopeEntry.type === "directory"
     ? await collectTraversalCandidateWorkloadEvidence({
@@ -353,7 +414,10 @@ export async function getSearchFixedStringPathResult(
   });
   const previewFirstAdmissionActive =
     traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST;
-  const admissionAdjustedMaxResults = previewFirstAdmissionActive
+  const completeResultRequested =
+    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
+    && requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
+  const admissionAdjustedMaxResults = previewFirstAdmissionActive && !completeResultRequested
     ? Math.max(
       1,
       Math.min(
@@ -364,16 +428,37 @@ export async function getSearchFixedStringPathResult(
       ),
     )
     : effectiveMaxResults;
-  const completeResultRequested =
-    traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
-    && requestedResumeMode === "complete-result";
-  const previewLanePlan = resolveTraversalPreviewLanePlan(
-    searchPath,
-    SEARCH_FIXED_STRING_TOOL_NAME,
-    traversalAdmissionDecision,
-    executionPolicy,
-    executionPolicy.fixedStringSyncCandidateBytesCap,
-  );
+  const previewLanePlan = completeResultRequested
+    ? {
+        candidateByteBudget: null,
+        guidanceText: null,
+        runtimeBudgetLimits: null,
+      }
+    : (() => {
+        const resolvedPreviewLanePlan = resolveTraversalPreviewLanePlan(
+          searchPath,
+          SEARCH_FIXED_STRING_TOOL_NAME,
+          traversalAdmissionDecision,
+          executionPolicy,
+          executionPolicy.fixedStringSyncCandidateBytesCap,
+        );
+
+        if (resolvedPreviewLanePlan.runtimeBudgetLimits === null) {
+          return resolvedPreviewLanePlan;
+        }
+
+        return {
+          ...resolvedPreviewLanePlan,
+          runtimeBudgetLimits: {
+            ...resolvedPreviewLanePlan.runtimeBudgetLimits,
+            softTimeBudgetMs: SEARCH_FAMILY_PREVIEW_EXECUTION_SOFT_TIME_BUDGET_MS,
+          },
+        };
+      })();
+  const effectiveTraversalRuntimeBudgetLimits = completeResultRequested
+    ? COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS
+    : previewLanePlan.runtimeBudgetLimits ?? undefined;
+  const useBatchedNativeExecutionPath = !previewFirstAdmissionActive || completeResultRequested;
 
   if (
     traversalAdmissionDecision.outcome
@@ -410,6 +495,7 @@ export async function getSearchFixedStringPathResult(
       executionPolicy,
       aggregateBudgetState,
       false,
+      true,
       true,
       admissionAdjustedMaxResults,
       activeFileMatchOffset,
@@ -473,7 +559,9 @@ export async function getSearchFixedStringPathResult(
     return true;
   }
 
-  async function flushPendingNativeBatch(): Promise<void> {
+  async function flushPendingNativeBatch(
+    currentTraversalFrame?: SearchFixedStringTraversalFrame,
+  ): Promise<void> {
     if (pendingNativeBatch.length === 0 || searchAborted) {
       return;
     }
@@ -487,11 +575,34 @@ export async function getSearchFixedStringPathResult(
       admissionAdjustedMaxResults - results.length,
     );
 
-    filesSearched += batchEntries.length;
+    const processedBatchEntryCount = batchSearchResult.truncated
+      ? Math.max(0, (batchSearchResult.activeBatchEntryIndex ?? -1) + 1)
+      : batchEntries.length;
+
+    filesSearched += processedBatchEntryCount;
     matchesFound += batchSearchResult.totalMatches;
     results.push(...batchSearchResult.matches);
 
     if (batchSearchResult.truncated) {
+      if (
+        completeResultRequested
+        && currentTraversalFrame !== undefined
+        && batchSearchResult.activeBatchEntryIndex !== null
+      ) {
+        const activeBatchEntry = batchEntries[batchSearchResult.activeBatchEntryIndex];
+
+        if (activeBatchEntry !== undefined) {
+          const unprocessedBatchEntries = batchEntries.slice(processedBatchEntryCount);
+          const unprocessedBatchBytes = sumFixedStringNativeBatchBytes(unprocessedBatchEntries);
+
+          totalBytesScanned -= unprocessedBatchBytes;
+          aggregateBudgetState.totalCandidateBytesScanned -= unprocessedBatchBytes;
+          currentTraversalFrame.nextEntryIndex = activeBatchEntry.entryIndexAfter;
+          activeFileRelativePath = activeBatchEntry.candidateRelativePath;
+          activeFileMatchOffset = batchSearchResult.activeBatchEntryMatchOffset;
+        }
+      }
+
       searchAborted = true;
       searchStopState = batchSearchResult.stopState;
     }
@@ -514,6 +625,7 @@ export async function getSearchFixedStringPathResult(
       aggregateBudgetState,
       activeFileRelativePath !== "",
       false,
+      !completeResultRequested,
       admissionAdjustedMaxResults,
       activeFileMatchOffset,
       totalBytesScanned,
@@ -556,7 +668,7 @@ export async function getSearchFixedStringPathResult(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
-          previewLanePlan.runtimeBudgetLimits ?? undefined,
+          effectiveTraversalRuntimeBudgetLimits,
         );
       } catch (error) {
         if (markTraversalBudgetExceeded(error)) {
@@ -586,7 +698,7 @@ export async function getSearchFixedStringPathResult(
           traversalRuntimeBudgetState,
           Date.now(),
           traversalNarrowingGuidance,
-          previewLanePlan.runtimeBudgetLimits ?? undefined,
+          effectiveTraversalRuntimeBudgetLimits,
         );
       } catch (error) {
         if (markTraversalBudgetExceeded(error)) {
@@ -606,18 +718,22 @@ export async function getSearchFixedStringPathResult(
         ? entry.name
         : path.join(currentTraversalFrame.directoryRelativePath, entry.name);
       const relativePath = rawRelativePath.split(path.sep).join("/");
-      const shouldTraverseExcludedDirectory = entry.isDirectory()
-        && shouldTraverseTraversalScopeDirectoryPath(
-          relativePath,
-          traversalScopePolicyResolution,
-        );
+      const entryPolicy = await resolveTraversalScopeEntryPolicy(
+        relativePath,
+        entry.isDirectory(),
+        traversalScopePolicyResolution,
+      );
 
-      if (
-        shouldExcludeTraversalScopePath(relativePath, traversalScopePolicyResolution)
-        && !shouldTraverseExcludedDirectory
-      ) {
+      if (entryPolicy.excluded) {
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
         continue;
+      }
+
+      if (entry.isFile()) {
+        if (!matchesPreviewLaneFilePatterns(relativePath, filePatterns)) {
+          commitInspectionResumeTraversalEntry(currentTraversalFrame);
+          continue;
+        }
       }
 
       const fullPath = path.join(currentPath, entry.name);
@@ -631,13 +747,24 @@ export async function getSearchFixedStringPathResult(
       }
 
       if (candidateEntry.type === "directory") {
+        if (completeResultRequested && pendingNativeBatch.length > 0) {
+          await flushPendingNativeBatch(currentTraversalFrame);
+
+          if (searchAborted) {
+            break;
+          }
+        }
+
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
-        traversalFrames.push({
-          directoryRelativePath: rawRelativePath,
-          nextEntryIndex: 0,
-        });
-        descendedIntoChildDirectory = true;
-        break;
+        if (entryPolicy.shouldTraverse) {
+          traversalFrames.push({
+            directoryRelativePath: rawRelativePath,
+            nextEntryIndex: 0,
+          });
+          descendedIntoChildDirectory = true;
+          break;
+        }
+        continue;
       }
 
       if (candidateEntry.type !== "file") {
@@ -666,12 +793,7 @@ export async function getSearchFixedStringPathResult(
         break;
       }
 
-      if (!previewFirstAdmissionActive) {
-        if (!matchesPreviewLaneFilePatterns(relativePath, filePatterns)) {
-          commitInspectionResumeTraversalEntry(currentTraversalFrame);
-          continue;
-        }
-
+      if (useBatchedNativeExecutionPath) {
         const nextTotalBytesScanned = totalBytesScanned + candidateEntry.size;
         const nextAggregateBytesScanned = aggregateBudgetState.totalCandidateBytesScanned + candidateEntry.size;
 
@@ -701,7 +823,7 @@ export async function getSearchFixedStringPathResult(
         }
 
         if (searchCapability.requiresDecodedTextFallback) {
-          await flushPendingNativeBatch();
+          await flushPendingNativeBatch(currentTraversalFrame);
 
           const fileSearchResult = await collectFixedStringMatchesFromFileEntry(
             candidateEntry,
@@ -713,6 +835,7 @@ export async function getSearchFixedStringPathResult(
             aggregateBudgetState,
             false,
             false,
+            !completeResultRequested,
             admissionAdjustedMaxResults - results.length,
             0,
             totalBytesScanned - candidateEntry.size,
@@ -729,6 +852,10 @@ export async function getSearchFixedStringPathResult(
           if (fileSearchResult.truncated) {
             searchAborted = true;
             searchStopState = fileSearchResult.stopState;
+            if (completeResultRequested) {
+              activeFileRelativePath = relativePath;
+              activeFileMatchOffset = fileSearchResult.matches.length;
+            }
             commitInspectionResumeTraversalEntry(currentTraversalFrame);
             break;
           }
@@ -739,11 +866,14 @@ export async function getSearchFixedStringPathResult(
 
         pendingNativeBatch.push({
           candidateEntry,
+          candidateRelativePath: relativePath,
+          entryIndexBefore: currentTraversalFrame.nextEntryIndex,
+          entryIndexAfter: currentTraversalFrame.nextEntryIndex + 1,
         });
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
 
         if (pendingNativeBatch.length >= SEARCH_FIXED_STRING_NATIVE_INLINE_BATCH_SIZE) {
-          await flushPendingNativeBatch();
+          await flushPendingNativeBatch(currentTraversalFrame);
 
           if (searchAborted) {
             break;
@@ -763,6 +893,7 @@ export async function getSearchFixedStringPathResult(
         aggregateBudgetState,
         true,
         false,
+        true,
         admissionAdjustedMaxResults - results.length,
         0,
         totalBytesScanned,
@@ -788,18 +919,27 @@ export async function getSearchFixedStringPathResult(
       commitInspectionResumeTraversalEntry(currentTraversalFrame);
     }
 
+    if (completeResultRequested && pendingNativeBatch.length > 0 && !searchAborted) {
+      await flushPendingNativeBatch(currentTraversalFrame);
+    }
+
+    if (searchAborted) {
+      break;
+    }
+
     if (!descendedIntoChildDirectory && currentTraversalFrame.nextEntryIndex >= entries.length) {
       traversalFrames.pop();
     }
   }
 
-  if (!previewFirstAdmissionActive && !searchAborted) {
+  if (useBatchedNativeExecutionPath && !searchAborted && pendingNativeBatch.length > 0) {
     await flushPendingNativeBatch();
   }
 
+  const hasRemainingTraversalWork =
+    traversalFrames.length > 0 || activeFileRelativePath !== null;
   const nextContinuationState = previewFirstAdmissionActive
-    && !completeResultRequested
-    && (traversalFrames.length > 0 || activeFileRelativePath !== null)
+    && hasRemainingTraversalWork
       ? {
           traversalFrames: cloneSearchFixedStringTraversalFrames(traversalFrames),
           activeFileRelativePath,
@@ -808,11 +948,14 @@ export async function getSearchFixedStringPathResult(
       : null;
 
   const rootStopState = nextContinuationState !== null
-    && (
-      searchStopState.stopReason === null
-      || searchStopState.stopReason === SEARCH_STOP_REASON_LITERALS.MAX_RESULTS_LIMIT_REACHED
-    )
-    ? createSearchPreviewContinuationState()
+    ? completeResultRequested
+      ? createSearchCompletionContinuationState()
+      : (
+          searchStopState.stopReason === null
+          || searchStopState.stopReason === SEARCH_STOP_REASON_LITERALS.MAX_RESULTS_LIMIT_REACHED
+        )
+        ? createSearchPreviewContinuationState()
+        : searchStopState
     : searchStopState;
 
   return {
