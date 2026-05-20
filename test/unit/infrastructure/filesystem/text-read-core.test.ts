@@ -141,4 +141,9 @@ describe("text_read_core", () => {
   it("formats absolute line numbers for emitted text surfaces", () => {
     expect(formatLineNumberedTextContent("alpha\nbeta", 4)).toBe("4: alpha\n5: beta");
   });
+
+  it("does not invent a phantom EOF line when the decoded content ends with a newline", () => {
+    expect(formatLineNumberedTextContent("alpha\nbeta\n", 1)).toBe("1: alpha\n2: beta");
+    expect(formatLineNumberedTextContent("", 1)).toBe("");
+  });
 });

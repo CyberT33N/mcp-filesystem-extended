@@ -363,6 +363,7 @@ const ReadFileContentCommonResultSchema = z.object({
   content: z.string(),
   totalFileBytes: z.number().int().min(0),
   returnedByteCount: z.number().int().min(0),
+  endsWithNewline: z.boolean(),
   hasMore: z.boolean(),
 });
 
@@ -375,7 +376,7 @@ const ReadFileContentLineRangeResultSchema = ReadFileContentCommonResultSchema.e
   mode: z.literal("line_range"),
   startLine: z.number().int().min(1),
   endLine: z.number().int().min(1),
-  returnedLineCount: z.number().int().min(0),
+  returnedLineCount: z.number().int().min(1),
   nextLine: z.number().int().min(1).nullable(),
 });
 
@@ -414,8 +415,8 @@ export const ReadFileContentResultSchema = ReadFileContentCommonResultSchema.ext
   mode: z.enum(["full", "line_range", "byte_range", "chunk_cursor"]),
   encoding: z.enum(["utf16le", "utf8"]).optional(),
   startLine: z.number().int().min(1).optional(),
-  endLine: z.number().int().min(0).optional(),
-  returnedLineCount: z.number().int().min(0).optional(),
+  endLine: z.number().int().min(1).optional(),
+  returnedLineCount: z.number().int().min(1).optional(),
   nextLine: z.number().int().min(1).nullable().optional(),
   startByte: z.number().int().min(0).optional(),
   endByteExclusive: z.number().int().min(0).optional(),

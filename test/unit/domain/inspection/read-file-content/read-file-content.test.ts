@@ -9,6 +9,7 @@ const {
   mockedReadFile,
   mockedReadFileContentByteRange,
   mockedReadFileContentChunkCursor,
+  mockedReadFileEndsWithNewline,
   mockedReadFileContentLineRange,
   mockedResolveSearchExecutionPolicy,
 } = vi.hoisted(() => ({
@@ -20,6 +21,7 @@ const {
   mockedReadFile: vi.fn(),
   mockedReadFileContentByteRange: vi.fn(),
   mockedReadFileContentChunkCursor: vi.fn(),
+  mockedReadFileEndsWithNewline: vi.fn(),
   mockedReadFileContentLineRange: vi.fn(),
   mockedResolveSearchExecutionPolicy: vi.fn(),
 }));
@@ -50,6 +52,7 @@ vi.mock("@infrastructure/runtime/io-capability-detector", () => ({
 vi.mock("@infrastructure/filesystem/streaming-file-content-reader", () => ({
   readFileContentByteRange: mockedReadFileContentByteRange,
   readFileContentChunkCursor: mockedReadFileContentChunkCursor,
+  readFileEndsWithNewline: mockedReadFileEndsWithNewline,
   readFileContentLineRange: mockedReadFileContentLineRange,
 }));
 
@@ -114,6 +117,7 @@ describe("read_file_content", () => {
       TEST_SEARCH_EXECUTION_POLICY,
     );
     mockedReadFile.mockResolvedValue(Buffer.from("hello world!\n"));
+    mockedReadFileEndsWithNewline.mockResolvedValue(true);
     mockedReadFileContentLineRange.mockResolvedValue({
       content: "line one\nline two\n",
       endLine: 2,
@@ -212,6 +216,7 @@ describe("read_file_content", () => {
     expect(result).toEqual({
       content: "hello world!\n",
       encoding: "utf8",
+      endsWithNewline: true,
       hasMore: false,
       mode: "full",
       path: "docs/notes.txt",
@@ -242,6 +247,7 @@ describe("read_file_content", () => {
     expect(result).toEqual({
       content: "hello world!",
       endByteExclusive: 12,
+      endsWithNewline: true,
       hasMore: true,
       mode: "byte_range",
       nextByteOffset: 12,
@@ -273,6 +279,7 @@ describe("read_file_content", () => {
     expect(output).toContain("mode: line_range");
     expect(output).toContain("returnedLineCount: 2");
     expect(output).toContain("nextLine: 3");
+    expect(output).toContain("endsWithNewline: true");
     expect(output).toContain("1: line one");
   });
 
@@ -297,6 +304,7 @@ describe("read_file_content", () => {
     expect(output).toContain("mode: chunk_cursor");
     expect(output).toContain("cursor: cursor-1");
     expect(output).toContain("nextCursor: cursor-2");
+    expect(output).toContain("endsWithNewline: true");
     expect(mockedAssertActualTextBudget).toHaveBeenCalledWith(
       READ_FILE_CONTENT_TOOL_NAME,
       expect.any(Number),

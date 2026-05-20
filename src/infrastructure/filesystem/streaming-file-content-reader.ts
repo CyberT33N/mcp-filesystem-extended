@@ -253,6 +253,72 @@ function assertEncodingAlignedByteWindow(
   }
 }
 
+function createStartLineOutOfRangeMessage(startLine: number, totalLines: number): string {
+  if (totalLines === 0) {
+    return `Requested startLine ${startLine} is outside the file because the file has 0 addressable lines. Use \`full\` mode to inspect an empty file instead.`;
+  }
+
+  return `Requested startLine ${startLine} is outside the file because the file has ${totalLines} addressable lines. Retry with startLine between 1 and ${totalLines}.`;
+}
+
+function assertAddressableByteStart(
+  startByte: number,
+  totalFileBytes: number,
+  coordinateLabel: string,
+): void {
+  if (totalFileBytes === 0) {
+    throw new Error(
+      `Requested ${coordinateLabel} ${startByte} is outside the file because the file has 0 bytes and no addressable byte positions. Use \`full\` mode to inspect an empty file instead.`,
+    );
+  }
+
+  if (startByte >= totalFileBytes) {
+    throw new Error(
+      `Requested ${coordinateLabel} ${startByte} is outside the file because totalFileBytes is ${totalFileBytes}. Retry with ${coordinateLabel} between 0 and ${totalFileBytes - 1}.`,
+    );
+  }
+}
+
+/**
+ * Determines whether a validated text file ends with a newline terminator.
+ *
+ * @param validPath - Absolute validated filesystem path that may be read safely.
+ * @param totalFileBytes - Total byte size of the validated target file.
+ * @param textEncoding - Shared text encoding resolved by the content-inspection classifier.
+ * @returns True when the decoded file surface ends with a newline terminator.
+ */
+export async function readFileEndsWithNewline(
+  validPath: string,
+  totalFileBytes: number,
+  textEncoding: InspectionContentTextEncoding,
+): Promise<boolean> {
+  if (totalFileBytes === 0) {
+    return false;
+  }
+
+  const fileHandle = await open(validPath, "r");
+
+  try {
+    if (textEncoding === "utf16le") {
+      if (totalFileBytes < 2) {
+        return false;
+      }
+
+      const buffer = Buffer.alloc(2);
+      const { bytesRead } = await fileHandle.read(buffer, 0, 2, totalFileBytes - 2);
+
+      return bytesRead === 2 && buffer[0] === 0x0a && buffer[1] === 0x00;
+    }
+
+    const buffer = Buffer.alloc(1);
+    const { bytesRead } = await fileHandle.read(buffer, 0, 1, totalFileBytes - 1);
+
+    return bytesRead === 1 && buffer[0] === 0x0a;
+  } finally {
+    await fileHandle.close();
+  }
+}
+
 async function readByteWindow(
   validPath: string,
   startByte: number,
@@ -328,11 +394,13 @@ export async function readFileContentLineRange(
     stream.destroy();
   }
 
+  if (returnedLines.length === 0) {
+    throw new Error(createStartLineOutOfRangeMessage(request.startLine, currentLine));
+  }
+
   const content = returnedLines.join("\n");
   const returnedLineCount = returnedLines.length;
-  const endLine = returnedLineCount === 0
-    ? request.startLine - 1
-    : request.startLine + returnedLineCount - 1;
+  const endLine = request.startLine + returnedLineCount - 1;
 
   return {
     content,
@@ -354,6 +422,8 @@ export async function readFileContentLineRange(
 export async function readFileContentByteRange(
   request: ReadFileContentByteRangeRequest,
 ): Promise<ReadFileContentByteRangeResult> {
+  assertAddressableByteStart(request.startByte, request.totalFileBytes, "startByte");
+
   const { content, returnedByteCount } = await readByteWindow(
     request.validPath,
     request.startByte,
@@ -383,6 +453,7 @@ export async function readFileContentChunkCursor(
   request: ReadFileContentChunkCursorRequest,
 ): Promise<ReadFileContentChunkCursorResult> {
   const startByte = parseReadFileContentCursor(request.cursor);
+  assertAddressableByteStart(startByte, request.totalFileBytes, "cursor byte offset");
   const { content, returnedByteCount } = await readByteWindow(
     request.validPath,
     startByte,

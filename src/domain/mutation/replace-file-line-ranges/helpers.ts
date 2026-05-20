@@ -6,6 +6,10 @@ import {
   normalizeLineEndings,
   wrapDiffInSafeFencedBlock,
 } from "@infrastructure/formatting/unified-diff";
+import {
+  splitTextIntoAddressableLines,
+  textEndsWithNewline,
+} from "@shared/text/canonical-line-model";
 
 /**
  * Configures how line-range replacements are applied before preview generation and optional writes.
@@ -35,9 +39,10 @@ export async function applyFileLineRangeReplacements(
 ): Promise<string> {
   // Read file content and normalize line endings
   const content = normalizeLineEndings(await fs.readFile(filePath, 'utf-8'));
+  const contentEndsWithNewline = textEndsWithNewline(content);
   
-  // Split content into lines
-  const contentLines = content.split('\n');
+  // Split content into addressable lines without inventing an EOF-only phantom line.
+  const contentLines = splitTextIntoAddressableLines(content);
   
   // Sort replacements by line number in descending order to avoid affecting line numbers of earlier updates
   const sortedReplacements = [...replacements].sort((a, b) => b.startLine - a.startLine);
@@ -95,7 +100,7 @@ export async function applyFileLineRangeReplacements(
     replacementResults.push(replacementResult);
   }
   
-  const modifiedContent = modifiedContentLines.join('\n');
+  const modifiedContent = modifiedContentLines.join('\n') + (contentEndsWithNewline ? '\n' : '');
   
   // Create unified diff
   const diff = createUnifiedDiff(content, modifiedContent, filePath, filePath);

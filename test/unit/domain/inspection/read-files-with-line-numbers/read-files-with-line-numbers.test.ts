@@ -43,9 +43,11 @@ describe("read_files_with_line_numbers", () => {
 
     expect(firstIndex).toBeGreaterThanOrEqual(0);
     expect(secondIndex).toBeGreaterThan(firstIndex);
+    expect(output).toContain("endsWithNewline: true");
     expect(output).toContain("1: alpha");
     expect(output).toContain("2: beta");
     expect(output).toContain("1: gamma");
+    expect(output).not.toContain("3: ");
     expect(output).toContain("\n---\n");
   });
 

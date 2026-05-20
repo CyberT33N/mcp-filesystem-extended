@@ -20,6 +20,12 @@ This guarantee is enforced at the infrastructure level:
 
 The visual appearance of indentation or whitespace in MCP client UIs is a rendering concern, not a transport concern. See `DESCRIPTION.md` for the troubleshooting section on MCP client rendering artifacts.
 
+The endpoint also separates **addressable lines** from the file's EOF newline terminator:
+
+- a trailing newline does **not** create an extra numbered phantom line,
+- the file-level EOF newline state is surfaced separately through `endsWithNewline`,
+- this keeps line coordinates stable for patching while still preserving terminal-newline truth for agents.
+
 ---
 
 ## Architectural Principle: Line-Number Annotation by Mode
@@ -40,6 +46,8 @@ The mode-specific decisions below reflect this architecture. Inline line-number 
 
 The infrastructure function `formatLineNumberedTextContent` from `@infrastructure/filesystem/text-read-core` is applied to the content string before the response is emitted. The annotation is purely additive — the original line content is not modified.
 
+If the file ends with a newline terminator, that EOF fact is reported via `endsWithNewline` rather than as an extra numbered empty line. EOF is a file-boundary property, not a separate addressable source line.
+
 ---
 
 ### `line_range` Mode — Inline Line Numbers: APPLIED (Absolute)
@@ -51,6 +59,8 @@ The infrastructure function `formatLineNumberedTextContent` from `@infrastructur
 If an agent reads lines 200–400 in Turn 3 and references a specific function in Turn 9, it needs to know that `export function processData` is at absolute line 215 — not at relative offset 15 within the returned window. Relative offsets require arithmetic reconstruction from `startLine + offset`, which is a hallucination risk. Absolute inline numbers eliminate this failure mode entirely.
 
 **Dual navigation model:** The metadata fields `startLine`, `endLine`, and `returnedLineCount` serve a macro-navigation role (locating the window within the file). Inline line numbers serve the micro-navigation role (addressing individual lines within the window). Both roles are architecturally distinct and must coexist.
+
+If the requested window reaches the physical last line of a newline-terminated file, the terminal newline is still represented through `endsWithNewline` instead of an extra numbered empty line.
 
 Format example for a `line_range` read starting at line 200:
 ```

@@ -11,15 +11,17 @@ import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execu
 import {
   assertSupportedTextReadSurface,
   formatLineNumberedTextContent,
-  resolveTextReadInspectionState,
   readValidatedFullTextFile,
+  resolveTextReadInspectionState,
 } from "@infrastructure/filesystem/text-read-core";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import {
   readFileContentByteRange,
   readFileContentChunkCursor,
+  readFileEndsWithNewline,
   readFileContentLineRange,
 } from "@infrastructure/filesystem/streaming-file-content-reader";
+import { textEndsWithNewline } from "@shared/text/canonical-line-model";
 
 import {
   type ReadFileContentArgs,
@@ -37,6 +39,7 @@ function formatReadFileContentResult(result: ReadFileContentResult): string {
         `encoding: ${result.encoding}`,
         `totalFileBytes: ${result.totalFileBytes}`,
         `returnedByteCount: ${result.returnedByteCount}`,
+        `endsWithNewline: ${result.endsWithNewline}`,
         `hasMore: ${result.hasMore}`,
         "content:",
         formatLineNumberedTextContent(result.content),
@@ -51,6 +54,7 @@ function formatReadFileContentResult(result: ReadFileContentResult): string {
         `nextLine: ${result.nextLine ?? "null"}`,
         `totalFileBytes: ${result.totalFileBytes}`,
         `returnedByteCount: ${result.returnedByteCount}`,
+        `endsWithNewline: ${result.endsWithNewline}`,
         `hasMore: ${result.hasMore}`,
         "content:",
         formatLineNumberedTextContent(result.content, result.startLine),
@@ -64,6 +68,7 @@ function formatReadFileContentResult(result: ReadFileContentResult): string {
         `nextByteOffset: ${result.nextByteOffset ?? "null"}`,
         `totalFileBytes: ${result.totalFileBytes}`,
         `returnedByteCount: ${result.returnedByteCount}`,
+        `endsWithNewline: ${result.endsWithNewline}`,
         `hasMore: ${result.hasMore}`,
         "content:",
         result.content,
@@ -78,6 +83,7 @@ function formatReadFileContentResult(result: ReadFileContentResult): string {
         `endByteExclusive: ${result.endByteExclusive}`,
         `totalFileBytes: ${result.totalFileBytes}`,
         `returnedByteCount: ${result.returnedByteCount}`,
+        `endsWithNewline: ${result.endsWithNewline}`,
         `hasMore: ${result.hasMore}`,
         "content:",
         result.content,
@@ -169,6 +175,7 @@ export async function getReadFileContentResult(
         path: entry.requestedPath,
         content,
         encoding: classification.resolvedTextEncoding,
+        endsWithNewline: textEndsWithNewline(content),
         totalFileBytes: entry.size,
         returnedByteCount,
         hasMore: false,
@@ -182,6 +189,11 @@ export async function getReadFileContentResult(
         textReadEntry,
         classification,
       );
+      const endsWithNewline = await readFileEndsWithNewline(
+        entry.validPath,
+        entry.size,
+        classification.resolvedTextEncoding,
+      );
 
       const lineRangeResult = await readFileContentLineRange({
         validPath: entry.validPath,
@@ -194,6 +206,7 @@ export async function getReadFileContentResult(
         mode: "line_range",
         path: entry.requestedPath,
         totalFileBytes: entry.size,
+        endsWithNewline,
         ...lineRangeResult,
       };
     }
@@ -204,6 +217,11 @@ export async function getReadFileContentResult(
         READ_FILE_CONTENT_TOOL_NAME,
         textReadEntry,
         classification,
+      );
+      const endsWithNewline = await readFileEndsWithNewline(
+        entry.validPath,
+        entry.size,
+        classification.resolvedTextEncoding,
       );
 
       const byteRangeResult = await readFileContentByteRange({
@@ -218,6 +236,7 @@ export async function getReadFileContentResult(
         mode: "byte_range",
         path: entry.requestedPath,
         totalFileBytes: entry.size,
+        endsWithNewline,
         ...byteRangeResult,
       };
     }
@@ -228,6 +247,11 @@ export async function getReadFileContentResult(
         READ_FILE_CONTENT_TOOL_NAME,
         textReadEntry,
         classification,
+      );
+      const endsWithNewline = await readFileEndsWithNewline(
+        entry.validPath,
+        entry.size,
+        classification.resolvedTextEncoding,
       );
 
       const chunkCursorResult = await readFileContentChunkCursor({
@@ -242,6 +266,7 @@ export async function getReadFileContentResult(
         mode: "chunk_cursor",
         path: entry.requestedPath,
         totalFileBytes: entry.size,
+        endsWithNewline,
         ...chunkCursorResult,
       };
     }

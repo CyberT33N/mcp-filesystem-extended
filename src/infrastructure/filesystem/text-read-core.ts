@@ -16,6 +16,7 @@ import {
   type InspectionContentSampleWindowPosition,
   type InspectionContentTextEncoding,
 } from "@domain/shared/search/inspection-content-state";
+import { splitTextIntoAddressableLines } from "@shared/text/canonical-line-model";
 
 /**
  * Shared metadata surface required by the internal text-read SSOT.
@@ -304,8 +305,7 @@ export async function readValidatedFullTextFile(
  * @returns The content surface with one prefixed absolute line number per line.
  */
 export function formatLineNumberedTextContent(content: string, startLine: number = 1): string {
-  return content
-    .split("\n")
+  return splitTextIntoAddressableLines(content)
     .map((line, index) => `${startLine + index}: ${line}`)
     .join("\n");
 }

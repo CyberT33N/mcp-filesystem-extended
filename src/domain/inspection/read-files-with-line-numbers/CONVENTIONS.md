@@ -17,6 +17,7 @@ This guarantee is enforced at the infrastructure level:
 - `readFile()` reads raw bytes from the filesystem without any modification.
 - The shared inspection pipeline resolves one supported text encoding before decoded text is emitted to the caller-facing surface.
 - `formatLineNumberedTextContent` applies only additive prefix annotation (`N: `) per line — the original line content is never modified.
+- terminal EOF newline state is surfaced separately via `endsWithNewline` instead of inventing an extra numbered empty line.
 
 The visual appearance of indentation or whitespace in MCP client UIs is a rendering concern, not a transport concern. See `DESCRIPTION.md` for the troubleshooting section on MCP client rendering artifacts.
 
@@ -36,9 +37,10 @@ Inline line numbers eliminate this failure mode by making every line self-descri
 
 ### Format
 
-Every line is prefixed with its one-based absolute file position followed by `: ` and then the original line content:
+Each file section first exposes `endsWithNewline: <boolean>` and then prefixes every addressable line with its one-based absolute file position followed by `: ` and then the original line content:
 
 ```
+endsWithNewline: true
 1: import fs from "fs/promises";
 2: import path from "path";
 3:
@@ -47,7 +49,7 @@ Every line is prefixed with its one-based absolute file position followed by `: 
 6: }
 ```
 
-The prefix is purely additive. The original line content — including all leading whitespace, tabs, and indentation — is reproduced exactly after the `N: ` prefix.
+The prefix is purely additive. The original line content — including all leading whitespace, tabs, and indentation — is reproduced exactly after the `N: ` prefix. A trailing newline does not create an extra numbered phantom line.
 
 ### Relationship to `read_file_content`
 
@@ -120,13 +122,13 @@ Multiple files may be included in a single request. Each file is processed in pa
 
 ```
 src/example/file-a.ts:
+endsWithNewline: true
 1: export const A = 1;
-2:
 
 ---
 src/example/file-b.ts:
+endsWithNewline: true
 1: export const B = 2;
-2:
 ```
 
 Per-file read failures are reported inline within the batch result as `path: Error - <message>` without aborting the entire batch. The response budget is validated both as a projected estimate before reads begin and as an actual measurement before the response is emitted.

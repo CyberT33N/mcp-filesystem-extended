@@ -118,6 +118,44 @@ describe("replace_file_line_ranges", () => {
     expect(preview).toContain("+  return items.join(' / ');");
   });
 
+  it("preserves the terminal newline when replacing interior addressable lines", async () => {
+    await writeFile(targetFilePath, "alpha\nbeta\n", "utf8");
+
+    await applyFileLineRangeReplacements(
+      targetFilePath,
+      [
+        {
+          startLine: 2,
+          endLine: 2,
+          replacementText: "gamma",
+        },
+      ],
+      false,
+      { preserveIndentation: false },
+    );
+
+    await expect(readFile(targetFilePath, "utf8")).resolves.toBe("alpha\ngamma\n");
+  });
+
+  it("rejects replacements that target the non-addressable EOF newline sentinel", async () => {
+    await writeFile(targetFilePath, "alpha\nbeta\n", "utf8");
+
+    await expect(
+      applyFileLineRangeReplacements(
+        targetFilePath,
+        [
+          {
+            startLine: 3,
+            endLine: 3,
+            replacementText: "gamma",
+          },
+        ],
+        true,
+        { preserveIndentation: false },
+      ),
+    ).rejects.toThrow("Invalid line range: 3-3 (file has 2 lines)");
+  });
+
   it("parses line-range replacement batches through the schema", () => {
     const parsed = ReplaceFileLineRangesArgsSchema.parse({
       files: [

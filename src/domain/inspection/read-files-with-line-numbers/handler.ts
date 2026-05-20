@@ -12,6 +12,7 @@ import {
   formatLineNumberedTextContent,
   readValidatedFullTextFile,
 } from "@infrastructure/filesystem/text-read-core";
+import { textEndsWithNewline } from "@shared/text/canonical-line-model";
 
 const READ_FILES_TOOL_NAME = "read_files_with_line_numbers";
 const PROJECTED_READ_RECOMMENDED_ACTION =
@@ -70,8 +71,9 @@ export async function handleReadFiles(filePaths: string[], allowedDirectories: s
           READ_FILES_TOOL_NAME,
         );
         const numberedContent = formatLineNumberedTextContent(content);
+        const endsWithNewline = textEndsWithNewline(content);
 
-        return `${entry.requestedPath}:\n${numberedContent}\n`;
+        return `${entry.requestedPath}:\nendsWithNewline: ${endsWithNewline}\n${numberedContent}\n`;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
 

@@ -16,13 +16,13 @@ This endpoint complements `read_files_with_line_numbers`, which is optimized for
 
 ### `full`
 
-Reads the complete file content as decoded text through the shared inspection encoding. Limited to files within the inline full-read ceiling. Returns content with **inline one-based absolute line-number prefixes** on every line.
+Reads the complete file content as decoded text through the shared inspection encoding. Limited to files within the inline full-read ceiling. Returns content with **inline one-based absolute line-number prefixes** on every addressable line and exposes the terminal EOF newline state separately via `endsWithNewline`.
 
 This mode is functionally equivalent to `read_files_with_line_numbers` for a single file and produces the same line-annotated output format. For batch reads, use `read_files_with_line_numbers` directly.
 
 ### `line_range`
 
-Reads a bounded window of lines using a one-based start line and a maximum line count. Returns content with **inline one-based absolute line-number prefixes** using file-absolute positions (not window-relative offsets). Continuation is supported via `nextLine`.
+Reads a bounded window of lines using a one-based start line and a maximum line count. Returns content with **inline one-based absolute line-number prefixes** using file-absolute positions (not window-relative offsets). Continuation is supported via `nextLine`, and the file-level terminal EOF newline state remains visible via `endsWithNewline`.
 
 ### `byte_range`
 
@@ -81,6 +81,15 @@ Those surfaces remain owned by shared architecture conventions because they are 
 The content field in all response modes reproduces the file content **100% verbatim and losslessly** after the shared inspection pipeline has resolved the supported text encoding. No transformation, trimming, whitespace normalization, or semantic rewriting is applied beyond that mandatory decoded-text projection.
 
 Line-number prefixes (where applied) are purely additive — they prepend `N: ` to each line without modifying the line content itself. The original characters, including all leading whitespace, tabs, and indentation, are preserved exactly as stored in the file.
+
+## EOF Newline Disclosure
+
+This endpoint distinguishes between:
+
+- **addressable lines** that can be targeted by line-based patch or replacement operations,
+- and the **terminal EOF newline** that may terminate the file after the last addressable line.
+
+A trailing newline therefore does **not** appear as an extra numbered empty line. Instead, the file-level truth is surfaced explicitly through `endsWithNewline`. This avoids phantom line coordinates while still preserving the information an agent needs for EOF-sensitive editing.
 
 ---
 

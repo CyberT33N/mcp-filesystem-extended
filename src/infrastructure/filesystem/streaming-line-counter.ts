@@ -87,9 +87,9 @@ async function countStreamedLines(
  * Counts total lines in one file without loading the full file into memory.
  *
  * @remarks
- * This helper preserves the existing `split("\n")` counting semantics, which
- * means a trailing newline still contributes one final empty line unless empty
- * lines are explicitly ignored.
+ * This helper preserves the server's canonical addressable-line semantics:
+ * newline-delimited records are counted, while a trailing newline terminator
+ * marks EOF without inventing an extra addressable empty line.
  *
  * @param filePath - Concrete file path whose total lines should be counted.
  * @param options - Optional blank-line and text-decoding settings.

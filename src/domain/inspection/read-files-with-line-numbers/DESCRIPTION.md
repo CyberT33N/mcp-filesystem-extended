@@ -18,10 +18,11 @@ For single-file reads with bounded access (line range, byte range, or cursor-bas
 
 ## Output Format
 
-Each file section begins with the file path on its own line, followed by the full line-numbered content, and ends with a newline:
+Each file section begins with the file path on its own line, then exposes `endsWithNewline: <boolean>`, followed by the full line-numbered content, and ends with a newline:
 
 ```
 src/example/file.ts:
+endsWithNewline: true
 1: import fs from "fs/promises";
 2:
 3: export function example(): void {
@@ -34,10 +35,12 @@ When multiple files are included, sections are separated by `\n---\n`:
 
 ```
 src/example/file-a.ts:
+endsWithNewline: true
 1: export const A = 1;
 
 ---
 src/example/file-b.ts:
+endsWithNewline: true
 1: export const B = 2;
 
 ```
@@ -49,6 +52,8 @@ src/example/file-b.ts:
 The content field for every file reproduces the file content **100% verbatim and losslessly** after the shared inspection pipeline has resolved the supported text encoding. No transformation, trimming, whitespace normalization, or semantic rewriting is applied beyond that mandatory decoded-text projection.
 
 Line-number prefixes are purely additive — they prepend `N: ` to each line without modifying the line content itself. The original characters, including all leading whitespace, tabs, and indentation, are preserved exactly as stored in the file.
+
+The terminal EOF newline is disclosed separately through `endsWithNewline` rather than by inventing an extra numbered empty line. This keeps file-boundary truth visible without creating non-addressable phantom patch coordinates.
 
 ---
 
