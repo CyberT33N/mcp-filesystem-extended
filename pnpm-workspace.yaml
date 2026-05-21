@@ -1,10 +1,15 @@
-packages:
-  - .
 
-allowedDeprecatedVersions: {}
-
+# `autoInstallPeers`
+# Einfach: Verhindert automatisches Nachinstallieren fehlender Peer-Dependencies.
+# Details: Peer-Entscheidungen muessen explizit im Manifest getroffen werden,
+# statt stillschweigend waehrend der Installation zu passieren.
 autoInstallPeers: false
 
+# `catalog`
+# Einfach: Zentraler Katalog freigegebener Versionsstaende fuer dieses Repo.
+# Details: Dieses Repository nutzt bewusst einen befuellten Catalog als
+# Freigabe-Surface, statt Versionsentscheidungen nur verteilt in `package.json`
+# zu halten.
 catalog:
   '@changesets/cli': ~2.29.6
   '@commitlint/cli': ~19.8.1
@@ -21,7 +26,7 @@ catalog:
   '@stylistic/eslint-plugin': ~5.7.1
   '@toon-format/toon': ^2.1.0
   '@types/lodash': ~4.17.17
-  '@types/node': ~22.15.17
+  '@types/node': ~25.8.0
   '@types/semver': 7.7.1
   '@typescript-eslint/utils': 8.58.0
   '@vitest/coverage-v8': ~3.2.4
@@ -47,9 +52,6 @@ catalog:
   eslint-plugin-playwright: ~2.2.2
   eslint-plugin-prefer-arrow: ~1.2.3
   eslint-plugin-promise: ~7.2.1
-  eslint-plugin-react: ~7.37.5
-  eslint-plugin-react-hooks: ~5.2.0
-  eslint-plugin-react-perf: ~3.3.3
   eslint-plugin-regexp: ~2.10.0
   eslint-plugin-security: ~3.0.1
   eslint-plugin-sonarjs: ~3.0.5
@@ -83,118 +85,286 @@ catalog:
   terser: 5.44.1
   ts-essentials: 10.1.1
   tsconfig-paths: ~4.2.0
-  tsup: ~8.5.0
+  tsdown: ~0.22.0
   tsx: ~4.19.4
   type-fest: ~4.41.0
-  typescript: ~5.8.3
+  typescript: ~6.0.3
   typescript-eslint: 8.58.0
   vite-tsconfig-paths: ~5.1.4
   vitest: ~3.2.4
   zod: ~4.1.5
   zod-to-json-schema: ^3.25.2
 
+# `catalogMode`
+# Einfach: Erzwingt, dass neue Dependencies nicht am Catalog vorbeigehen.
+# Details: `strict` macht auch im Single-Project-Repo den Catalog zur
+# Source of Truth fuer freigegebene Versionen.
 catalogMode: strict
 
-ci: true
-
+# `cleanupUnusedCatalogs`
+# Einfach: Raeumt ungenutzte Catalog-Eintraege auf.
+# Details: Das verhindert veraltete Freigabe-Leichen und haelt die zentrale
+# Versionsgovernance sauber.
 cleanupUnusedCatalogs: true
 
-dangerouslyAllowAllBuilds: false
+########################################
+# Supply-chain fortress posture
+########################################
 
-dedupePeerDependents: true
+# `minimumReleaseAge`
+# Einfach: Verzoegert die Aufnahme frisch veroeffentlichter Versionen.
+# Details: Fortress-Baseline ist 7 Tage, damit kompromittierte oder schnell
+# zurueckgezogene Releases nicht sofort im Repo landen.
+minimumReleaseAge: 10080
 
-disallowWorkspaceCycles: true
+# `minimumReleaseAgeIgnoreMissingTime`
+# Einfach: Schaltet fail-open fuer fehlende Publish-Zeitmetadaten aus.
+# Details: Wenn die Registry keinen `time`-Wert liefert, muss die Aufloesung
+# scheitern, statt die Schutzwirkung still zu verlieren.
+minimumReleaseAgeIgnoreMissingTime: false
 
-dlxCacheMaxAge: 1440
+# `minimumReleaseAgeStrict`
+# Einfach: Erzwingt einen harten Abbruch bei zu jungen Versionen.
+# Details: Ohne diese Einstellung koennte PNPM auf eine zu frische Version
+# zurueckfallen; das ist fuer Fortress-Governance unzulaessig.
+minimumReleaseAgeStrict: true
 
-enablePrePostScripts: false
+# `minimumReleaseAgeExclude`
+# Einfach: Definiert Ausnahmen vom Release-Age-Gate.
+# Details: Die Liste bleibt explizit leer, damit sichtbar ist, dass es keine
+# genehmigten Sofort-Ausnahmen fuer "heisse" Releases gibt.
+minimumReleaseAgeExclude: []
 
-engineStrict: true
+# `trustPolicy`
+# Einfach: Blockiert Versionen, deren Vertrauensniveau abgesunken ist.
+# Details: `no-downgrade` reduziert das Risiko, versehentlich ein weniger
+# vertrauenswuerdiges Nachfolge-Release zu akzeptieren.
+trustPolicy: no-downgrade
 
-gitBranchLockfile: false
+# `trustPolicyExclude`
+# Einfach: Definiert Ausnahmen von der Trust-Policy.
+# Details: Fortress-Default ist eine leere Liste; aktuell bleibt genau eine
+# reviewte Ausnahme fuer `semver@6.3.1`, weil `eslint-import-resolver-node`
+# ueber `resolve -> node-exports-info` diese transitive Version weiterhin erzwingt.
+# TODO: Im `eslint-plugin-enterprise` pruefen, wie der Resolver-Stack mittelfristig
+# ohne diese `semver@6.3.1`-Kette gestaltet werden kann. Sobald dort ein sauberer
+# Upstream-/Architekturpfad existiert, muss diese `trustPolicyExclude`-Ausnahme
+# wieder entfernt werden.
+trustPolicyExclude:
+  - 'semver@6.3.1'
 
-hoist: true
+# `blockExoticSubdeps`
+# Einfach: Verbietet Git- und Tarball-Quellen in transitiven Dependencies.
+# Details: Exotische Quellen duerfen nicht unkontrolliert ueber Subdependencies
+# in den aufgeloesten Graphen einsickern.
+blockExoticSubdeps: true
 
-hoistPattern:
-  - '*eslint*'
-  - '*babel*'
-
-ignoredBuiltDependencies:
-  - esbuild
-
-includeWorkspaceRoot: false
-
-linkWorkspacePackages: true
-
-managePackageManagerVersions: true
-
-mergeGitBranchLockfilesBranchPattern: null
-
-minimumReleaseAge: 1440
-
-modulesCacheMaxAge: 10080
-
-neverBuiltDependencies:
-  - fsevents
-
-nodeLinker: isolated
-
-nodeVersion: 25.8.0
-
-optimisticRepeatInstall: true
-
-overrides: {}
-
-packageExtensions: {}
-
-packageImportMethod: clone-or-copy
-
-packageManagerStrict: true
-
-packageManagerStrictVersion: true
-
-peerDependencyRules:
-  allowAny: []
-  allowedVersions:
-    '@typescript-eslint/utils@7>eslint': '9'
-  ignoreMissing: []
-
-preferFrozenLockfile: true
-
-preferWorkspacePackages: true
-
-publicHoistPattern: []
-
-registrySupportsTimeField: false
-
-requiredScripts:
-  - build
-  - test
-
-resolutionMode: time-based
-
-resolvePeersFromWorkspaceRoot: true
-
-savePrefix: ''
-
-saveWorkspaceProtocol: true
-
-shamefullyHoist: false
-
-sharedWorkspaceLockfile: true
-
-shellEmulator: true
-
+# `strictDepBuilds`
+# Einfach: Erzwingt explizite Entscheidungen fuer Dependency-Build-Skripte.
+# Details: Ein neues `postinstall` oder vergleichbares Skript darf nicht still
+# ausgefuehrt werden, sondern muss bewusst freigegeben werden.
 strictDepBuilds: true
 
-strictPeerDependencies: true
+# `allowBuilds`
+# Einfach: Definiert die explizite Allow-/Deny-Liste fuer Dependency-Builds.
+# Details: Fortress-Baseline bleibt fail-closed; freigegeben werden nur die
+# aktuell benoetigten Build-Skripte fuer den Build-/Test- und Resolver-Stack.
+allowBuilds:
+  # Required by tsdown, vite, vitest and tsx for platform-specific binaries.
+  esbuild: true
 
-useNodeVersion: 25.8.0
+  # Required by the eslint import resolver stack for native resolution support.
+  unrs-resolver: true
 
-verifyDepsBeforeRun: error
+# `dangerouslyAllowAllBuilds`
+# Einfach: Oeffnet blanket-weite Build-Skript-Ausfuehrung.
+# Details: In einer Fortress-Architektur bleibt dieser Wert immer `false`.
+dangerouslyAllowAllBuilds: false
 
-verifyStoreIntegrity: true
+# `strictSsl`
+# Einfach: Erzwingt TLS-Zertifikatspruefung fuer Registry-Zugriffe.
+# Details: Das ist die Mindesthaertung gegen MITM und fehlerhafte
+# Zertifikatsketten beim Download von Artefakten.
+strictSsl: true
 
+########################################
+# Toolchain enforcement
+########################################
+
+# `nodeVersion`
+# Einfach: Definiert die Engine-Baseline fuer Dependency-Pruefungen.
+# Details: Dieses Repo ist auf Node.js 26 ausgerichtet; der Patch-Stand bleibt
+# bewusst exakt statt als lockerer Bereich modelliert zu werden.
+nodeVersion: 26.2.0
+
+# `engineStrict`
+# Einfach: Macht Engine-Checks hart statt advisory.
+# Details: So koennen keine Dependencies eingefuehrt werden, die gegen die
+# freigegebene Runtime-Linie verstossen.
+engineStrict: true
+
+# `pmOnFail`
+# Einfach: Bricht ab, wenn die laufende pnpm-Version nicht exakt passt.
+# Details: Fortress-Haltung ist `error`, nicht `download`; die Toolchain muss
+# vorprovisioniert und freigegeben sein.
+pmOnFail: error
+
+# `runtimeOnFail`
+# Einfach: Bricht ab, wenn die deklarierte Runtime nicht verfuegbar ist.
+# Details: Auch hier gilt fail-closed statt automatischer Nachbeschaffung.
+runtimeOnFail: error
+
+########################################
+# Lockfile and resolution discipline
+########################################
+
+# `lockfile`
+# Einfach: Erzwingt die Verwendung eines Lockfiles.
+# Details: Ein Fortress-Repo arbeitet niemals ohne deterministischen Lockfile.
+lockfile: true
+
+# `preferFrozenLockfile`
+# Einfach: Bevorzugt headless, unveraenderte Installationen.
+# Details: CI und regulierte Workflows sollen nicht still resolven, wenn das
+# Lockfile bereits den gewuenschten Graphen beschreibt.
+preferFrozenLockfile: true
+
+# `lockfileIncludeTarballUrl`
+# Einfach: Speichert Tarball-Quellen direkt im Lockfile.
+# Details: Das verbessert Herkunftsnachvollziehbarkeit und Auditierbarkeit fuer
+# spaetere Review- und Incident-Analysen.
+lockfileIncludeTarballUrl: true
+
+# `resolutionMode`
+# Einfach: Waehlt die PNPM-Aufloesungsstrategie.
+# Details: `time-based` reduziert das Risiko von Subdependency-Hijacking, weil
+# transitive Updates zeitlich an Direct-Dependency-Releases gekoppelt bleiben.
+resolutionMode: time-based
+
+# `registrySupportsTimeField`
+# Einfach: Schaltet optimierte Zeitmetadaten nur fuer verifizierte Registries frei.
+# Details: Der Wert bleibt `false`, bis die verwendete Registry das benoetigte
+# `time`-Feld nachweislich sauber liefert.
+registrySupportsTimeField: false
+
+########################################
+# Dependency layout and anti-hoisting
+########################################
+
+# `nodeLinker`
+# Einfach: Waehlt das Installationsmodell fuer Node-Dependencies.
+# Details: `isolated` ist die strikteste allgemeine Default-Wahl fuer saubere
+# Dependency-Isolation und gegen Phantom-Imports.
+nodeLinker: isolated
+
+# `enableGlobalVirtualStore`
+# Einfach: Verhindert projektuebergreifende globale Virtual-Store-Nutzung.
+# Details: Eine Fortress-Policy vermeidet implizite Cross-Project-Sharing-Pfade
+# und die damit verbundene `NODE_PATH`-Komplexitaet.
+enableGlobalVirtualStore: false
+
+# `hoist`
+# Einfach: Schaltet Hidden-Hoisting global aus.
+# Details: Fortress-Baseline ist kein Hoisting, solange nicht das Gegenteil
+# durch harte Evidenz erzwungen wurde.
+hoist: false
+
+# `hoistPattern`
+# Einfach: Laesst standardmaessig keine Hoisting-Ausnahmen zu.
+# Details: Ein leeres Array ist die fail-closed Ausgangslage fuer spaetere,
+# minimalistische Ausnahmen.
+hoistPattern: []
+
+# `publicHoistPattern`
+# Einfach: Verhindert Root-sichtbares Hoisting fuer Applikationscode.
+# Details: So werden Phantom-Dependencies nicht in den sichtbaren Root-Pfad
+# exportiert.
+publicHoistPattern: []
+
+# `shamefullyHoist`
+# Einfach: Verhindert blanket-weites Public-Hoisting.
+# Details: Ein npm-/Yarn-Classic-aehnliches flaches Root-Layout ist fuer diese
+# Haertung ausdruecklich nicht gewuenscht.
+shamefullyHoist: false
+
+# `virtualStoreDir`
+# Einfach: Legt den projektlokalen Virtual-Store-Pfad fest.
+# Details: `.pnpm` verkuerzt Pfade und macht den Virtual-Store sichtbar und
+# bewusst kontrollierbar.
 virtualStoreDir: .pnpm
 
-virtualStoreDirMaxLength: 120
+# `virtualStoreDirMaxLength`
+# Einfach: Begrenzt die Laenge der Verzeichnisnamen im Virtual Store.
+# Details: `60` ist der konservative Windows-sichere Grenzwert aus der
+# Referenzhaltung.
+virtualStoreDirMaxLength: 60
+
+# `verifyStoreIntegrity`
+# Einfach: Prueft Store-Inhalte vor dem Verlinken.
+# Details: Veraenderte Dateien im Content-Addressable Store werden nicht still
+# uebernommen.
+verifyStoreIntegrity: true
+
+# `strictStorePkgContentCheck`
+# Einfach: Prueft, ob Name, Version und Inhalt im Store zusammenpassen.
+# Details: Das schuetzt gegen Registries, die identischen Inhalt unter
+# verschiedenen Paketidentitaeten liefern.
+strictStorePkgContentCheck: true
+
+########################################
+# Peer dependency governance
+########################################
+
+# `strictPeerDependencies`
+# Einfach: Macht Peer-Konflikte hart statt advisory.
+# Details: Das verhindert Laufzeitueberraschungen durch weiche Peer-Abweichungen.
+strictPeerDependencies: true
+
+# `peerDependencyRules`
+# Einfach: Haelt blanket-Ausnahmen fuer Peers geschlossen.
+# Details: Leere Listen bleiben fail-closed; die eine `allowedVersions`-Regel
+# unten ist eine gezielte Repo-Ausnahme und keine allgemeine Lockerung.
+peerDependencyRules:
+  allowAny: []
+
+  # `allowedVersions`
+  # Einfach: Dokumentiert eine gezielte, reviewte Peer-Kompatibilitaetsausnahme.
+  # Details: Diese Ausnahme ist repo-spezifisch und bleibt bewusst eng auf das
+  # konkrete `@typescript-eslint/utils -> eslint`-Paar begrenzt.
+  allowedVersions:
+    '@typescript-eslint/utils@7>eslint': '9'
+
+  # `ignoreMissing`
+  # Einfach: Haelt pauschale Missing-Peer-Ausnahmen geschlossen.
+  # Details: Ein leeres Array bedeutet, dass fehlende Peers nicht blanket-weise
+  # toleriert werden.
+  ignoreMissing: []
+
+# `ignoreCompatibilityDb`
+# Einfach: Deaktiviert implizite automatische Manifest-Patches aus der
+# Kompatibilitaetsdatenbank.
+# Details: Das erhoeht Auditierbarkeit, weil das Repo nicht stillschweigend von
+# externer Patch-Logik beeinflusst wird.
+ignoreCompatibilityDb: true
+
+# `updateNotifier`
+# Einfach: Deaktiviert automatische Update-Hinweise.
+# Details: Upgrades sollen im kontrollierten Governance-Prozess passieren und
+# nicht als spontane CLI-Nachricht im Alltag auftauchen.
+updateNotifier: false
+
+########################################
+# Script safety
+########################################
+
+# `enablePrePostScripts`
+# Einfach: Deaktiviert implizite `pre*`/`post*`-Hooks.
+# Details: Skriptverkettung soll explizit sein, nicht still im Hintergrund
+# passieren.
+enablePrePostScripts: false
+
+# `verifyDepsBeforeRun`
+# Einfach: Erzwingt aktuelle Dependencies vor `pnpm run` und `pnpm exec`.
+# Details: `error` verhindert, dass mit stale `node_modules` oder einem nicht
+# mehr passenden Installationszustand gearbeitet wird.
+verifyDepsBeforeRun: error

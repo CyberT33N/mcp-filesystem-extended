@@ -44,6 +44,6 @@ todo_window_mode_override: "ACTIVE_ONLY"
 
 ## Notes for Orchestrating Agent
 - This unit must be executed only after the planned runtime test coverage from Units 1-8 is materially in place.
-- Preserve the existing `build` script literal `tsup`; gate the lifecycle through package scripts instead of replacing the build tool itself.
+- Preserve the existing `build` script literal `tsdown`; gate the lifecycle through package scripts instead of replacing the build tool itself.
 - Do not use the existing [`test`](package.json:45) script as the build gate because it is watch-oriented and non-deterministic for a build lifecycle.
 

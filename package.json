@@ -40,7 +40,7 @@
   ],
   "scripts": {
     "prebuild": "pnpm test:build-gate",
-    "build": "tsup",
+    "build": "tsdown",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
     "test": "vitest",
@@ -115,9 +115,6 @@
     "eslint-plugin-playwright": "catalog:",
     "eslint-plugin-prefer-arrow": "catalog:",
     "eslint-plugin-promise": "catalog:",
-    "eslint-plugin-react": "catalog:",
-    "eslint-plugin-react-hooks": "catalog:",
-    "eslint-plugin-react-perf": "catalog:",
     "eslint-plugin-regexp": "catalog:",
     "eslint-plugin-security": "catalog:",
     "eslint-plugin-sonarjs": "catalog:",
@@ -138,23 +135,28 @@
     "safe-stable-stringify": "catalog:",
     "terser": "catalog:",
     "tsconfig-paths": "catalog:",
-    "tsup": "catalog:",
+    "tsdown": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
     "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:"
   },
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@11.2.2",
   "engines": {
-    "node": ">=25.8.0",
-    "pnpm": ">=10.0.0"
+    "node": "26.2.0",
+    "pnpm": "11.2.2"
   },
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "25.8.0",
-      "onFail": "download"
+      "version": "26.2.0",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.2.2",
+      "onFail": "error"
     }
   },
   "publishConfig": {

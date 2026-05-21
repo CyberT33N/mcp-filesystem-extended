@@ -91,7 +91,7 @@ total_units: 9
 - Preserve and extend existing tests instead of replacing them where a mirrored test surface already exists.
 - Keep the runtime unit-test tree in `test/unit/**`; use selective `test/fixtures/**` and `test/shared/utils/**` only when multiple tests truly share the same reusable data or assertion logic.
 - For schema-heavy endpoint folders, use a hybrid approach: runtime unit tests for project-owned handler logic and schema semantics tests for the exported Zod contracts; snapshots are not the primary unit-test regression tool.
-- Keep the package build tool binding `build: tsup` unchanged; enforce build gating through a deterministic package lifecycle test gate in Unit 9 instead of through a watch-mode test script.
+- Keep the package build tool binding `build: tsdown` unchanged; enforce build gating through a deterministic package lifecycle test gate in Unit 9 instead of through a watch-mode test script.
 
 ## Legend
 
