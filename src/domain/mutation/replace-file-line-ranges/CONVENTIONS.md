@@ -73,6 +73,10 @@ This preserves the intended coordinates for earlier ranges while later ranges ar
 - When indentation preservation is enabled, the first inserted line inherits the indentation of the first replaced line.
 - Additional inserted lines keep the indentation supplied by the caller inside `replacementText`.
 
+### 3.4 Symbolic-link write-through
+
+When the target path is a symbolic link, replacements are written through the link into the resolved target file. The link itself is never modified by a replacement.
+
 ---
 
 ## 3A. Public Limit Disclosure Placement

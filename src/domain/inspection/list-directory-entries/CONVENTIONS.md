@@ -65,6 +65,7 @@ Each returned entry is a structured filesystem record with these local invariant
 - `path` is relative to the requested root.
 - `path` is slash-normalized.
 - `type` and `size` are always present.
+- an entry that is a symbolic link reports `type: "symlink"` and carries `linkTarget` with the resolved absolute target path, while `size` and the optional groups describe the link entry itself.
 - grouped timestamp metadata is optional
 - grouped permission metadata is optional
 - `children` exists only when recursive traversal includes descendants for that entry

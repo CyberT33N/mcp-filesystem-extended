@@ -17,6 +17,7 @@ import type { UgrepCommand } from "@infrastructure/search/ugrep-command-builder"
 import {
   formatUgrepSpawnFailure,
   runUgrepSearch,
+  runUgrepSearchStreaming,
   UgrepRunner,
 } from "@infrastructure/search/ugrep-runner";
 
@@ -157,5 +158,132 @@ describe("ugrep_runner", () => {
     expect(formatUgrepSpawnFailure(result)).toBe(
       "Native search runner failed to start for executable 'C:/tools/ugrep.exe': spawn ENOENT",
     );
+  });
+
+  it("streams completed lines to the consumer and flushes the final unterminated line", async () => {
+    const command = createUgrepCommand();
+    const spawnedProcess = createMockSpawnedProcess();
+
+    ugrepRunnerTestState.mockedSpawn.mockReturnValue(spawnedProcess);
+
+    const deliveredLines: string[] = [];
+    const resultPromise = new UgrepRunner().runSearchStreaming(command, (line) => {
+      deliveredLines.push(line);
+      return true;
+    });
+
+    spawnedProcess.stdout.emit("data", "alpha\nbe");
+    spawnedProcess.stderr.emit("data", "backend warning\n");
+    spawnedProcess.stdout.emit("data", "ta\ngamma\n");
+    spawnedProcess.stdout.emit("data", "delta");
+    spawnedProcess.emit("close", 0, null);
+
+    const result = await resultPromise;
+
+    expect(deliveredLines).toEqual(["alpha", "beta", "gamma", "delta"]);
+    expect(result.stderr).toBe("backend warning\n");
+    expect(result.terminatedEarly).toBe(false);
+    expect(result.exitCode).toBe(0);
+    expect(result.signal).toBeNull();
+  });
+
+  it("terminates the spawned process when the consumer stops the stream and drops the partial tail", async () => {
+    const command = createUgrepCommand();
+    const spawnedProcess = createMockSpawnedProcess();
+
+    ugrepRunnerTestState.mockedSpawn.mockReturnValue(spawnedProcess);
+
+    const deliveredLines: string[] = [];
+    const resultPromise = new UgrepRunner().runSearchStreaming(command, (line) => {
+      deliveredLines.push(line);
+      return line !== "stop";
+    });
+
+    spawnedProcess.stdout.emit("data", "alpha\nstop\npartial-tail");
+    spawnedProcess.stdout.emit("data", "late-arrival\n");
+    spawnedProcess.emit("close", null, "SIGTERM");
+
+    const result = await resultPromise;
+
+    expect(deliveredLines).toEqual(["alpha", "stop"]);
+    expect(spawnedProcess.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(result.terminatedEarly).toBe(true);
+  });
+
+  it("marks timed out streaming executions and kills the spawned process", async () => {
+    vi.useFakeTimers();
+
+    const command = createUgrepCommand();
+    const spawnedProcess = createMockSpawnedProcess();
+
+    ugrepRunnerTestState.mockedSpawn.mockReturnValue(spawnedProcess);
+
+    const deliveredLines: string[] = [];
+    const resultPromise = new UgrepRunner({ timeoutMs: 25 }).runSearchStreaming(
+      command,
+      (line) => {
+        deliveredLines.push(line);
+        return true;
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    expect(spawnedProcess.kill).toHaveBeenCalledWith("SIGTERM");
+
+    spawnedProcess.emit("close", null, "SIGTERM");
+
+    const result = await resultPromise;
+
+    expect(deliveredLines).toEqual([]);
+    expect(result.timedOut).toBe(true);
+    expect(result.terminatedEarly).toBe(false);
+  });
+
+  it("captures spawn errors on the streaming surface", async () => {
+    const command = createUgrepCommand();
+    const spawnedProcess = createMockSpawnedProcess();
+
+    ugrepRunnerTestState.mockedSpawn.mockReturnValue(spawnedProcess);
+
+    const resultPromise = runUgrepSearchStreaming(command, () => true);
+
+    spawnedProcess.emit("error", new Error("spawn ENOENT"));
+    spawnedProcess.emit("close", 1, null);
+
+    const result = await resultPromise;
+
+    expect(result.spawnErrorMessage).toBe("spawn ENOENT");
+    expect(result.terminatedEarly).toBe(false);
+  });
+
+  it("kills a timed out buffered execution with the default signal when none is configured", async () => {
+    vi.useFakeTimers();
+
+    const command = createUgrepCommand();
+    const spawnedProcess = createMockSpawnedProcess();
+
+    ugrepRunnerTestState.mockedSpawn.mockReturnValue(spawnedProcess);
+
+    const resultPromise = new UgrepRunner({ timeoutMs: 25 }).runSearch(command);
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    expect(spawnedProcess.kill).toHaveBeenCalledWith("SIGTERM");
+
+    spawnedProcess.emit("close", null, "SIGTERM");
+
+    const result = await resultPromise;
+
+    expect(result.timedOut).toBe(true);
+  });
+
+  it("rejects spawn-failure formatting when no spawn error was captured", () => {
+    expect(() =>
+      formatUgrepSpawnFailure({
+        executable: "C:/tools/ugrep.exe",
+        spawnErrorMessage: null,
+      }),
+    ).toThrow("formatUgrepSpawnFailure requires a captured spawnErrorMessage.");
   });
 });

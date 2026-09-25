@@ -93,6 +93,22 @@ export interface UgrepSearchExecutionResult {
 }
 
 /**
+ * Structured runtime result returned by the streaming `ugrep` runner.
+ *
+ * @remarks
+ * The streaming surface carries no buffered stdout: lines are consumed by the caller's
+ * line callback as they arrive, and the runner terminates the spawned process when the
+ * consumer stops the stream.
+ */
+export interface UgrepStreamingSearchExecutionResult extends Omit<UgrepSearchExecutionResult, "stdout"> {
+  /**
+   * Indicates whether the runner terminated the spawned process because the line consumer
+   * stopped the stream early.
+   */
+  terminatedEarly: boolean;
+}
+
+/**
  * Shared runner for shell-free `ugrep` execution.
  *
  * @remarks
@@ -173,6 +189,118 @@ export class UgrepRunner {
       });
     });
   }
+
+  /**
+   * Executes one `ugrep` command plan in streaming mode: every completed stdout line is
+   * delivered to the caller's line consumer as it arrives, and the spawned process is
+   * terminated as soon as the consumer stops the stream.
+   *
+   * @remarks
+   * The streaming surface exists so domain-owned total budgets are enforced by the domain
+   * itself: the backend emits the raw truth and the consumer terminates the stream at the
+   * budget boundary instead of delegating a per-file flag with divergent semantics.
+   *
+   * @param command - Structured native-search command plan produced by `buildUgrepCommand`.
+   * @param onStdoutLine - Line consumer; returning `false` terminates the spawned process.
+   * @returns Structured exit, stderr, and timing metadata without buffered stdout.
+   */
+  public async runSearchStreaming(
+    command: UgrepCommand,
+    onStdoutLine: (line: string) => boolean,
+  ): Promise<UgrepStreamingSearchExecutionResult> {
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      let stderr = "";
+      let spawnErrorMessage: string | null = null;
+      let timedOut = false;
+      let terminatedEarly = false;
+      let streamStopped = false;
+      let pendingStdoutTail = "";
+
+      const child = spawn(command.executable, command.args, {
+        cwd: this.options.cwd,
+        env: this.options.env,
+        shell: false,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      });
+
+      const stopStreaming = (): void => {
+        streamStopped = true;
+        terminatedEarly = true;
+        child.kill(this.options.killSignal ?? "SIGTERM");
+      };
+
+      child.stdout?.setEncoding("utf8");
+      child.stderr?.setEncoding("utf8");
+      child.stdout?.on("data", (chunk) => {
+        if (streamStopped) {
+          return;
+        }
+
+        pendingStdoutTail += chunk.toString();
+        const lastNewlineIndex = pendingStdoutTail.lastIndexOf("\n");
+
+        if (lastNewlineIndex < 0) {
+          return;
+        }
+
+        const completedBlock = pendingStdoutTail.slice(0, lastNewlineIndex + 1);
+        pendingStdoutTail = pendingStdoutTail.slice(lastNewlineIndex + 1);
+
+        for (const completedLine of completedBlock.split(/\r?\n/u)) {
+          if (completedLine === "") {
+            continue;
+          }
+
+          if (!onStdoutLine(completedLine)) {
+            stopStreaming();
+            return;
+          }
+        }
+      });
+      child.stderr?.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      child.on("error", (error) => {
+        spawnErrorMessage = error.message;
+      });
+
+      const timeoutHandle = this.options.timeoutMs === undefined
+        ? undefined
+        : setTimeout(() => {
+            timedOut = true;
+            child.kill(this.options.killSignal ?? "SIGTERM");
+          }, this.options.timeoutMs);
+
+      child.on("close", (exitCode, signal) => {
+        if (timeoutHandle !== undefined) {
+          clearTimeout(timeoutHandle);
+        }
+
+        // A naturally completed stream flushes its final unterminated line; a stopped
+        // stream drops its partial tail because the consumer already stopped at the budget.
+        if (!streamStopped && pendingStdoutTail.trim() !== "") {
+          onStdoutLine(pendingStdoutTail);
+        }
+
+        resolve({
+          args: [...command.args],
+          durationMs: Date.now() - startedAt,
+          executable: command.executable,
+          exitCode,
+          fixedStringMode: command.fixedStringMode,
+          requiresPcre2: command.requiresPcre2,
+          signal,
+          spawnErrorMessage,
+          stderr,
+          syncCandidateBytesCap: command.syncCandidateBytesCap,
+          terminatedEarly,
+          timedOut,
+        });
+      });
+    });
+  }
 }
 
 /**
@@ -205,4 +333,22 @@ export async function runUgrepSearch(
   const runner = new UgrepRunner(options);
 
   return runner.runSearch(command);
+}
+
+/**
+ * Executes one structured `ugrep` command plan through the shared runner in streaming mode.
+ *
+ * @param command - Structured native-search command plan produced by `buildUgrepCommand`.
+ * @param onStdoutLine - Line consumer; returning `false` terminates the spawned process.
+ * @param options - Optional working-directory, environment, and timeout configuration.
+ * @returns Structured exit, stderr, and timing metadata without buffered stdout.
+ */
+export async function runUgrepSearchStreaming(
+  command: UgrepCommand,
+  onStdoutLine: (line: string) => boolean,
+  options?: UgrepRunnerOptions,
+): Promise<UgrepStreamingSearchExecutionResult> {
+  const runner = new UgrepRunner(options);
+
+  return runner.runSearchStreaming(command, onStdoutLine);
 }

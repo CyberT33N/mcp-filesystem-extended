@@ -6,10 +6,13 @@ import {
   buildTraversalNarrowingGuidance,
   collectValidatedFilesystemPreflightEntries,
   resolveTraversalPreflightContext,
+  resolveTraversalScopeContext,
   type FilesystemPreflightEntry,
+  type TraversalScopeContext,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import {
   TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS,
+  resolveResumePassAdmissionDecision,
   resolveTraversalWorkloadAdmissionDecision,
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
@@ -67,7 +70,7 @@ import {
 } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { buildUgrepCommand } from "@infrastructure/search/ugrep-command-builder";
 import { withTemporaryUgrepCandidatePathListFile } from "@infrastructure/search/ugrep-candidate-path-list-file";
-import { formatUgrepSpawnFailure, runUgrepSearch } from "@infrastructure/search/ugrep-runner";
+import { formatUgrepSpawnFailure, runUgrepSearch, runUgrepSearchStreaming } from "@infrastructure/search/ugrep-runner";
 import { createModuleLogger } from "@infrastructure/logging/logger";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 import { minimatch } from "minimatch";
@@ -82,6 +85,14 @@ import {
   SEARCH_STOP_REASON_LITERALS,
   type SearchStopState,
 } from "../search-stop-state";
+import {
+  normalizeSearchAliasIdentityKey,
+  recordSearchAliasCanonicalDelivery,
+  registerSearchAliasEncounter,
+  resolveSearchAliasAttributionState,
+  type SearchAliasAttributionState,
+  type SearchAliasReferenceEvent,
+} from "../search-alias-attribution";
 import { type RegexSearchMatch, type SearchRegexPathResult } from "./search-regex-result";
 
 const SEARCH_REGEX_INLINE_RESPONSE_OVERHEAD_CHARS = 96;
@@ -113,6 +124,14 @@ export interface SearchRegexRootContinuationState {
   activeFileRelativePath: string | null;
   activeFileMatchOffset: number;
   materializedExecutionPlan?: RegexMaterializedExecutionPlanState | null;
+  /**
+   * Alias-attribution state persisted across passes.
+   *
+   * @remarks
+   * Optional because sessions persisted before this field existed carry no alias state; the
+   * consumption boundary normalizes their absence to the empty attribution state.
+   */
+  aliasAttribution?: SearchAliasAttributionState | null;
 }
 
 interface RegexBatchCandidateEntry {
@@ -342,6 +361,72 @@ function createRegexDecodedFallbackBatchCandidateEntry(
   };
 }
 
+/**
+ * Attaches the accumulated alias attributions of one delivered canonical file to its matches.
+ *
+ * @remarks
+ * The delivery mark is recorded before the matches are returned so a later alias encounter in
+ * the same session correctly resolves to the already-delivered event instead of a re-delivery.
+ */
+function attachRegexAliasAttributions(
+  matches: RegexSearchMatch[],
+  canonicalRelativePath: string,
+  aliasAttributionState: SearchAliasAttributionState,
+): RegexSearchMatch[] {
+  if (matches.length === 0) {
+    return matches;
+  }
+
+  const attributedAliases = recordSearchAliasCanonicalDelivery({
+    canonicalRelativePath,
+    state: aliasAttributionState,
+  });
+
+  if (attributedAliases.length === 0) {
+    return matches;
+  }
+
+  return matches.map((match) => ({ ...match, attributedAliases }));
+}
+
+/**
+ * Attaches alias attributions to native-batch matches by resolving each backend-reported file
+ * path back to its canonical root-relative identity.
+ */
+function attachRegexBatchAliasAttributions(
+  matches: RegexSearchMatch[],
+  batchEntries: RegexNativeBatchEntry[],
+  aliasAttributionState: SearchAliasAttributionState,
+): RegexSearchMatch[] {
+  if (matches.length === 0) {
+    return matches;
+  }
+
+  const candidateRelativePathByIdentityKey = new Map(
+    batchEntries.map((batchEntry) => [
+      normalizeSearchAliasIdentityKey(batchEntry.candidateEntry.validPath),
+      batchEntry.candidateRelativePath,
+    ]),
+  );
+
+  return matches.map((match) => {
+    const candidateRelativePath = candidateRelativePathByIdentityKey.get(
+      normalizeSearchAliasIdentityKey(match.file),
+    );
+
+    if (candidateRelativePath === undefined) {
+      return match;
+    }
+
+    const attributedAliases = recordSearchAliasCanonicalDelivery({
+      canonicalRelativePath: candidateRelativePath,
+      state: aliasAttributionState,
+    });
+
+    return attributedAliases.length > 0 ? { ...match, attributedAliases } : match;
+  });
+}
+
 function isNativeRegexBackendPatternSyntaxFailure(runtimeError: string): boolean {
   const normalizedRuntimeError = runtimeError.toLowerCase();
 
@@ -430,68 +515,6 @@ async function collectRegexMatchesFromNativeBatch(
   const useManifestBackedCandidateList =
     batchEntries.some((batchEntry) => batchEntry.nextUnitIndexAfter !== undefined)
     || batchEntries.length > SEARCH_REGEX_NATIVE_INLINE_BATCH_SIZE;
-  const executionResult = useManifestBackedCandidateList
-    ? await withTemporaryUgrepCandidatePathListFile(
-        candidatePaths,
-        async (candidatePathListFile) =>
-          runUgrepSearch(
-            buildUgrepCommand({
-              patternClassification,
-              executionPolicy,
-              candidatePathListFile,
-              caseSensitive,
-              maxCount: maxAdditionalResults,
-            }),
-          ),
-      )
-    : await runUgrepSearch(
-        buildUgrepCommand({
-          patternClassification,
-          executionPolicy,
-          candidatePaths,
-          caseSensitive,
-          maxCount: maxAdditionalResults,
-        }),
-      );
-
-  if (executionResult.spawnErrorMessage !== null) {
-    throw new Error(formatUgrepSpawnFailure(executionResult));
-  }
-
-  if (executionResult.timedOut) {
-    throw new Error("Native search runner timed out before completion.");
-  }
-
-  if (executionResult.exitCode !== null && executionResult.exitCode > 1) {
-    const runtimeError = executionResult.stderr.trim();
-
-    if (runtimeError !== "" && isNativeRegexBackendPatternSyntaxFailure(runtimeError)) {
-      throw createRegexBackendDialectRejectedError(
-        toolName,
-        pattern,
-        caseSensitive,
-        runtimeError,
-      );
-    }
-
-    throw new Error(
-      runtimeError === ""
-        ? `Native search backend exited with code ${executionResult.exitCode}.`
-        : runtimeError,
-    );
-  }
-
-  if (executionResult.exitCode === 1 || executionResult.stdout.trim() === "") {
-    return {
-      matches: [],
-      totalMatches: 0,
-      truncated: false,
-      activeBatchEntryIndex: null,
-      activeBatchEntryMatchOffset: 0,
-      stopState: createUnstoppedSearchState(),
-    };
-  }
-
   const matches: RegexSearchMatch[] = [];
   let totalMatches = 0;
   let truncated = false;
@@ -504,15 +527,15 @@ async function collectRegexMatchesFromNativeBatch(
     ]),
   );
   const emittedMatchCountsByBatchEntryIndex = new Map<number, number>();
-  const matchedLines = executionResult.stdout
-    .split(/\r?\n/u)
-    .filter((outputLine) => outputLine.trim() !== "");
 
-  for (const matchedLine of matchedLines) {
+  // The total match budget is domain-owned: the backend streams the raw truth in strict
+  // candidate order without a per-file --max-count, and this loop terminates the stream
+  // exactly at the budget so the resume bookkeeping stays true.
+  const consumeMatchedLine = (matchedLine: string): boolean => {
     const parsedLine = parseUgrepMatchLine(matchedLine);
 
     if (parsedLine === null) {
-      continue;
+      return true;
     }
 
     const parsedBatchEntryIndex = batchEntryIndexByPath.get(
@@ -552,13 +575,79 @@ async function collectRegexMatchesFromNativeBatch(
 
       if (matches.length >= maxAdditionalResults) {
         truncated = true;
-        break;
+        return false;
       }
     }
 
-    if (truncated) {
-      break;
+    return true;
+  };
+
+  const executionResult = useManifestBackedCandidateList
+    ? await withTemporaryUgrepCandidatePathListFile(
+        candidatePaths,
+        async (candidatePathListFile) =>
+          runUgrepSearchStreaming(
+            buildUgrepCommand({
+              patternClassification,
+              executionPolicy,
+              candidatePathListFile,
+              caseSensitive,
+              preserveCandidateOrder: true,
+            }),
+            consumeMatchedLine,
+          ),
+      )
+    : await runUgrepSearchStreaming(
+        buildUgrepCommand({
+          patternClassification,
+          executionPolicy,
+          candidatePaths,
+          caseSensitive,
+          preserveCandidateOrder: true,
+        }),
+        consumeMatchedLine,
+      );
+
+  if (executionResult.spawnErrorMessage !== null) {
+    throw new Error(formatUgrepSpawnFailure(executionResult));
+  }
+
+  if (executionResult.timedOut) {
+    throw new Error("Native search runner timed out before completion.");
+  }
+
+  if (
+    !executionResult.terminatedEarly
+    && executionResult.exitCode !== null
+    && executionResult.exitCode > 1
+  ) {
+    const runtimeError = executionResult.stderr.trim();
+
+    if (runtimeError !== "" && isNativeRegexBackendPatternSyntaxFailure(runtimeError)) {
+      throw createRegexBackendDialectRejectedError(
+        toolName,
+        pattern,
+        caseSensitive,
+        runtimeError,
+      );
     }
+
+    throw new Error(
+      runtimeError === ""
+        ? `Native search backend exited with code ${executionResult.exitCode}.`
+        : runtimeError,
+    );
+  }
+
+  if (matches.length === 0) {
+    return {
+      matches: [],
+      totalMatches: 0,
+      truncated: false,
+      activeBatchEntryIndex: null,
+      activeBatchEntryMatchOffset: 0,
+      stopState: createUnstoppedSearchState(),
+    };
   }
 
   return {
@@ -889,6 +978,8 @@ async function collectRegexMatchesFromDecodedFallbackExecutionUnit(
 
 async function materializeRegexExecutionPlanFromTraversal(options: {
   aggregateBudgetState: RegexSearchAggregateBudgetState;
+  aliasAttributionState: SearchAliasAttributionState;
+  aliasReferenceEvents: SearchAliasReferenceEvent[];
   allowedDirectories: string[];
   diagnostics: {
     filesRejectedByContentState: number;
@@ -918,6 +1009,8 @@ async function materializeRegexExecutionPlanFromTraversal(options: {
 }): Promise<RegexExecutionPlanMaterializationResult> {
   const {
     aggregateBudgetState,
+    aliasAttributionState,
+    aliasReferenceEvents,
     allowedDirectories,
     diagnostics,
     effectiveTraversalRuntimeBudgetLimits,
@@ -1023,6 +1116,23 @@ async function materializeRegexExecutionPlanFromTraversal(options: {
           traversalDecisionDiagnostics.directoriesExcludedByEntryPolicy += 1;
         } else {
           traversalDecisionDiagnostics.filesExcludedByEntryPolicy += 1;
+        }
+
+        commitInspectionResumeTraversalEntry(currentTraversalFrame);
+        continue;
+      }
+
+      // No-follow boundary: aliases are registered for attribution but never searched.
+      if (entry.isSymbolicLink()) {
+        const aliasReferenceEvent = await registerSearchAliasEncounter({
+          aliasAbsolutePath: path.join(currentPath, entry.name),
+          aliasRelativePath: relativePath,
+          state: aliasAttributionState,
+          validRootPath,
+        });
+
+        if (aliasReferenceEvent !== null) {
+          aliasReferenceEvents.push(aliasReferenceEvent);
         }
 
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
@@ -1158,6 +1268,7 @@ interface RegexExecutionPlanExecutionResult {
 }
 
 async function executeMaterializedRegexExecutionPlan(options: {
+  aliasAttributionState: SearchAliasAttributionState;
   diagnostics: {
     nativeBatchCandidates: number;
     nativeBatchExecutions: number;
@@ -1173,6 +1284,7 @@ async function executeMaterializedRegexExecutionPlan(options: {
   caseSensitive: boolean;
 }): Promise<RegexExecutionPlanExecutionResult> {
   const {
+    aliasAttributionState,
     diagnostics,
     executionPlan,
     executionPolicy,
@@ -1223,7 +1335,13 @@ async function executeMaterializedRegexExecutionPlan(options: {
 
       filesSearched += decodedFallbackSearchResult.fileSearched ? 1 : 0;
       totalMatches += decodedFallbackSearchResult.totalMatches;
-      matches.push(...decodedFallbackSearchResult.matches);
+      matches.push(
+        ...attachRegexAliasAttributions(
+          decodedFallbackSearchResult.matches,
+          currentExecutionUnit.candidateRelativePath,
+          aliasAttributionState,
+        ),
+      );
       nextUnitIndex += 1;
 
       if (decodedFallbackSearchResult.truncated) {
@@ -1277,7 +1395,13 @@ async function executeMaterializedRegexExecutionPlan(options: {
 
     filesSearched += processedBatchEntryCount;
     totalMatches += batchSearchResult.totalMatches;
-    matches.push(...batchSearchResult.matches);
+    matches.push(
+      ...attachRegexBatchAliasAttributions(
+        batchSearchResult.matches,
+        batchEntries,
+        aliasAttributionState,
+      ),
+    );
 
     if (batchSearchResult.truncated) {
       const activeBatchEntry = batchSearchResult.activeBatchEntryIndex === null
@@ -1366,18 +1490,34 @@ export async function getSearchRegexPathResult(
     nativeBatchExecutions: 0,
   };
 
-  const traversalPreflightContext = await resolveTraversalPreflightContext(
-    toolName,
-    searchPath,
-    excludePatterns,
-    includeExcludedGlobs,
-    respectGitIgnore,
-    allowedDirectories,
-    ["file", "directory"],
-    true,
-    createRegexTraversalPreflightWorkloadPolicy(filePatterns),
-  );
-  const searchScopeEntry = traversalPreflightContext.rootEntry;
+  // Resume passes re-validate the root and re-resolve the scope policy, but never re-run the
+  // blocking admission probe or the candidate sampling: the birth admission decision is
+  // persisted with the session and reconstructed instead.
+  const isResumePass = continuationState !== null;
+  const basePreflightContext = isResumePass
+    ? null
+    : await resolveTraversalPreflightContext(
+        toolName,
+        searchPath,
+        excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
+        allowedDirectories,
+        ["file", "directory"],
+        true,
+        createRegexTraversalPreflightWorkloadPolicy(filePatterns),
+      );
+  const scopeContext: TraversalScopeContext = basePreflightContext
+    ?? await resolveTraversalScopeContext(
+        toolName,
+        searchPath,
+        excludePatterns,
+        includeExcludedGlobs,
+        respectGitIgnore,
+        allowedDirectories,
+        ["file", "directory"],
+      );
+  const searchScopeEntry = scopeContext.rootEntry;
   const regexExecutionPlan = options.regexExecutionPlan
     ?? createGuardrailedSearchRegexExecutionPlan(toolName, pattern, caseSensitive);
   const regex = regexExecutionPlan.regex;
@@ -1388,10 +1528,10 @@ export async function getSearchRegexPathResult(
     maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
     softTimeBudgetMs: SEARCH_FAMILY_PREVIEW_EXECUTION_SOFT_TIME_BUDGET_MS,
   };
-  const candidateWorkloadEvidence = searchScopeEntry.type === "directory"
+  const candidateWorkloadEvidence = !isResumePass && searchScopeEntry.type === "directory"
     ? await collectTraversalCandidateWorkloadEvidence({
         validRootPath: searchScopeEntry.validPath,
-        traversalScopePolicyResolution: traversalPreflightContext.traversalScopePolicyResolution,
+        traversalScopePolicyResolution: scopeContext.traversalScopePolicyResolution,
         runtimeBudgetLimits: previewExecutionRuntimeBudgetLimits,
         inlineCandidateByteBudget: executionPolicy.regexSyncCandidateBytesCap,
         fileMatcher: (candidateRelativePath) =>
@@ -1405,27 +1545,29 @@ export async function getSearchRegexPathResult(
     1,
     Math.floor(REGEX_SEARCH_RESPONSE_CAP_CHARS / Math.max(1, batchRootCount)),
   );
-  const traversalAdmissionDecision = resolveTraversalWorkloadAdmissionDecision({
-    requestedRoot: searchPath,
-    rootEntry: searchScopeEntry,
-    admissionEvidence: traversalPreflightContext.traversalPreflightAdmissionEvidence,
-    candidateWorkloadEvidence,
-    projectedInlineTextChars,
-    executionPolicy,
-    consumerCapabilities: {
-      toolName,
-      previewFirstSupported: true,
-      inlineCandidateByteBudget: executionPolicy.regexSyncCandidateBytesCap,
-      inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
-      inlineTextResponseCapChars,
-      executionTimeCostMultiplier:
-        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.REGEX_SEARCH.executionTimeCostMultiplier,
-      estimatedPerCandidateFileCostMs:
-        SEARCH_FAMILY_REGEX_ESTIMATED_PER_CANDIDATE_FILE_COST_MS,
-      inlineExecutionBudgetMs: SEARCH_FAMILY_REGEX_INLINE_EXECUTION_BUDGET_MS,
-      taskBackedExecutionSupported: false,
-    },
-  });
+  const traversalAdmissionDecision = isResumePass
+    ? resolveResumePassAdmissionDecision(searchPath, toolName)
+    : resolveTraversalWorkloadAdmissionDecision({
+        requestedRoot: searchPath,
+        rootEntry: searchScopeEntry,
+        admissionEvidence: basePreflightContext?.traversalPreflightAdmissionEvidence ?? null,
+        candidateWorkloadEvidence,
+        projectedInlineTextChars,
+        executionPolicy,
+        consumerCapabilities: {
+          toolName,
+          previewFirstSupported: true,
+          inlineCandidateByteBudget: executionPolicy.regexSyncCandidateBytesCap,
+          inlineCandidateFileBudget: executionPolicy.traversalInlineCandidateFileBudget,
+          inlineTextResponseCapChars,
+          executionTimeCostMultiplier:
+            TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.REGEX_SEARCH.executionTimeCostMultiplier,
+          estimatedPerCandidateFileCostMs:
+            SEARCH_FAMILY_REGEX_ESTIMATED_PER_CANDIDATE_FILE_COST_MS,
+          inlineExecutionBudgetMs: SEARCH_FAMILY_REGEX_INLINE_EXECUTION_BUDGET_MS,
+          taskBackedExecutionSupported: false,
+        },
+      });
   const previewFirstAdmissionActive =
     traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST;
   const completeResultRequested =
@@ -1481,9 +1623,9 @@ export async function getSearchRegexPathResult(
       admissionOutcome: traversalAdmissionDecision.outcome,
       completeResultRequested,
       gitIgnoreEnrichmentApplied:
-        traversalPreflightContext.traversalScopePolicyResolution.gitIgnoreEnrichmentApplied,
+        scopeContext.traversalScopePolicyResolution.gitIgnoreEnrichmentApplied,
       explicitExcludedRoot:
-        traversalPreflightContext.traversalScopePolicyResolution.explicitExcludedRoot,
+        scopeContext.traversalScopePolicyResolution.explicitExcludedRoot,
       includeGlobs: filePatterns,
       excludePatterns,
       includeExcludedGlobs,
@@ -1492,7 +1634,7 @@ export async function getSearchRegexPathResult(
       requestedMaxResults: maxResults,
       effectiveMaxResults: admissionAdjustedMaxResults,
       traversalPreflightEvidence:
-        traversalPreflightContext.traversalPreflightAdmissionEvidence,
+        basePreflightContext?.traversalPreflightAdmissionEvidence ?? null,
       candidateWorkloadEvidence,
       executionPolicy: {
         regexSyncCandidateBytesCap: executionPolicy.regexSyncCandidateBytesCap,
@@ -1589,7 +1731,7 @@ export async function getSearchRegexPathResult(
 
   const validRootPath = searchScopeEntry.validPath;
   const traversalScopePolicyResolution =
-    traversalPreflightContext.traversalScopePolicyResolution;
+    scopeContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   const traversalFrames = continuationState === null
     ? createInitialSearchRegexTraversalFrames()
@@ -1615,6 +1757,8 @@ export async function getSearchRegexPathResult(
     includePatternRejectedFiles: 0,
     candidateByteBudgetStops: 0,
   };
+  const aliasAttributionState = resolveSearchAliasAttributionState(continuationState?.aliasAttribution);
+  const aliasReferenceEvents: SearchAliasReferenceEvent[] = [];
 
   function markTraversalBudgetExceeded(error: unknown): boolean {
     if (!isTraversalRuntimeBudgetExceededError(error)) {
@@ -1657,7 +1801,13 @@ export async function getSearchRegexPathResult(
 
     filesSearched += processedBatchEntryCount;
     matchesFound += batchSearchResult.totalMatches;
-    results.push(...batchSearchResult.matches);
+    results.push(
+      ...attachRegexBatchAliasAttributions(
+        batchSearchResult.matches,
+        batchEntries,
+        aliasAttributionState,
+      ),
+    );
 
     if (batchSearchResult.truncated) {
       if (
@@ -1722,7 +1872,19 @@ export async function getSearchRegexPathResult(
 
     totalBytesScanned = resumedFileSearchResult.totalBytesScanned;
     matchesFound += resumedFileSearchResult.totalMatches;
-    results.push(...resumedFileSearchResult.matches);
+    // Deliberate guard (documented, not test-covered): the root-file identity "" is produced
+    // only by the single-file branch, which returns before this shared directory-resume block.
+    // The check keeps this block total over the continuation-state type and is unreachable
+    // through directory sessions by construction.
+    results.push(
+      ...(activeFileRelativePath === ""
+        ? resumedFileSearchResult.matches
+        : attachRegexAliasAttributions(
+            resumedFileSearchResult.matches,
+            activeFileRelativePath,
+            aliasAttributionState,
+          )),
+    );
 
     if (
       unsupportedStateReason === null
@@ -1745,6 +1907,8 @@ export async function getSearchRegexPathResult(
     if (materializedExecutionPlan === null && traversalFrames.length > 0) {
       const materializationResult = await materializeRegexExecutionPlanFromTraversal({
         aggregateBudgetState,
+        aliasAttributionState,
+        aliasReferenceEvents,
         allowedDirectories,
         diagnostics,
         effectiveTraversalRuntimeBudgetLimits,
@@ -1777,6 +1941,7 @@ export async function getSearchRegexPathResult(
 
     if (!searchAborted && materializedExecutionPlan !== null) {
       const executionPlanResult = await executeMaterializedRegexExecutionPlan({
+        aliasAttributionState,
         caseSensitive,
         diagnostics,
         executionPlan: materializedExecutionPlan,
@@ -1883,6 +2048,23 @@ export async function getSearchRegexPathResult(
           } else {
             traversalDecisionDiagnostics.filesExcludedByEntryPolicy += 1;
           }
+          commitInspectionResumeTraversalEntry(currentTraversalFrame);
+          continue;
+        }
+
+        // No-follow boundary: aliases are registered for attribution but never searched.
+        if (entry.isSymbolicLink()) {
+          const aliasReferenceEvent = await registerSearchAliasEncounter({
+            aliasAbsolutePath: path.join(currentPath, entry.name),
+            aliasRelativePath: relativePath,
+            state: aliasAttributionState,
+            validRootPath,
+          });
+
+          if (aliasReferenceEvent !== null) {
+            aliasReferenceEvents.push(aliasReferenceEvent);
+          }
+
           commitInspectionResumeTraversalEntry(currentTraversalFrame);
           continue;
         }
@@ -2014,7 +2196,13 @@ export async function getSearchRegexPathResult(
 
             totalBytesScanned = fileSearchResult.totalBytesScanned;
             matchesFound += fileSearchResult.totalMatches;
-            results.push(...fileSearchResult.matches);
+            results.push(
+              ...attachRegexAliasAttributions(
+                fileSearchResult.matches,
+                relativePath,
+                aliasAttributionState,
+              ),
+            );
 
             if (
               unsupportedStateReason === null
@@ -2080,7 +2268,13 @@ export async function getSearchRegexPathResult(
 
         totalBytesScanned = fileSearchResult.totalBytesScanned;
         matchesFound += fileSearchResult.totalMatches;
-        results.push(...fileSearchResult.matches);
+        results.push(
+          ...attachRegexAliasAttributions(
+            fileSearchResult.matches,
+            relativePath,
+            aliasAttributionState,
+          ),
+        );
 
         if (
           unsupportedStateReason === null
@@ -2126,6 +2320,7 @@ export async function getSearchRegexPathResult(
         activeFileRelativePath,
         activeFileMatchOffset,
         materializedExecutionPlan,
+        aliasAttribution: aliasAttributionState,
       }
     : null;
 
@@ -2182,5 +2377,6 @@ export async function getSearchRegexPathResult(
     stopMessage: rootStopState.stopMessage,
     admissionOutcome: traversalAdmissionDecision.outcome,
     nextContinuationState,
+    ...(aliasReferenceEvents.length > 0 ? { aliasReferences: aliasReferenceEvents } : {}),
   };
 }

@@ -75,6 +75,15 @@ Because that behavior is already owned locally, callers do not need `create_dire
 - existing destinations are rejected by default,
 - callers must opt in with `overwrite=true` when replacement of an existing destination is intended.
 
+### 3.5 Symbolic-link semantics
+
+Copying follows symbolic links into their content:
+
+- a file alias copies the resolved target content to the destination,
+- a directory alias is recursed into and materializes as a real directory at the destination,
+- aliases whose resolved targets leave the allowed directories are refused,
+- alias cycles are rejected instead of recursing indefinitely.
+
 ---
 
 ## 3A. Public Limit Disclosure Placement

@@ -28,7 +28,9 @@ import {
   commitInspectionResumeTraversalEntry,
 } from "@domain/shared/resume/inspection-resume-frontier";
 import { DISCOVERY_RESPONSE_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import type { FileSystemEntrySymlinkMarking } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
+import { resolveSymlinkTargetPath } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
 
@@ -43,6 +45,14 @@ import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability
 export interface SearchFilesResult {
   matches: string[];
   truncated: boolean;
+  /**
+   * Symbolic-link markings for delivered matches that are aliases.
+   *
+   * @remarks
+   * Present only when at least one delivered match is a symbolic link. The match itself
+   * stays in `matches` as the truthful traversal path; the marking adds the alias nature.
+   */
+  symlinkMatches?: FileSystemEntrySymlinkMarking[];
   admissionOutcome?: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
   nextContinuationState?: FindPathsByNameContinuationState | null;
 }
@@ -110,6 +120,7 @@ export async function searchFiles(
   requestedResumeMode: InspectionResumeMode | null = null,
 ): Promise<SearchFilesResult> {
   const results: string[] = [];
+  const symlinkMatches: FileSystemEntrySymlinkMarking[] = [];
   let truncated = false;
   const traversalPreflightContext = await resolveTraversalPreflightContext(
     "find_paths_by_name",
@@ -292,6 +303,17 @@ export async function searchFiles(
 
       if (entry.name.toLowerCase().includes(pattern.toLowerCase())) {
         results.push(fullPath);
+
+        if (entry.isSymbolicLink()) {
+          try {
+            symlinkMatches.push({
+              path: fullPath,
+              linkTarget: await resolveSymlinkTargetPath(fullPath),
+            });
+          } catch {
+            // An alias that vanished mid-traversal is delivered without its marking.
+          }
+        }
       }
 
       commitInspectionResumeTraversalEntry(currentTraversalFrame);
@@ -327,6 +349,7 @@ export async function searchFiles(
   return {
     matches: results,
     truncated,
+    ...(symlinkMatches.length > 0 ? { symlinkMatches } : {}),
     admissionOutcome: traversalAdmissionDecision.outcome,
     nextContinuationState,
   };

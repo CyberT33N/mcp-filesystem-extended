@@ -13,11 +13,21 @@
  *███████████████████████████████████████████████████████████████████████████████
  */
 
+// ═══╡ 🧩 IMPORTS ╞═══
+import { isError } from 'remeda'
+
 /*
  *╭───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───
- *📦 EXPORTS ► Exports for: shared/errors
+ *📦 IMPLEMENTATION ► Implementation for: shared/errors
  *╰───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───
  */
-export { isAbortError } from './is-abort-error/abort-guard'
-export { isErrnoException } from './is-errno-exception/errno-guard'
-export { normalizeError } from './normalize-error/normalize'
+
+/**
+ * Checks if the value is a Node.js errno exception carrying a string error code.
+ *
+ * @param value - The value to check.
+ * @returns True when the value is an `Error` with a string `code` property.
+ */
+export const isErrnoException = (value: unknown): value is NodeJS.ErrnoException => {
+    return isError(value) && 'code' in value && typeof value.code === 'string'
+}

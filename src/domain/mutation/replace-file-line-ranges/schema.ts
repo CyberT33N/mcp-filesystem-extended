@@ -42,7 +42,7 @@ export const ReplaceFileLineRangesArgsSchema = z.object({
         path: z
           .string()
           .max(PATH_MAX_CHARS)
-          .describe(`Path to the existing text file whose inclusive line ranges should be replaced. Each path is capped at ${PATH_MAX_CHARS} characters.`),
+          .describe(`Path to the existing text file whose inclusive line ranges should be replaced. Each path is capped at ${PATH_MAX_CHARS} characters. When the path is a symbolic link, replacements are written through the link into the resolved target file.`),
         /**
          * Replacement operations.
          *

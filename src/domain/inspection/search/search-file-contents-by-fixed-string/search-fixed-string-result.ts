@@ -19,6 +19,11 @@ import {
   type SearchStopReason,
 } from "../search-stop-state";
 import {
+  collectSearchAliasFileGroupAttributions,
+  formatSearchAliasReferenceEvents,
+  type SearchAliasReferenceEvent,
+} from "../search-alias-attribution";
+import {
   formatSearchCompletionSummaryLine,
   type SearchSessionDeliverySummary,
 } from "../search-session-delivery";
@@ -46,6 +51,15 @@ export interface FixedStringSearchMatch {
    * Exact substring matched by the fixed-string search engine.
    */
   match: string;
+
+  /**
+   * Alias display paths accumulated for the canonical file that produced this match.
+   *
+   * @remarks
+   * Present only when the session already registered symbolic links that reference the
+   * canonical file. The match itself is delivered exactly once; aliases never re-deliver it.
+   */
+  attributedAliases?: string[];
 }
 
 /**
@@ -91,6 +105,15 @@ export interface SearchFixedStringPathResult {
    * Caller-visible explanation for the current bounded-stop state.
    */
   stopMessage: string | null;
+
+  /**
+   * Alias-reference events fired while traversing the root during the current pass.
+   *
+   * @remarks
+   * Absent when no alias event fired. Symbolic links are never followed into content, but
+   * their references stay visible as first-class session information.
+   */
+  aliasReferences?: SearchAliasReferenceEvent[];
 }
 
 /**
@@ -160,6 +183,12 @@ export function formatSearchFixedStringPathOutput(
       output += `\n${stopStateLine}`;
     }
 
+    const aliasReferenceBlock = formatSearchAliasReferenceEvents(result.aliasReferences ?? []);
+
+    if (aliasReferenceBlock !== null) {
+      output += `\n${aliasReferenceBlock}`;
+    }
+
     return output;
   }
 
@@ -188,7 +217,19 @@ export function formatSearchFixedStringPathOutput(
       output += `  Line ${fileResult.line}: ${fileResult.content}\n`;
     }
 
+    const fileGroupAttributions = collectSearchAliasFileGroupAttributions(fileResults);
+
+    if (fileGroupAttributions.length > 0) {
+      output += `  Also referenced by aliases: ${fileGroupAttributions.join(", ")}\n`;
+    }
+
     output += "\n";
+  }
+
+  const aliasReferenceBlock = formatSearchAliasReferenceEvents(result.aliasReferences ?? []);
+
+  if (aliasReferenceBlock !== null) {
+    output += `${aliasReferenceBlock}\n`;
   }
 
   const stopStateLine = formatSearchStopStateLine(result);
@@ -214,9 +255,12 @@ function formatSearchFixedStringPreviewPathOutput(
   }
 
   if (result.matches.length === 0) {
+    const aliasReferenceBlock = formatSearchAliasReferenceEvents(result.aliasReferences ?? []);
+
     return [
       `No matches reached yet for fixed string: ${fixedString} in this bounded preview slice`,
       `Searched ${result.filesSearched} files in this bounded preview slice`,
+      ...(aliasReferenceBlock === null ? [] : [aliasReferenceBlock]),
     ].join("\n");
   }
 
@@ -245,7 +289,19 @@ function formatSearchFixedStringPreviewPathOutput(
       output += `  Line ${fileResult.line}: ${fileResult.content}\n`;
     }
 
+    const fileGroupAttributions = collectSearchAliasFileGroupAttributions(fileResults);
+
+    if (fileGroupAttributions.length > 0) {
+      output += `  Also referenced by aliases: ${fileGroupAttributions.join(", ")}\n`;
+    }
+
     output += "\n";
+  }
+
+  const aliasReferenceBlock = formatSearchAliasReferenceEvents(result.aliasReferences ?? []);
+
+  if (aliasReferenceBlock !== null) {
+    output += `${aliasReferenceBlock}\n`;
   }
 
   return output.trimEnd();
@@ -285,6 +341,12 @@ export function formatSearchFixedStringCompletionDeltaPathOutput(
       output += `\n${stopStateLine}`;
     }
 
+    const aliasReferenceBlock = formatSearchAliasReferenceEvents(result.aliasReferences ?? []);
+
+    if (aliasReferenceBlock !== null) {
+      output += `\n${aliasReferenceBlock}`;
+    }
+
     return output;
   }
 
@@ -313,7 +375,19 @@ export function formatSearchFixedStringCompletionDeltaPathOutput(
       output += `  Line ${fileResult.line}: ${fileResult.content}\n`;
     }
 
+    const fileGroupAttributions = collectSearchAliasFileGroupAttributions(fileResults);
+
+    if (fileGroupAttributions.length > 0) {
+      output += `  Also referenced by aliases: ${fileGroupAttributions.join(", ")}\n`;
+    }
+
     output += "\n";
+  }
+
+  const aliasReferenceBlock = formatSearchAliasReferenceEvents(result.aliasReferences ?? []);
+
+  if (aliasReferenceBlock !== null) {
+    output += `${aliasReferenceBlock}\n`;
   }
 
   return output.trimEnd();
@@ -446,16 +520,23 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
   }
 
   // Terminal continuation pass: the session is complete and no longer resumable, so the response
-  // closes with the session-cumulative summary and the additive continuation guidance.
-  const completionSummary = formatSearchCompletionSummaryLine(
-    "Fixed-string-search",
-    result.roots.length,
-    {
-      matchCount: result.totalMatches,
-      locationCount: result.totalLocations,
-    },
-    result.sessionDelivery,
-  );
+  // closes with the session-cumulative summary and the additive continuation guidance. A terminal
+  // pass carrying a permanent root failure closes the session truthfully instead — never framed
+  // as a completed traversal.
+  const firstFailedRootError = result.roots.find(
+    (root) => root !== undefined && root.error !== null,
+  )?.error ?? null;
+  const completionSummary = firstFailedRootError === null
+    ? formatSearchCompletionSummaryLine(
+        "Fixed-string-search",
+        result.roots.length,
+        {
+          matchCount: result.totalMatches,
+          locationCount: result.totalLocations,
+        },
+        result.sessionDelivery,
+      )
+    : `Fixed-string-search session closed without completing: a permanent root failure ended the session and the persisted frontier cannot continue. First failure: ${firstFailedRootError} Start a new request to search the same scope again.`;
 
   return `${fullOutput}\n\n${formatInspectionTerminalCompletionTextBlock(result.admission, completionSummary)}`;
 }

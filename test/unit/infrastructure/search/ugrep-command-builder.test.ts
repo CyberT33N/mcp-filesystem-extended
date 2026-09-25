@@ -190,4 +190,50 @@ describe("buildUgrepCommand", () => {
       syncCandidateBytesCap: executionPolicy.regexSyncCandidateBytesCap,
     });
   });
+
+  it("rejects conflicting or empty candidate surfaces", () => {
+    const executionPolicy = createSearchExecutionPolicy();
+
+    expect(() =>
+      buildUgrepCommand({
+        candidatePathListFile: "C:/temp/candidate-paths.txt",
+        candidatePaths: ["src/domain"],
+        caseSensitive: true,
+        executionPolicy,
+        patternClassification: createPatternClassification(),
+      }),
+    ).toThrow("accepts either candidatePaths or candidatePathListFile, but not both");
+
+    expect(() =>
+      buildUgrepCommand({
+        caseSensitive: true,
+        executionPolicy,
+        patternClassification: createPatternClassification(),
+      }),
+    ).toThrow("requires at least one candidate path or one candidate-path manifest file");
+  });
+
+  it("adds the single-threaded flag when the batch plan must preserve candidate order", () => {
+    const executionPolicy = createSearchExecutionPolicy();
+
+    const command = buildUgrepCommand({
+      candidatePaths: ["src/domain", "src/infrastructure"],
+      caseSensitive: true,
+      executionPolicy,
+      preserveCandidateOrder: true,
+      patternClassification: createPatternClassification(),
+    });
+
+    expect(command.args).toEqual([
+      "--binary-files=without-match",
+      "--color=never",
+      "--line-number",
+      "--with-filename",
+      "-J1",
+      "--fixed-strings",
+      "PRAXIS1",
+      "src/domain",
+      "src/infrastructure",
+    ]);
+  });
 });

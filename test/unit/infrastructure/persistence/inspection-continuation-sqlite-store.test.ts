@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -154,5 +155,35 @@ describe("inspection_continuation_sqlite_store", () => {
       ),
     ).toBeNull();
     expect(store.cleanupExpiredSessions(new Date("2026-02-15T00:00:00.000Z"))).toBe(3);
+  });
+
+  it("reclaims database file space when vacuum runs after expired-session cleanup", () => {
+    const store = createStore();
+    const largeContinuationState = { payload: "x".repeat(200_000) };
+    const createdAt = new Date("2026-01-01T00:00:00.000Z");
+
+    for (let index = 0; index < 10; index++) {
+      store.createSession(
+        {
+          admissionOutcome:
+            INSPECTION_CONTINUATION_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+          continuationState: largeContinuationState,
+          endpointName: "search_file_contents_by_fixed_string",
+          familyMember: "fixed-string-search",
+          requestPayload: { roots: ["src"] },
+        },
+        createdAt,
+      );
+    }
+
+    expect(
+      store.cleanupExpiredSessions(new Date("2026-03-01T00:00:00.000Z")),
+    ).toBe(10);
+
+    const sizeBeforeVacuum = statSync(databasePath).size;
+    store.vacuum();
+    const sizeAfterVacuum = statSync(databasePath).size;
+
+    expect(sizeAfterVacuum).toBeLessThan(sizeBeforeVacuum);
   });
 });

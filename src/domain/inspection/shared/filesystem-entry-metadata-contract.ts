@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * Canonical filesystem entry categories used across inspection metadata surfaces.
  */
-export type FileSystemEntryType = "directory" | "file" | "other";
+export type FileSystemEntryType = "directory" | "file" | "other" | "symlink";
 
 /**
  * Timestamp metadata that can be requested as one grouped capability.
@@ -57,6 +57,10 @@ export interface FileSystemEntryMetadata
 {
   /**
    * Entry type resolved from the current filesystem stats.
+   *
+   * @remarks
+   * `symlink` entries describe the link itself: `linkTarget` carries the resolved target
+   * path, and `size` plus the optional groups describe the link entry, never the target.
    */
   type: FileSystemEntryType;
 
@@ -64,6 +68,11 @@ export interface FileSystemEntryMetadata
    * Entry size in bytes.
    */
   size: number;
+
+  /**
+   * Resolved absolute target path when the entry is a symbolic link.
+   */
+  linkTarget?: string | undefined;
 
   /**
    * Entry creation timestamp in ISO-8601 format when the timestamp group is requested.
@@ -87,6 +96,26 @@ export interface FileSystemEntryMetadata
 }
 
 /**
+ * Canonical symbolic-link marking for discovery match surfaces.
+ *
+ * @remarks
+ * Discovery endpoints deliver the truthful traversal path of every match. Matches that are
+ * symbolic links are additionally marked with their resolved link target so the alias nature
+ * of a delivered path is always visible.
+ */
+export interface FileSystemEntrySymlinkMarking {
+  /**
+   * Delivered traversal path of the symbolic-link match.
+   */
+  path: string;
+
+  /**
+   * Resolved absolute target path of the symbolic link.
+   */
+  linkTarget: string;
+}
+
+/**
  * Default grouped metadata selection used when callers do not request optional groups.
  */
 export const DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION = {
@@ -101,6 +130,7 @@ export const FileSystemEntryTypeSchema = z.enum([
   "directory",
   "file",
   "other",
+  "symlink",
 ]);
 
 /**
@@ -152,10 +182,19 @@ export const DefaultedFileSystemEntryMetadataSelectionSchema =
 export const FileSystemEntryMetadataSchema = z.object({
   type: FileSystemEntryTypeSchema,
   size: z.number(),
+  linkTarget: z.string().optional(),
   created: z.string().optional(),
   modified: z.string().optional(),
   accessed: z.string().optional(),
   permissions: z.string().optional(),
+});
+
+/**
+ * Canonical schema for the symbolic-link marking surface of discovery endpoints.
+ */
+export const FileSystemEntrySymlinkMarkingSchema = z.object({
+  path: z.string(),
+  linkTarget: z.string(),
 });
 
 /**

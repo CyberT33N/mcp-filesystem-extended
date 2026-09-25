@@ -65,6 +65,7 @@ The structured response keeps one result object per requested root:
 - `root` repeats the requested root.
 - `matches` contains flat path matches for that root.
 - `truncated` indicates that root-local collection stopped at the effective match ceiling.
+- `symlinkMatches` is present only when at least one delivered match is a symbolic link; it marks the alias with its resolved link target, while the alias path itself stays in `matches`.
 
 The aggregate result also exposes:
 

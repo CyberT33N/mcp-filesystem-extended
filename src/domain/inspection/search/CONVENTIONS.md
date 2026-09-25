@@ -314,6 +314,88 @@ The family must also preserve one execution truth per request.
 6. Preview-first must not trigger prematurely for moderate recursive code-search workloads.
 7. Fixed-string must remain slightly more permissive than regex.
 8. The family must prefer one shared execution result per request when producing `content.text` and `structuredContent`.
+9. Both endpoints never follow symbolic links into content, and both surface alias references through the shared alias-attribution contract.
+
+---
+
+## Symbolic-Link Doctrine (No-Follow + Alias Attribution)
+
+### The no-follow boundary
+
+Both search endpoints never search or descend into symbolic links found during directory
+traversal. A link entry is intercepted at the traversal boundary, registered by identity, and
+never handed to the content-search lanes.
+
+This boundary is the repair of a proven defect class and must stay:
+
+- **Exactly-once canonical delivery.** Before this doctrine, the traversal classified candidates
+  by their resolved target type, so the same content was reachable through the real path and
+  every alias, and a resumed session could deliver one canonical match once per alias identity.
+  Every canonical (file, line) match is now delivered exactly once per session.
+- **Cycle elimination.** Alias directory loops have no cycle guard value to add here because
+  links are never descended into.
+- **Scope-boundary integrity.** An in-root alias whose target escapes the requested root is no
+  longer searched and labeled with an outside path.
+
+Explicitly requested roots that are themselves symbolic links still follow the link through path
+validation: deliberate targeting of a known alias is a different contract than incidental
+traversal fan-out.
+
+### Alias attribution as first-class session information
+
+Skipping aliases silently would hide the consumer map (`which alias positions reference this
+canonical content?`). The family therefore registers every encountered alias by identity only —
+`lstat`/`readlink`, never a content read — and surfaces the references:
+
+- A canonical match is delivered exactly once and carries its accumulated alias attributions.
+- An alias whose target was already delivered in the same session produces an
+  `already-delivered` alias-reference event — never a new match.
+- An alias whose target escapes the requested root produces an `outside-scope` event and is
+  never searched.
+- Alias-reference events are themselves exactly-once per session.
+- Multiple aliases of the same target appear as the dependency list of the canonical match.
+
+Both encounter orders are contract-conformant: alias-first resolves to attribution on the later
+delivery, original-first resolves to the `already-delivered` event. Lanes that defer delivery
+(batch flushes, materialized completion plans) register aliases during traversal and attach the
+accumulated attribution at delivery time.
+
+### Canonical implementation surface
+
+The shared alias-attribution state, event contract, and text rendering live in
+[`search-alias-attribution.ts`](./search-alias-attribution.ts). The state persists inside the
+per-root continuation state as an additive optional field; sessions persisted before this
+surface existed are normalized to the empty attribution state at the consumption boundary, so
+the resume architecture carries no breaking change.
+
+---
+
+## Domain-Owned Total Result Budget
+
+### The contract
+
+`maxResults` is a **true total** of match locations per delivery pass, enforced by the domain —
+never delegated to the native backend as a per-file flag:
+
+- The native `--max-count` flag applies per input file. Binding the session's total budget to it
+  over-delivers, discards emissions, and loses matches silently when an early file holds more
+  matches than the remaining budget. That delegation is a proven defect class and is forbidden.
+- Batch plans carry no `--max-count`. The backend streams raw matches in strict candidate order
+  (`-J1`, because the resume bookkeeping derives its frontier position from emission order), and
+  the domain collection loop terminates the stream exactly at the budget — the semantic
+  equivalent of `ugrep … | head -n B`.
+- The single-file lane keeps `--max-count` unchanged: there, per-file and total semantics are
+  identical by construction.
+- `totalMatches`, `truncated`, the `max_results_limit_reached` stop state, and the session
+  delivery summary always reflect this contract truth. A budget stop is a clean truncation
+  boundary, never an error.
+
+### Why candidate order is load-bearing
+
+The native backend threads by default and may reorder per-file emission across runs. The resume
+frontier (`activeBatchEntryIndex`, `activeFileMatchOffset`, `nextUnitIndexAfter`) is only true
+when emission follows candidate order, so batch plans always set `-J1`. A cheaper-sounding
+threaded batch would silently corrupt the frontier.
 
 ---
 

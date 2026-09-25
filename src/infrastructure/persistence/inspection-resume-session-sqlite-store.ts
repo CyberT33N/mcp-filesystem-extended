@@ -121,6 +121,19 @@ export class InspectionResumeSessionSqliteStore {
     return Number(result.changes);
   }
 
+  /**
+   * Rebuilds the database file so TTL deletions physically shrink it.
+   *
+   * @remarks
+   * `DELETE` frees pages inside the existing file but never shrinks it: the file stays at its
+   * high-water mark and reuses free pages for future writes. VACUUM rewrites the file at its
+   * real content size. This maintenance runs once at server startup after the TTL cleanup and
+   * never on the request path, because VACUUM rewrites the whole file.
+   */
+  vacuum(): void {
+    this.database.exec("VACUUM");
+  }
+
   createSession<TRequest, TState>(
     seed: InspectionResumeSessionSeed<TRequest, TState>,
     now = new Date(),

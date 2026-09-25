@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -154,6 +154,32 @@ describe("replace_file_line_ranges", () => {
         { preserveIndentation: false },
       ),
     ).rejects.toThrow("Invalid line range: 3-3 (file has 2 lines)");
+  });
+
+  it("writes replacements through a file symlink into the resolved target file", async () => {
+    const linkPath = join(sandboxRootPath, "notes-alias.ts");
+    await symlink(targetFilePath, linkPath, "file");
+
+    await handleReplaceFileLineRanges(
+      [
+        {
+          path: linkPath,
+          replacements: [
+            {
+              startLine: 2,
+              endLine: 2,
+              replacementText: "'linked first',",
+            },
+          ],
+        },
+      ],
+      false,
+      { preserveIndentation: true },
+      allowedDirectories,
+    );
+
+    expect(await readFile(targetFilePath, "utf8")).toContain("'linked first',");
+    expect((await lstat(linkPath)).isSymbolicLink()).toBe(true);
   });
 
   it("parses line-range replacement batches through the schema", () => {

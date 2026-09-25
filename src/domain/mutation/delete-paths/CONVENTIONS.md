@@ -74,6 +74,15 @@ The public registration surface explicitly scopes this endpoint to removal workf
 
 It must not be documented as an in-place rewrite shortcut, a rename step, or a content-replacement helper.
 
+### 3.5 Symbolic-link targets
+
+Deletion acts on the requested path itself. Scope security stays realpath-based, but the removal never resolves the link into its target:
+
+- deleting a symbolic link removes the link itself,
+- the canonical link target is never touched,
+- a dangling link can be deleted like any other entry,
+- a link never requires the recursive flag, even when it points to a directory.
+
 ---
 ---
 

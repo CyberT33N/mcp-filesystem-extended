@@ -17,6 +17,7 @@ import {
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
+import { FileSystemEntrySymlinkMarkingSchema } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 
 export const FindPathsByNameArgsSchema = z.object({
   [INSPECTION_RESUME_TOKEN_FIELD]: InspectionResumeTokenFieldSchema("name-discovery"),
@@ -225,6 +226,14 @@ export const FindPathsByNameResultSchema = z.object({
        * ```
        */
       matches: z.array(z.string()),
+      /**
+       * Symbolic-link markings.
+       *
+       * @remarks
+       * This optional additive property marks delivered matches that are symbolic
+       * links and exposes their resolved link targets.
+       */
+      symlinkMatches: z.array(FileSystemEntrySymlinkMarkingSchema).optional(),
       /**
        * Root truncation flag.
        *

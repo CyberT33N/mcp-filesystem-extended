@@ -63,6 +63,7 @@ export class FilesystemServer {
     this.allowedDirectories = allowedDirectories;
     this.inspectionResumeSessionStore = new InspectionResumeSessionSqliteStore();
     this.inspectionResumeSessionStore.cleanupExpiredSessions();
+    this.inspectionResumeSessionStore.vacuum();
     getUgrepRuntimeDependency();
 
     this.server = new McpServer(

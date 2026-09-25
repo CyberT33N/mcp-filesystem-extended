@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -70,6 +70,22 @@ describe("get_path_metadata", () => {
     expect(output).toContain(`path: ${sampleFilePath}`);
     expect(output).toContain("size: 3 bytes");
     expect(output).toContain("type: file");
+  });
+
+  it("reports an explicitly requested symlink with its alias nature and resolved target", async () => {
+    const aliasPath = join(sandboxRootPath, "alias.txt");
+    await symlink(sampleFilePath, aliasPath, "file");
+
+    const result = await getPathMetadataResult([aliasPath], undefined, allowedDirectories);
+    const aliasEntry = result.entries[0];
+
+    expect(aliasEntry?.type).toBe("symlink");
+    expect(aliasEntry?.linkTarget).toBe(sampleFilePath);
+
+    const output = await handleGetPathMetadata([aliasPath], undefined, allowedDirectories);
+
+    expect(output).toContain("type: symlink");
+    expect(output).toContain(`linkTarget: ${sampleFilePath}`);
   });
 
   it("defaults grouped metadata selection when the request omits it", () => {

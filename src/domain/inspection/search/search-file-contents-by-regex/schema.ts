@@ -22,6 +22,7 @@ import {
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
 import { SEARCH_STOP_REASON_VALUES } from "../search-stop-state";
+import { SearchAliasReferenceEventSchema } from "../search-alias-attribution";
 import { SearchSessionDeliverySummarySchema } from "../search-session-delivery";
 
 /**
@@ -188,7 +189,7 @@ export const SearchFileContentsByRegexBaseArgsSchema = z.object({
     .max(REGEX_SEARCH_MAX_RESULTS_HARD_CAP)
     .optional()
     .default(100)
-    .describe(`Maximum number of results to return before truncation. The value may not exceed the hard cap of ${REGEX_SEARCH_MAX_RESULTS_HARD_CAP} results.`),
+    .describe(`Maximum total number of match locations returned in one response before truncation. The budget is a true total across all searched files — never a per-file sample — and applies per delivery pass in resumed sessions; a pass that stops at this budget carries the max_results_limit_reached stop state. The value may not exceed the hard cap of ${REGEX_SEARCH_MAX_RESULTS_HARD_CAP} results.`),
   /**
    * Case-sensitivity flag.
    *
@@ -361,6 +362,15 @@ export const SearchFileContentsByRegexResultSchema = z.object({
            * ```
            */
           match: z.string(),
+          /**
+           * Alias attributions.
+           *
+           * @remarks
+           * Optional additive field: present only when the session registered
+           * symbolic links that reference the canonical file producing this
+           * match. The match itself is delivered exactly once.
+           */
+          attributedAliases: z.array(z.string()).optional(),
         }),
       ),
       /**
@@ -439,6 +449,15 @@ export const SearchFileContentsByRegexResultSchema = z.object({
        * partial-result state exists.
        */
       stopMessage: z.string().nullable(),
+      /**
+       * Alias-reference events.
+       *
+       * @remarks
+       * Optional additive field: present when the traversal registered symbolic
+       * links whose targets were already delivered in this session or lie outside
+       * the requested root. Links are never followed into content.
+       */
+      aliasReferences: z.array(SearchAliasReferenceEventSchema).optional(),
     }),
   ),
   /**

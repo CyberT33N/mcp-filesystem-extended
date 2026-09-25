@@ -75,6 +75,10 @@ Every successful entry must preserve these local invariants:
 
 The endpoint must not invent synthetic metadata groups beyond the grouped selectors already modeled by the schema.
 
+### Symbolic-link visibility
+
+An explicitly requested path that is a symbolic link reports its alias nature instead of its target's metadata: `type` is `symlink`, `linkTarget` carries the resolved absolute target path, and `size` plus the optional groups describe the link entry itself. Scope security still resolves the real path during validation; only the metadata read stays on the requested path.
+
 ---
 
 ## Text-Formatting Conventions

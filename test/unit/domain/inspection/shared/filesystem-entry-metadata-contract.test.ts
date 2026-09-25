@@ -5,6 +5,7 @@ import {
   DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
   DefaultedFileSystemEntryMetadataSelectionSchema,
   FileSystemEntryMetadataSchema,
+  FileSystemEntrySymlinkMarkingSchema,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 
 describe("filesystem_entry_metadata_contract", () => {
@@ -27,6 +28,29 @@ describe("filesystem_entry_metadata_contract", () => {
     expect(parsed.type).toBe("file");
     expect(parsed.size).toBe(3);
     expect(parsed.permissions).toBe("644");
+  });
+
+  it("parses symlink metadata with its resolved link target", () => {
+    const parsed = FileSystemEntryMetadataSchema.parse({
+      linkTarget: "C:/targets/file.txt",
+      size: 12,
+      type: "symlink",
+    });
+
+    expect(parsed.type).toBe("symlink");
+    expect(parsed.linkTarget).toBe("C:/targets/file.txt");
+  });
+
+  it("parses the symbolic-link marking surface", () => {
+    const parsed = FileSystemEntrySymlinkMarkingSchema.parse({
+      linkTarget: "C:/targets/file.ts",
+      path: "src/alias.ts",
+    });
+
+    expect(parsed).toEqual({
+      linkTarget: "C:/targets/file.ts",
+      path: "src/alias.ts",
+    });
   });
 
   it("preserves batch error payloads with path and error details", () => {

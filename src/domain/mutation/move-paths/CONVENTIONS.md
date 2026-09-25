@@ -76,6 +76,15 @@ Because that behavior is already owned locally, callers do not need `create_dire
 - there is no separate recursive flag on this endpoint,
 - the same contract covers same-parent rename and cross-directory relocation.
 
+### 3.5 Symbolic-link semantics
+
+Move operations act on the requested path itself:
+
+- moving a symbolic link relocates the link; the link target is never touched,
+- a dangling source link remains movable,
+- when `overwrite=true` replaces an existing destination link, only the destination link is removed — never its target,
+- a destination path occupied by a link counts as existing and therefore requires `overwrite=true`.
+
 ---
 ---
 

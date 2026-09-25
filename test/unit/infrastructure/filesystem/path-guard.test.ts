@@ -1,5 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import os, { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ vi.mock("@infrastructure/logging/logger", () => ({
 }));
 
 import {
+  resolveRequestedPath,
   validatePath,
   validatePathForCreation,
 } from "@infrastructure/filesystem/path-guard";
@@ -70,6 +71,21 @@ describe("path_guard", () => {
 
     await expect(validatePathForCreation(nestedCreationPath, [allowedRootPath])).resolves.toBe(
       nestedCreationPath,
+    );
+  });
+
+  it("resolves requested paths to their absolute operation path without following links", async () => {
+    const linkedFilePath = join(allowedRootPath, "linked.txt");
+    const aliasPath = join(allowedRootPath, "alias.txt");
+    await writeFile(linkedFilePath, "canonical", "utf8");
+    await symlink(linkedFilePath, aliasPath, "file");
+
+    expect(resolveRequestedPath(aliasPath)).toBe(aliasPath);
+    expect(resolveRequestedPath(join("relative", "target.txt"))).toBe(
+      join(process.cwd(), "relative", "target.txt"),
+    );
+    expect(resolveRequestedPath("~/home-file.txt")).toBe(
+      join(os.homedir(), "home-file.txt"),
     );
   });
 });

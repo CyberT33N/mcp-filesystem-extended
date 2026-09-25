@@ -47,8 +47,23 @@ export interface BuildUgrepCommandInput {
 
   /**
    * Optional maximum number of emitted matches.
+   *
+   * @remarks
+   * The native `--max-count` flag applies per input file, never as a global total. It is
+   * therefore only lawful on single-file command plans; batch plans enforce their total budget
+   * domain-side through the streaming runner instead.
    */
   maxCount?: number;
+
+  /**
+   * Whether the backend must emit matches in strict candidate order.
+   *
+   * @remarks
+   * Maps to the native `-J1` flag, which disables threading so files are searched in the same
+   * order as specified. Batch plans need this because the resume bookkeeping derives its
+   * frontier position from the candidate order of the emitted stream.
+   */
+  preserveCandidateOrder?: boolean;
 
   /**
    * Optional number of leading context lines per match.
@@ -132,6 +147,10 @@ export function buildUgrepCommand(input: BuildUgrepCommandInput): UgrepCommand {
     "--line-number",
     "--with-filename",
   ];
+
+  if (input.preserveCandidateOrder === true) {
+    args.push("-J1");
+  }
 
   if (!input.caseSensitive) {
     args.push("--ignore-case");

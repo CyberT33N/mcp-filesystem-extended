@@ -26,6 +26,7 @@ import type {
   InspectionResumeMetadata,
 } from "@domain/shared/resume/inspection-resume-contract";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
+import type { FileSystemEntrySymlinkMarking } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
 
@@ -46,6 +47,14 @@ export interface FindPathsByNameRootResult {
   root: string;
   matches: string[];
   truncated: boolean;
+  /**
+   * Symbolic-link markings for delivered matches that are aliases.
+   *
+   * @remarks
+   * Present only when at least one delivered match is a symbolic link. The alias stays in
+   * `matches` as the truthful traversal path; the marking adds the alias nature and target.
+   */
+  symlinkMatches?: FileSystemEntrySymlinkMarking[];
 }
 
 /**
@@ -154,6 +163,19 @@ function buildFindPathsByNameScopeReductionGuidance(directoryPaths: string[]): s
   return "Reduce the discovery scope by narrowing roots or making nameContains more specific.";
 }
 
+function formatFindPathsByNameMarkedMatches(result: FindPathsByNameRootResult): string {
+  const linkTargetByAliasPath = new Map(
+    (result.symlinkMatches ?? []).map((marking) => [marking.path, marking.linkTarget]),
+  );
+
+  return result.matches
+    .map((match) => {
+      const linkTarget = linkTargetByAliasPath.get(match);
+      return linkTarget === undefined ? match : `${match} [symlink → ${linkTarget}]`;
+    })
+    .join("\n");
+}
+
 /**
  * Formats one root-local name-search delta of a continuation pass into the public text response surface.
  *
@@ -178,7 +200,7 @@ function formatFindPathsByNameCompletionDeltaRootOutput(
     return "No additional matches found in this completion pass";
   }
 
-  let output = `Found ${result.matches.length} additional matches in this completion pass\n\n${result.matches.join("\n")}`;
+  let output = `Found ${result.matches.length} additional matches in this completion pass\n\n${formatFindPathsByNameMarkedMatches(result)}`;
 
   if (result.truncated) {
     output += `\n(limited to ${maxResults} results)`;
@@ -444,6 +466,9 @@ async function getFindPathsByNameRootResult(
     root: directoryPath,
     matches: result.matches,
     truncated: result.truncated,
+    ...(result.symlinkMatches !== undefined && result.symlinkMatches.length > 0
+      ? { symlinkMatches: result.symlinkMatches }
+      : {}),
     admissionOutcome: result.admissionOutcome ?? INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
     nextContinuationState: result.nextContinuationState ?? null,
   };
@@ -461,7 +486,7 @@ function formatFindPathsByNameRootOutput(
     return "No matches found";
   }
 
-  let output = result.matches.join("\n");
+  let output = formatFindPathsByNameMarkedMatches(result);
 
   if (result.truncated) {
     output += `\n(limited to ${maxResults} results)`;
@@ -594,10 +619,11 @@ export async function getFindPathsByNameResult(
   );
 
   return {
-    roots: roots.map(({ root, matches, truncated }) => ({
+    roots: roots.map(({ root, matches, truncated, symlinkMatches }) => ({
       root,
       matches,
       truncated,
+      ...(symlinkMatches !== undefined ? { symlinkMatches } : {}),
     })),
     totalMatches: roots.reduce((total, root) => total + root.matches.length, 0),
     truncated: roots.some((root) => root.truncated),

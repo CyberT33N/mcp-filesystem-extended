@@ -943,6 +943,49 @@ describe("search_file_contents_by_fixed_string", () => {
     });
   });
 
+  it("passes alias-reference events through the structured root surface", async () => {
+    mockedGetSearchFixedStringPathResult.mockResolvedValue({
+      admissionOutcome: "inline",
+      error: null,
+      filesSearched: 1,
+      matches: [],
+      nextContinuationState: null,
+      root: "src",
+      totalMatches: 0,
+      truncated: false,
+      aliasReferences: [
+        {
+          aliasPath: "aliases/escape.ts",
+          targetPath: "C:/outside/secret.ts",
+          disposition: "outside-scope",
+        },
+      ],
+    });
+
+    const result = await getSearchFixedStringResult({
+      resumeToken: undefined,
+      resumeMode: undefined,
+      searchPaths: ["src"],
+      fixedString: "needle",
+      filePatterns: [],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 100,
+      caseSensitive: false,
+      allowedDirectories: [],
+      inspectionResumeSessionStore: undefined,
+    });
+
+    expect(result.roots[0]?.aliasReferences).toEqual([
+      {
+        aliasPath: "aliases/escape.ts",
+        targetPath: "C:/outside/secret.ts",
+        disposition: "outside-scope",
+      },
+    ]);
+  });
+
   it("enforces the fixed-string base-request and resume-only schema rules", () => {
     expect(
       SearchFileContentsByFixedStringArgsSchema.safeParse({
@@ -989,5 +1032,149 @@ describe("search_file_contents_by_fixed_string", () => {
         resumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
       }).success,
     ).toBe(false);
+  });
+
+  it("keeps the session active with its persisted frontier when a resume pass fails transiently", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-fixed-string-transient-failure-"));
+    const store = new InspectionResumeSessionSqliteStore(
+      join(sandboxRootPath, "sessions.sqlite"),
+    );
+
+    try {
+      const seededSession = store.createSession({
+        endpointName: "search_file_contents_by_fixed_string",
+        familyMember: "search_file_contents_by_fixed_string",
+        requestPayload: {
+          searchPaths: ["src"],
+          fixedString: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 100,
+          caseSensitive: false,
+        },
+        resumeState: {
+          rootTraversalStates: {
+            src: {
+              traversalFrames: [{ directoryRelativePath: "", nextEntryIndex: 5 }],
+              activeFileRelativePath: null,
+              activeFileMatchOffset: 0,
+            },
+          },
+        },
+        admissionOutcome: "preview-first",
+      });
+
+      mockedGetSearchFixedStringPathResult.mockRejectedValue(
+        new Error("Native search runner timed out before completion."),
+      );
+
+      const result = await getSearchFixedStringResult({
+        resumeToken: seededSession.resumeToken,
+        resumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+        searchPaths: [],
+        fixedString: "",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 100,
+        caseSensitive: false,
+        allowedDirectories: [sandboxRootPath],
+        inspectionResumeSessionStore: store,
+      });
+
+      expect(result.resume.resumable).toBe(true);
+      expect(result.roots[0]?.error).toContain("could not be executed to completion");
+      expect(result.roots[0]?.error).toContain("session remains active");
+      expect(
+        store.loadActiveSession(
+          seededSession.resumeToken,
+          "search_file_contents_by_fixed_string",
+          "search_file_contents_by_fixed_string",
+        ),
+      ).not.toBeNull();
+    } finally {
+      store.close();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("closes the session truthfully when a resume pass fails permanently", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-fixed-string-permanent-failure-"));
+    const store = new InspectionResumeSessionSqliteStore(
+      join(sandboxRootPath, "sessions.sqlite"),
+    );
+
+    try {
+      const seededSession = store.createSession({
+        endpointName: "search_file_contents_by_fixed_string",
+        familyMember: "search_file_contents_by_fixed_string",
+        requestPayload: {
+          searchPaths: ["src"],
+          fixedString: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 100,
+          caseSensitive: false,
+        },
+        resumeState: {
+          rootTraversalStates: {
+            src: {
+              traversalFrames: [{ directoryRelativePath: "", nextEntryIndex: 5 }],
+              activeFileRelativePath: null,
+              activeFileMatchOffset: 0,
+            },
+          },
+        },
+        admissionOutcome: "preview-first",
+      });
+
+      mockedGetSearchFixedStringPathResult.mockRejectedValue(
+        new Error(
+          "Tool guardrail refusal: Request rejected during metadata preflight before content execution began.\nFailure code: metadata_preflight_rejected\nDetails:\n- Preflight target: src.",
+        ),
+      );
+
+      const actualResultModule = await vi.importActual<
+        typeof import("@domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-result")
+      >("@domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-result");
+
+      mockedFormatSearchFixedStringContinuationAwareTextOutput.mockImplementation(
+        actualResultModule.formatSearchFixedStringContinuationAwareTextOutput,
+      );
+
+      const toolResult = await buildSearchFixedStringToolResult({
+        resumeToken: seededSession.resumeToken,
+        resumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+        searchPaths: [],
+        fixedString: "",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 100,
+        caseSensitive: false,
+        allowedDirectories: [sandboxRootPath],
+        inspectionResumeSessionStore: store,
+      });
+
+      expect(toolResult.result.resume.resumable).toBe(false);
+      expect(toolResult.text).toContain("session closed without completing");
+      expect(toolResult.text).not.toContain("completion finished");
+      expect(
+        store.loadActiveSession(
+          seededSession.resumeToken,
+          "search_file_contents_by_fixed_string",
+          "search_file_contents_by_fixed_string",
+        ),
+      ).toBeNull();
+    } finally {
+      store.close();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
   });
 });

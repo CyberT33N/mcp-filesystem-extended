@@ -71,6 +71,12 @@ This behavior must remain explicit in endpoint-local documentation because it di
 
 ---
 
+## Architectural Principle: Symbolic-Link Write-Through
+
+When the append target path is a symbolic link, content is appended through the link into the resolved target file. The link itself is never modified by an append.
+
+---
+
 ## Architectural Principle: Contrast with Nearby Mutation Surfaces
 
 `append_files` must stay clearly separated from the nearby content-mutation surfaces:

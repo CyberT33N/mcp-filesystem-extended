@@ -77,8 +77,8 @@ All six resume-capable inspection endpoints whose handler calls `assertActualTex
 | Guardrail | Active? | Notes |
 |---|---|---|
 | Schema caps (Layer 1) | ✅ | Always |
-| Admission decision (Layer 2) | ✅ | Re-evaluated against persisted payload |
-| Candidate workload probe (Layer 3) | ✅ | Re-run for admission input |
+| Admission decision (Layer 2) | ✅ | Search endpoints read the persisted birth decision from the session; other endpoints re-evaluate against the persisted payload |
+| Candidate workload probe (Layer 3) | ⚠️ endpoint-dependent | Search endpoints never re-run the probe on resume passes; other endpoint families still re-run it for admission input |
 | Preview runtime budget (Layer 4) | ✅ | Bounds the chunk traversal |
 | Family-level response cap (Layer 5) | ✅ | Chunk text output is subject to family cap |
 | Global fuse (Layer 6) | ✅ | Always |
@@ -90,8 +90,8 @@ When a preview-family `next-chunk` or base preview response pauses because of th
 | Guardrail | Active? | Notes |
 |---|---|---|
 | Schema caps (Layer 1) | ✅ | Always |
-| Admission decision (Layer 2) | ✅ | Re-evaluated; still routes to PREVIEW_FIRST, which activates the complete-result branch |
-| Candidate workload probe (Layer 3) | ✅ | Re-run for admission input |
+| Admission decision (Layer 2) | ✅ | Search endpoints read the persisted birth decision from the session; other endpoints re-evaluate |
+| Candidate workload probe (Layer 3) | ⚠️ endpoint-dependent | Search endpoints never re-run the probe on resume passes; other endpoint families still re-run it for admission input |
 | Preview runtime budget (Layer 4) | ❌ | Not used; full traversal path is active |
 | Deep traversal breadth safeguards | ✅ internal only | 500K entries and 50K directories remain last-resort stabilizers |
 | Local soft runtime timeout | ❌ | Preview-family `complete-result` must not inherit the legacy 5-second soft-time wall |
@@ -114,11 +114,12 @@ When a preview-family `next-chunk` or base preview response pauses because of th
 
 ## Admission-Layer Timeouts Are Not a Conflict
 
-The proactive admission decision (Layer 2) re-runs on every resume request, including `complete-result` requests. This is correct and intentional:
+The proactive admission decision (Layer 2) is resolved once at the birth of every resume session. On resume passes, the search endpoints read the persisted birth decision from the session record instead of re-running the blocking probe:
 
 - The admission layer is **routing logic**, not a blocking guard for `complete-result` execution.
-- A `PREVIEW_FIRST` admission outcome in a resume request **activates** the `complete-result` branch in the handler — it does not block it.
-- The admission layer ensures that the handler knows whether it is in a preview-capable, completion-backed, or narrowing-required situation before selecting the execution path.
+- A `PREVIEW_FIRST` birth admission **activates** the `complete-result` branch on resume passes that request it — it does not block it.
+- The blocking preflight probe and the candidate workload sampling run at session birth only; resume passes re-validate the root and re-resolve the scope policy (cheap, path-based) and never re-run the tree-walk probe.
+- A root deleted between passes fails that per-pass re-validation as a **permanent** failure: the session may close, but truthfully — never with a `completion finished` framing. Transient failures (time budgets, backend timeouts) keep the session active with its persisted frontier unchanged.
 
 The admission timeouts that informed the original `PREVIEW_FIRST` routing decision are part of this logic and remain architecturally correct. They were never designed to block `complete-result` execution — that conflict arose only when the family-level response cap was applied unconditionally without checking the delivery mode.
 

@@ -86,6 +86,58 @@ describe("search resume terminal truthfulness regression contract", () => {
     expect(output).toContain("session total 1 matches in 1 locations");
   });
 
+  it("guards the failure-close contract: a terminal pass with a permanent root failure never claims completion", () => {
+    const output = formatSearchRegexContinuationAwareTextOutput(
+      {
+        roots: [
+          {
+            root: "src",
+            matches: [],
+            filesSearched: 0,
+            totalMatches: 0,
+            truncated: false,
+            error:
+              "This resume pass could not be executed to completion: the requested root no longer exists. The session remains active with its persisted frontier — resume the same request again or narrow the scope.",
+            stopReason: null,
+            stopMessage: null,
+          },
+        ],
+        totalLocations: 0,
+        totalMatches: 0,
+        truncated: false,
+        sessionDelivery: {
+          continuationPass: true,
+          previouslyDeliveredCount: 1,
+          previouslyDeliveredLocationCount: 1,
+          sessionTotalCount: 1,
+          sessionTotalLocationCount: 1,
+        },
+        admission: {
+          outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+          guidanceText:
+            "Continuation response. This payload contains entries from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset.",
+          scopeReductionGuidanceText: null,
+        },
+        resume: {
+          resumeToken: null,
+          resumable: false,
+          status: null,
+          expiresAt: null,
+          supportedResumeModes: [
+            INSPECTION_RESUME_MODES.NEXT_CHUNK,
+            INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+          ],
+          recommendedResumeMode: null,
+        },
+      },
+      "project[_ ]number",
+      400,
+    );
+
+    expect(output).not.toContain("completion finished");
+    expect(output).toContain("session closed without completing");
+  });
+
   it("guards glob-discovery completion passes: a resumable completion-backed pass never claims completion", () => {
     const output = formatFindFilesByGlobTextOutput(
       {

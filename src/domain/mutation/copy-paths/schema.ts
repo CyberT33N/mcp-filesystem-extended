@@ -86,5 +86,5 @@ export const CopyPathsArgsSchema = z.object({
     )
     .min(1)
     .max(MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST)
-    .describe(`Copy operations. Pass one operation for a single copy or multiple operations for a batch copy. The tool creates missing destination parent directories recursively, so a separate create_directories call is unnecessary. The request accepts at most ${MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST} operations.`),
+    .describe(`Copy operations. Pass one operation for a single copy or multiple operations for a batch copy. The tool creates missing destination parent directories recursively, so a separate create_directories call is unnecessary. The request accepts at most ${MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST} operations. Copying follows symbolic links into their content: the destination receives the resolved target content, links whose targets leave the allowed directories are refused, and link cycles are rejected.`),
 });

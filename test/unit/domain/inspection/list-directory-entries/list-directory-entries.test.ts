@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -292,6 +292,29 @@ describe("list_directory_entries", () => {
     expect(output).toContain("Directory listing completion progress is available for 2 roots with 0 entries in this bounded chunk.");
     expect(output).toContain("No entries collected in this chunk");
     expect(output).toContain("Active resumeToken: resume_123");
+  });
+
+  it("marks symbolic-link entries with their resolved link target", async () => {
+    const aliasPath = join(nestedDirectoryPath, "alias.txt");
+    await symlink(sampleFilePath, aliasPath, "file");
+
+    const result = await getListDirectoryEntriesResult(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      true,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      allowedDirectories,
+    );
+
+    const nestedEntry = result.roots[0]?.entries.find((entry) => entry.path === "nested");
+    const aliasEntry = nestedEntry?.children?.find((entry) => entry.path === "nested/alias.txt");
+
+    expect(aliasEntry?.type).toBe("symlink");
+    expect(aliasEntry?.linkTarget).toBe(sampleFilePath);
   });
 
   it("threads session-cumulative delivery through a resumed directory-listing session", async () => {

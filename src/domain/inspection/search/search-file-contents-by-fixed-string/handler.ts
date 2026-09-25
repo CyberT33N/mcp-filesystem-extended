@@ -29,6 +29,10 @@ import {
   type SearchDeliveredTotals,
 } from "../search-session-delivery";
 import {
+  classifySearchResumePassFailure,
+  SEARCH_RESUME_PASS_FAILURE_CLASSES,
+} from "../search-session-failure-classification";
+import {
   getSearchFixedStringPathResult,
   type SearchFixedStringRootContinuationState,
 } from "./search-fixed-string-path-result";
@@ -516,6 +520,26 @@ export async function getSearchFixedStringResult(
       roots.push(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const persistedRootContinuationState =
+        executionContext.continuationState?.rootTraversalStates[searchPath] ?? null;
+
+      // A transient failure inside a resume pass must not collapse the root into a terminal
+      // error: the persisted frontier is preserved unchanged and the session stays active.
+      if (
+        executionContext.activeResumeSession !== null
+        && persistedRootContinuationState !== null
+        && classifySearchResumePassFailure(error) === SEARCH_RESUME_PASS_FAILURE_CLASSES.TRANSIENT
+      ) {
+        roots.push({
+          ...createFixedStringRootErrorResult(
+            searchPath,
+            `This resume pass could not be executed to completion: ${errorMessage} The session remains active with its persisted frontier — resume the same request again or narrow the scope.`,
+          ),
+          admissionOutcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+          nextContinuationState: persistedRootContinuationState,
+        });
+        continue;
+      }
 
       roots.push({
         ...createFixedStringRootErrorResult(searchPath, errorMessage),
@@ -562,7 +586,7 @@ export async function getSearchFixedStringResult(
 
   return {
     roots: roots.map(
-      ({ root, matches, filesSearched, totalMatches, truncated, error, stopReason, stopMessage }) => ({
+      ({ root, matches, filesSearched, totalMatches, truncated, error, stopReason, stopMessage, aliasReferences }) => ({
         root,
         matches,
         filesSearched,
@@ -571,6 +595,7 @@ export async function getSearchFixedStringResult(
         error,
         stopReason,
         stopMessage,
+        ...(aliasReferences !== undefined ? { aliasReferences } : {}),
       })
     ),
     totalLocations: roots.reduce((total, root) => total + root.matches.length, 0),

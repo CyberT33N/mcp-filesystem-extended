@@ -53,6 +53,10 @@ Instead, it answers one question only:
 - Directory-root scopes enter the shared traversal admission planner before broad traversal begins.
 - Recursive aggregate governance must not be described as a blanket hard refusal for explicit large text-compatible files.
 
+### Symbolic-link behavior
+
+This endpoint follows the family-level symbolic-link doctrine: directory traversal never follows links into content, and alias references surface through the shared alias-attribution contract (`already-delivered` and `outside-scope` events plus per-match alias attribution). An explicitly requested file scope that is itself a link is still read through path validation as deliberate targeting. See [the family symbolic-link doctrine](../CONVENTIONS.md#symbolic-link-doctrine-no-follow--alias-attribution).
+
 ---
 
 ## Content-State and Eligibility Conventions

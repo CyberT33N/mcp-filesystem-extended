@@ -24,7 +24,7 @@ export const DeletePathsArgsSchema = z.object({
     .array(z.string().max(PATH_MAX_CHARS))
     .min(1)
     .max(MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST)
-    .describe(`Paths to files or directories to delete. Pass one path for a single delete or multiple paths for a batch delete. Each path is capped at ${PATH_MAX_CHARS} characters, and the request accepts at most ${MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST} deletion targets.`),
+    .describe(`Paths to files or directories to delete. Pass one path for a single delete or multiple paths for a batch delete. Each path is capped at ${PATH_MAX_CHARS} characters, and the request accepts at most ${MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST} deletion targets. Symbolic links are deleted as links: the link itself is removed and its target is never touched.`),
   /**
    * Recursive deletion mode.
    *

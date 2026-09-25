@@ -1,7 +1,37 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+/**
+ * Hoisted symlink-target resolver mock used to drive the vanished-alias guard deterministically.
+ */
+const findPathsByNameMockState = vi.hoisted(() => {
+  const state: {
+    mockedResolveSymlinkTargetPath: ReturnType<typeof vi.fn>;
+    actualResolveSymlinkTargetPath:
+      | typeof import("@infrastructure/filesystem/filesystem-entry-metadata").resolveSymlinkTargetPath
+      | null;
+  } = {
+    mockedResolveSymlinkTargetPath: vi.fn(),
+    actualResolveSymlinkTargetPath: null,
+  };
+
+  return state;
+});
+
+vi.mock("@infrastructure/filesystem/filesystem-entry-metadata", async () => {
+  const actual = await vi.importActual<
+    typeof import("@infrastructure/filesystem/filesystem-entry-metadata")
+  >("@infrastructure/filesystem/filesystem-entry-metadata");
+
+  findPathsByNameMockState.actualResolveSymlinkTargetPath = actual.resolveSymlinkTargetPath;
+
+  return {
+    ...actual,
+    resolveSymlinkTargetPath: findPathsByNameMockState.mockedResolveSymlinkTargetPath,
+  };
+});
 
 import {
   formatFindPathsByNameTextOutput,
@@ -22,6 +52,17 @@ describe("find_paths_by_name", () => {
   let allowedDirectories: string[] = [];
 
   beforeEach(async () => {
+    const actualResolveSymlinkTargetPath = findPathsByNameMockState.actualResolveSymlinkTargetPath;
+
+    if (actualResolveSymlinkTargetPath === null) {
+      throw new Error("Expected the actual symlink-target resolver binding to be initialized.");
+    }
+
+    findPathsByNameMockState.mockedResolveSymlinkTargetPath.mockReset();
+    findPathsByNameMockState.mockedResolveSymlinkTargetPath.mockImplementation(
+      actualResolveSymlinkTargetPath,
+    );
+
     sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-find-name-"));
     allowedDirectories = [sandboxRootPath];
 
@@ -128,6 +169,82 @@ describe("find_paths_by_name", () => {
     );
 
     expect(output).toContain(join(alphaRootPath, "SchemaRecord.ts"));
+  });
+
+  it("marks alias matches with their resolved link targets across helper, structured, and text surfaces", async () => {
+    const canonicalFilePath = join(sandboxRootPath, "alpha", "SchemaRecord.ts");
+    const aliasPath = join(sandboxRootPath, "alpha", "schema-alias.ts");
+    await symlink(canonicalFilePath, aliasPath, "file");
+
+    const helperResult = await searchFiles(
+      sandboxRootPath,
+      "schema-alias",
+      [],
+      [],
+      false,
+      allowedDirectories,
+      100,
+    );
+
+    expect(helperResult.matches).toEqual([aliasPath]);
+    expect(helperResult.symlinkMatches).toEqual([
+      { path: aliasPath, linkTarget: canonicalFilePath },
+    ]);
+
+    const result = await getFindPathsByNameResult(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      "schema-alias",
+      [],
+      [],
+      false,
+      undefined,
+      allowedDirectories,
+      100,
+    );
+
+    expect(result.roots[0]?.symlinkMatches).toEqual([
+      { path: aliasPath, linkTarget: canonicalFilePath },
+    ]);
+
+    const output = await handleSearchFiles(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      "schema-alias",
+      [],
+      [],
+      false,
+      undefined,
+      allowedDirectories,
+      100,
+    );
+
+    expect(output).toContain(`${aliasPath} [symlink → ${canonicalFilePath}]`);
+  });
+
+  it("delivers an alias match without its marking when the link-target resolution fails mid-traversal", async () => {
+    const canonicalFilePath = join(sandboxRootPath, "alpha", "SchemaRecord.ts");
+    const aliasPath = join(sandboxRootPath, "alpha", "schema-alias.ts");
+    await symlink(canonicalFilePath, aliasPath, "file");
+
+    findPathsByNameMockState.mockedResolveSymlinkTargetPath.mockRejectedValueOnce(
+      new Error("ENOENT: symbolic link vanished mid-traversal"),
+    );
+
+    const helperResult = await searchFiles(
+      sandboxRootPath,
+      "schema-alias",
+      [],
+      [],
+      false,
+      allowedDirectories,
+      100,
+    );
+
+    expect(helperResult.matches).toEqual([aliasPath]);
+    expect(helperResult.symlinkMatches).toBeUndefined();
   });
 
   it("rejects resume requests when resume-session storage is unavailable", async () => {

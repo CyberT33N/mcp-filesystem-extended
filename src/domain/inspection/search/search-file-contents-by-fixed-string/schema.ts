@@ -22,6 +22,7 @@ import {
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
 import { SEARCH_STOP_REASON_VALUES } from "../search-stop-state";
+import { SearchAliasReferenceEventSchema } from "../search-alias-attribution";
 import { SearchSessionDeliverySummarySchema } from "../search-session-delivery";
 
 /**
@@ -87,7 +88,7 @@ export const SearchFileContentsByFixedStringBaseArgsSchema = z.object({
     .max(REGEX_SEARCH_MAX_RESULTS_HARD_CAP)
     .optional()
     .default(100)
-    .describe(`Maximum number of results to return before truncation. The value may not exceed the hard cap of ${REGEX_SEARCH_MAX_RESULTS_HARD_CAP} results.`),
+    .describe(`Maximum total number of match locations returned in one response before truncation. The budget is a true total across all searched files — never a per-file sample — and applies per delivery pass in resumed sessions; a pass that stops at this budget carries the max_results_limit_reached stop state. The value may not exceed the hard cap of ${REGEX_SEARCH_MAX_RESULTS_HARD_CAP} results.`),
   caseSensitive: z
     .boolean()
     .optional()
@@ -159,6 +160,14 @@ export const SearchFileContentsByFixedStringResultSchema = z.object({
           line: z.number(),
           content: z.string(),
           match: z.string(),
+          /**
+           * Alias attributions accumulated for the canonical file that produced the match.
+           *
+           * @remarks
+           * Optional additive field: present only when the session registered symbolic links
+           * that reference the canonical file. The match is delivered exactly once.
+           */
+          attributedAliases: z.array(z.string()).optional(),
         })
       ),
       filesSearched: z.number(),
@@ -167,6 +176,14 @@ export const SearchFileContentsByFixedStringResultSchema = z.object({
       error: z.string().nullable(),
       stopReason: z.enum(SEARCH_STOP_REASON_VALUES).nullable(),
       stopMessage: z.string().nullable(),
+      /**
+       * Alias-reference events fired while traversing the root during the current pass.
+       *
+       * @remarks
+       * Optional additive field: present when the traversal registered symbolic links whose
+       * targets were already delivered in this session or lie outside the requested root.
+       */
+      aliasReferences: z.array(SearchAliasReferenceEventSchema).optional(),
     })
   ),
   totalLocations: z.number(),

@@ -26,6 +26,7 @@ import {
   buildTraversalNarrowingGuidance,
   collectValidatedFilesystemPreflightEntries,
   resolveTraversalPreflightContext,
+  resolveTraversalScopeContext,
   sumPreflightBytes,
 } from "@domain/shared/guardrails/filesystem-preflight";
 import { MAX_GENERIC_PATHS_PER_REQUEST } from "@domain/shared/guardrails/tool-guardrail-limits";
@@ -207,6 +208,34 @@ describe("filesystem preflight", () => {
     } finally {
       await rm(sandboxRootPath, { recursive: true, force: true });
     }
+  });
+
+  it("resolves the resume-pass scope context without the blocking admission probe", async () => {
+    mockedValidatePath.mockResolvedValueOnce("C:/allowed/root");
+    mockedGetFileSystemEntryMetadata.mockResolvedValueOnce({
+      size: 0,
+      type: "directory",
+    });
+
+    const result = await resolveTraversalScopeContext(
+      "search_file_contents_by_regex",
+      "root",
+      [],
+      [],
+      false,
+      ["C:/allowed"],
+      ["directory"],
+    );
+
+    expect(result.rootEntry).toEqual({
+      requestedPath: "root",
+      validPath: "C:/allowed/root",
+      type: "directory",
+      size: 0,
+    });
+    expect(result.traversalScopePolicyResolution).toBeDefined();
+    expect(result.rootLocalGitIgnoreAvailable).toBe(false);
+    expect("traversalPreflightAdmissionEvidence" in result).toBe(false);
   });
 
   it("mentions optional respectGitIgnore narrowing when preflight fails and a root-local gitignore is available but inactive", async () => {

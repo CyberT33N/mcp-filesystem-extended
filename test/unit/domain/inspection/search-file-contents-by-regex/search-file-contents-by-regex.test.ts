@@ -383,6 +383,49 @@ describe("search_file_contents_by_regex", () => {
     );
   });
 
+  it("passes alias-reference events through the structured root surface", async () => {
+    mockedGetSearchRegexPathResult.mockResolvedValue({
+      admissionOutcome: "inline",
+      error: null,
+      filesSearched: 1,
+      matches: [],
+      nextContinuationState: null,
+      root: "src",
+      totalMatches: 0,
+      truncated: false,
+      aliasReferences: [
+        {
+          aliasPath: "aliases/escape.ts",
+          targetPath: "C:/outside/secret.ts",
+          disposition: "outside-scope",
+        },
+      ],
+    });
+
+    const result = await getSearchRegexResult({
+      resumeToken: undefined,
+      resumeMode: undefined,
+      searchPaths: ["src"],
+      pattern: "needle",
+      filePatterns: [],
+      excludePatterns: [],
+      includeExcludedGlobs: [],
+      respectGitIgnore: false,
+      maxResults: 100,
+      caseSensitive: false,
+      allowedDirectories: [],
+      inspectionResumeSessionStore: undefined,
+    });
+
+    expect(result.roots[0]?.aliasReferences).toEqual([
+      {
+        aliasPath: "aliases/escape.ts",
+        targetPath: "C:/outside/secret.ts",
+        disposition: "outside-scope",
+      },
+    ]);
+  });
+
   it("rejects zero-length anchor patterns with a content-search contract response", async () => {
     const actualModule = await vi.importActual<
       typeof import("@domain/shared/guardrails/regex-search-safety")
@@ -1068,5 +1111,149 @@ describe("search_file_contents_by_regex", () => {
         resumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
       }).success,
     ).toBe(false);
+  });
+
+  it("keeps the session active with its persisted frontier when a resume pass fails transiently", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-transient-failure-"));
+    const store = new InspectionResumeSessionSqliteStore(
+      join(sandboxRootPath, "sessions.sqlite"),
+    );
+
+    try {
+      const seededSession = store.createSession({
+        endpointName: "search_file_contents_by_regex",
+        familyMember: "search_file_contents_by_regex",
+        requestPayload: {
+          searchPaths: ["src"],
+          pattern: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 100,
+          caseSensitive: false,
+        },
+        resumeState: {
+          rootTraversalStates: {
+            src: {
+              traversalFrames: [{ directoryRelativePath: "", nextEntryIndex: 5 }],
+              activeFileRelativePath: null,
+              activeFileMatchOffset: 0,
+            },
+          },
+        },
+        admissionOutcome: "preview-first",
+      });
+
+      mockedGetSearchRegexPathResult.mockRejectedValue(
+        new Error("Native search runner timed out before completion."),
+      );
+
+      const result = await getSearchRegexResult({
+        resumeToken: seededSession.resumeToken,
+        resumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+        searchPaths: [],
+        pattern: "",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 100,
+        caseSensitive: false,
+        allowedDirectories: [sandboxRootPath],
+        inspectionResumeSessionStore: store,
+      });
+
+      expect(result.resume.resumable).toBe(true);
+      expect(result.roots[0]?.error).toContain("could not be executed to completion");
+      expect(result.roots[0]?.error).toContain("session remains active");
+      expect(
+        store.loadActiveSession(
+          seededSession.resumeToken,
+          "search_file_contents_by_regex",
+          "search_file_contents_by_regex",
+        ),
+      ).not.toBeNull();
+    } finally {
+      store.close();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("closes the session truthfully when a resume pass fails permanently", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-permanent-failure-"));
+    const store = new InspectionResumeSessionSqliteStore(
+      join(sandboxRootPath, "sessions.sqlite"),
+    );
+
+    try {
+      const seededSession = store.createSession({
+        endpointName: "search_file_contents_by_regex",
+        familyMember: "search_file_contents_by_regex",
+        requestPayload: {
+          searchPaths: ["src"],
+          pattern: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 100,
+          caseSensitive: false,
+        },
+        resumeState: {
+          rootTraversalStates: {
+            src: {
+              traversalFrames: [{ directoryRelativePath: "", nextEntryIndex: 5 }],
+              activeFileRelativePath: null,
+              activeFileMatchOffset: 0,
+            },
+          },
+        },
+        admissionOutcome: "preview-first",
+      });
+
+      mockedGetSearchRegexPathResult.mockRejectedValue(
+        new Error(
+          "Tool guardrail refusal: Request rejected during metadata preflight before content execution began.\nFailure code: metadata_preflight_rejected\nDetails:\n- Preflight target: src.",
+        ),
+      );
+
+      const actualResultModule = await vi.importActual<
+        typeof import("@domain/inspection/search/search-file-contents-by-regex/search-regex-result")
+      >("@domain/inspection/search/search-file-contents-by-regex/search-regex-result");
+
+      mockedFormatSearchRegexContinuationAwareTextOutput.mockImplementation(
+        actualResultModule.formatSearchRegexContinuationAwareTextOutput,
+      );
+
+      const toolResult = await buildSearchRegexToolResult({
+        resumeToken: seededSession.resumeToken,
+        resumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+        searchPaths: [],
+        pattern: "",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 100,
+        caseSensitive: false,
+        allowedDirectories: [sandboxRootPath],
+        inspectionResumeSessionStore: store,
+      });
+
+      expect(toolResult.result.resume.resumable).toBe(false);
+      expect(toolResult.text).toContain("session closed without completing");
+      expect(toolResult.text).not.toContain("completion finished");
+      expect(
+        store.loadActiveSession(
+          seededSession.resumeToken,
+          "search_file_contents_by_regex",
+          "search_file_contents_by_regex",
+        ),
+      ).toBeNull();
+    } finally {
+      store.close();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
   });
 });

@@ -44,8 +44,10 @@ import {
 } from "@domain/shared/guardrails/traversal-runtime-budget";
 import { resolveTraversalScopeEntryPolicy } from "@domain/shared/guardrails/traversal-scope-policy";
 import { DISCOVERY_RESPONSE_CAP_CHARS, GLOBAL_RESPONSE_HARD_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
+import type { FileSystemEntrySymlinkMarking } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
+import { resolveSymlinkTargetPath } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
@@ -64,6 +66,14 @@ export interface FindFilesByGlobRootResult {
   root: string;
   matches: string[];
   truncated: boolean;
+  /**
+   * Symbolic-link markings for delivered matches that are aliases.
+   *
+   * @remarks
+   * Present only when at least one delivered match is a symbolic link. The alias stays in
+   * `matches` as the truthful traversal path; the marking adds the alias nature and target.
+   */
+  symlinkMatches?: FileSystemEntrySymlinkMarking[];
 }
 
 interface FindFilesByGlobTraversalFrame {
@@ -191,8 +201,13 @@ function formatFindFilesByGlobCompletionDeltaRootOutput(
 
   output += "\n\n";
 
+  const linkTargetByAliasPath = new Map(
+    (rootResult.symlinkMatches ?? []).map((marking) => [marking.path, marking.linkTarget]),
+  );
+
   for (const match of sortedMatches) {
-    output += `${match}\n`;
+    const linkTarget = linkTargetByAliasPath.get(match);
+    output += `${linkTarget === undefined ? match : `${match} [symlink → ${linkTarget}]`}\n`;
   }
 
   return output.trimEnd();
@@ -491,8 +506,13 @@ function formatFindFilesByGlobRootOutput(
 
   output += "\n\n";
 
+  const linkTargetByAliasPath = new Map(
+    (rootResult.symlinkMatches ?? []).map((marking) => [marking.path, marking.linkTarget]),
+  );
+
   for (const match of sortedMatches) {
-    output += `${match}\n`;
+    const linkTarget = linkTargetByAliasPath.get(match);
+    output += `${linkTarget === undefined ? match : `${match} [symlink → ${linkTarget}]`}\n`;
   }
 
   return output.trimEnd();
@@ -597,6 +617,7 @@ async function getFindFilesByGlobRootResult(
     : previewExecutionRuntimeBudgetLimits;
 
   const results: string[] = [];
+  const symlinkMatches: FileSystemEntrySymlinkMarking[] = [];
   let searchAborted = false;
   const traversalFrames = continuationState === null
     ? createInitialFindFilesByGlobTraversalFrames()
@@ -694,6 +715,17 @@ async function getFindFilesByGlobRootResult(
 
       if (minimatch(relativePath, pattern, { dot: true })) {
         results.push(fullPath);
+
+        if (entry.isSymbolicLink()) {
+          try {
+            symlinkMatches.push({
+              path: fullPath,
+              linkTarget: await resolveSymlinkTargetPath(fullPath),
+            });
+          } catch {
+            // An alias that vanished mid-traversal is delivered without its marking.
+          }
+        }
       }
 
       commitInspectionResumeTraversalEntry(currentTraversalFrame);
@@ -730,6 +762,7 @@ async function getFindFilesByGlobRootResult(
     root: searchPath,
     matches: [...results].sort(),
     truncated: searchAborted || nextContinuationState !== null,
+    ...(symlinkMatches.length > 0 ? { symlinkMatches } : {}),
     admissionOutcome: traversalAdmissionDecision.outcome,
     nextContinuationState,
   };
@@ -851,10 +884,11 @@ export async function getFindFilesByGlobResult(
   );
 
   return {
-    roots: roots.map(({ root, matches, truncated }) => ({
+    roots: roots.map(({ root, matches, truncated, symlinkMatches }) => ({
       root,
       matches,
       truncated,
+      ...(symlinkMatches !== undefined ? { symlinkMatches } : {}),
     })),
     totalMatches: roots.reduce((total, root) => total + root.matches.length, 0),
     truncated: roots.some((root) => root.truncated),

@@ -8,7 +8,7 @@ import {
   type FileSystemEntryMetadataSelection,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
-import { validatePath } from "@infrastructure/filesystem/path-guard";
+import { resolveRequestedPath, validatePath } from "@infrastructure/filesystem/path-guard";
 import { formatBatchTextOperationResults } from "@infrastructure/formatting/batch-result-formatter";
 
 /**
@@ -56,8 +56,13 @@ async function getPathMetadataEntry(
   metadataSelection: FileSystemEntryMetadataSelection,
   allowedDirectories: string[]
 ): Promise<PathMetadataEntry> {
-  const validPath = await validatePath(filePath, allowedDirectories);
-  const metadata = await getFileSystemEntryMetadata(validPath, metadataSelection);
+  // Scope security stays realpath-based inside validatePath; the metadata read targets the
+  // requested path itself so a symbolic link reports its alias nature, never its target's.
+  await validatePath(filePath, allowedDirectories);
+  const metadata = await getFileSystemEntryMetadata(
+    resolveRequestedPath(filePath),
+    metadataSelection
+  );
 
   return {
     path: filePath,
@@ -86,6 +91,10 @@ function formatPathMetadataEntry(entry: PathMetadataEntry): string {
 
   if (entry.permissions !== undefined) {
     lines.push(["permissions", entry.permissions]);
+  }
+
+  if (entry.linkTarget !== undefined) {
+    lines.push(["linkTarget", entry.linkTarget]);
   }
 
   return lines.map(([key, value]) => `${key}: ${value}`).join("\n");

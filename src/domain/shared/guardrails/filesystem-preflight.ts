@@ -68,9 +68,9 @@ export interface FilesystemPreflightEntry {
 }
 
 /**
- * Shared root-level traversal preflight context used before broad recursive traversal begins.
+ * Shared root-level traversal scope context resolved on every pass of a traversal surface.
  */
-export interface TraversalPreflightContext {
+export interface TraversalScopeContext {
   /**
    * Validated root entry resolved before traversal starts.
    */
@@ -85,7 +85,12 @@ export interface TraversalPreflightContext {
    * Whether a traversal-root-local `.gitignore` file is available as an optional refinement hint.
    */
   rootLocalGitIgnoreAvailable: boolean;
+}
 
+/**
+ * Shared root-level traversal preflight context used before broad recursive traversal begins.
+ */
+export interface TraversalPreflightContext extends TraversalScopeContext {
   /**
    * Breadth evidence gathered before recursive traversal begins.
    */
@@ -602,6 +607,62 @@ export async function resolveTraversalPreflightContext(
   recursiveTraversal: boolean = true,
   workloadPolicy: TraversalPreflightWorkloadPolicy = {},
 ): Promise<TraversalPreflightContext> {
+  const scopeContext = await resolveTraversalScopeContext(
+    toolName,
+    requestedRoot,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    allowedDirectories,
+    allowedTypes,
+  );
+
+  const traversalPreflightAdmissionEvidence =
+    scopeContext.rootEntry.type === "directory" && recursiveTraversal
+      ? await assertTraversalScopePreflightAdmission(
+          toolName,
+          requestedRoot,
+          scopeContext.rootEntry.validPath,
+          scopeContext.traversalScopePolicyResolution,
+          scopeContext.rootLocalGitIgnoreAvailable,
+          workloadPolicy,
+        )
+      : null;
+
+  return {
+    ...scopeContext,
+    traversalPreflightAdmissionEvidence,
+  };
+}
+
+/**
+ * Resolves the per-pass traversal scope context — root validation, optional `.gitignore`
+ * enrichment, and scope-policy resolution — without the blocking admission probe.
+ *
+ * @remarks
+ * This is the resume-pass surface of the traversal preflight: the birth admission decision is
+ * persisted with the session, so continuation passes re-validate the root and re-resolve the
+ * scope policy but never re-run the tree-walk probe. New base requests keep using
+ * `resolveTraversalPreflightContext`, which composes this context with the admission probe.
+ *
+ * @param toolName - Exact tool name that owns the traversal request.
+ * @param requestedRoot - Caller-supplied root path that anchors the traversal.
+ * @param excludePatterns - Caller-supplied exclude globs used by the traversal policy.
+ * @param includeExcludedGlobs - Additive re-include globs that reopen excluded descendants.
+ * @param respectGitIgnore - Whether optional directory-scoped hierarchical `.gitignore` enrichment participates.
+ * @param allowedDirectories - Allowed root directories enforced by the shared path guard.
+ * @param allowedTypes - Filesystem entry types that the current traversal surface accepts.
+ * @returns Validated root metadata plus the effective traversal-scope policy, without probe evidence.
+ */
+export async function resolveTraversalScopeContext(
+  toolName: string,
+  requestedRoot: string,
+  excludePatterns: readonly string[],
+  includeExcludedGlobs: readonly string[],
+  respectGitIgnore: boolean,
+  allowedDirectories: string[],
+  allowedTypes: Array<"file" | "directory"> = ["file", "directory"],
+): Promise<TraversalScopeContext> {
   const entries = await collectValidatedFilesystemPreflightEntries(
     toolName,
     [requestedRoot],
@@ -633,23 +694,10 @@ export async function resolveTraversalPreflightContext(
     },
   );
 
-  const traversalPreflightAdmissionEvidence =
-    rootEntry.type === "directory" && recursiveTraversal
-      ? await assertTraversalScopePreflightAdmission(
-          toolName,
-          requestedRoot,
-          rootEntry.validPath,
-          traversalScopePolicyResolution,
-          rootLocalGitIgnoreAvailable,
-          workloadPolicy,
-        )
-      : null;
-
   return {
     rootEntry,
     traversalScopePolicyResolution,
     rootLocalGitIgnoreAvailable,
-    traversalPreflightAdmissionEvidence,
   };
 }
 

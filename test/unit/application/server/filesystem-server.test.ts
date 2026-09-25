@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 const filesystemServerTestState = vi.hoisted(() => {
   const cleanupExpiredSessions = vi.fn();
+  const vacuum = vi.fn();
   const inspectionResumeSessionStore = {
     cleanupExpiredSessions,
+    vacuum,
   };
   const inspectionResumeSessionStoreConstructor = vi.fn(
     () => inspectionResumeSessionStore,
@@ -36,6 +38,7 @@ const filesystemServerTestState = vi.hoisted(() => {
 
   return {
     cleanupExpiredSessions,
+    vacuum,
     inspectionResumeSessionStore,
     inspectionResumeSessionStoreConstructor,
     sendLoggingMessage,
@@ -94,6 +97,7 @@ import { FilesystemServer } from "@application/server/filesystem-server";
 describe("filesystem-server", () => {
   beforeEach(() => {
     filesystemServerTestState.cleanupExpiredSessions.mockClear();
+    filesystemServerTestState.vacuum.mockClear();
     filesystemServerTestState.inspectionResumeSessionStoreConstructor.mockClear();
     filesystemServerTestState.sendLoggingMessage.mockClear();
     filesystemServerTestState.connect.mockClear();
@@ -116,6 +120,7 @@ describe("filesystem-server", () => {
       filesystemServerTestState.inspectionResumeSessionStoreConstructor,
     ).toHaveBeenCalledOnce();
     expect(filesystemServerTestState.cleanupExpiredSessions).toHaveBeenCalledOnce();
+    expect(filesystemServerTestState.vacuum).toHaveBeenCalledOnce();
     expect(
       filesystemServerTestState.getUgrepRuntimeDependency,
     ).toHaveBeenCalledOnce();

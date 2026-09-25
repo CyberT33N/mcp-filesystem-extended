@@ -68,7 +68,9 @@ Applies when the caller sends `resumeToken + resumeMode='next-chunk'`.
    (no base request fields)
 2. Schema caps validated (resume-only request shape)
 3. Session loaded from SQLite → requestPayload + resumeState restored
-4. Preflight + admission decision re-evaluated against requestPayload
+4. Root re-validation + scope-policy re-resolution only — the birth admission
+   decision is read from the persisted session, and the blocking preflight
+   probe plus candidate sampling do not re-run on resume passes
    (result is still PREVIEW_FIRST — same workload)
 5. Preview-lane traversal resumes from the persisted frontier position
 6. Next bounded chunk collected
@@ -85,6 +87,26 @@ Applies when the caller sends `resumeToken + resumeMode='next-chunk'`.
 
 ---
 
+### Failure Mapping on Resume Passes (Search Family)
+
+The search endpoints (`search_file_contents_by_regex`, `search_file_contents_by_fixed_string`)
+classify every failure raised inside a resume pass before any session-state decision:
+
+- **Transient failures** (time-budget breaches, backend timeouts, and comparable retryable
+  states): the session stays `active`, the root's persisted frontier is re-persisted unchanged,
+  and the response carries resume guidance instead of terminal framing. The caller resumes the
+  same request again or narrows the scope.
+- **Permanent failures** (the requested root was deleted or is invalid, the cumulative
+  candidate-byte hard gap): the session may close — but truthfully. A terminal pass that carries
+  a permanent root failure never frames itself as `completion finished`; it reports the failure
+  close and instructs the caller to start a new request.
+
+The classification is identity-based: the shared guardrail refusal contract carries a stable
+`Failure code:` identity, and the traversal runtime budget carries a typed error surface. This
+doctrine is the reason no session dies with a false completion claim after a transient hiccup.
+
+---
+
 ### Flow D: Resume Request — `complete-result` Mode (Preview Family)
 
 Applies when the caller sends `resumeToken + resumeMode='complete-result'` for a preview-capable family.
@@ -94,7 +116,9 @@ Applies when the caller sends `resumeToken + resumeMode='complete-result'` for a
    (no base request fields)
 2. Schema caps validated (resume-only request shape)
 3. Session loaded from SQLite → requestPayload + resumeState restored
-4. Preflight + admission decision re-evaluated against requestPayload
+4. Root re-validation + scope-policy re-resolution only — the birth admission
+   decision is read from the persisted session, and the blocking preflight
+   probe plus candidate sampling do not re-run on resume passes
    (result is still PREVIEW_FIRST — same workload)
 5. Because resumeMode = 'complete-result':
    handler bypasses the preview-lane chunk branch

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -46,6 +46,19 @@ describe("append_files", () => {
     );
 
     expect(await readFile(newFilePath, "utf8")).toBe("created by append");
+  });
+
+  it("appends through a file symlink into the resolved target file", async () => {
+    const linkPath = join(sandboxRootPath, "notes-alias.txt");
+    await symlink(existingFilePath, linkPath, "file");
+
+    await handleAppendFiles(
+      [{ path: linkPath, content: " through link" }],
+      allowedDirectories,
+    );
+
+    expect(await readFile(existingFilePath, "utf8")).toBe("hello through link");
+    expect((await lstat(linkPath)).isSymbolicLink()).toBe(true);
   });
 
   it("parses append targets through the batch schema", () => {

@@ -56,7 +56,7 @@ export const MovePathsArgsSchema = z.object({
     )
     .min(1)
     .max(MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST)
-    .describe(`Move operations. Pass one operation for a single move or multiple operations for a batch move. The tool creates missing destination parent directories recursively, so a separate create_directories call is unnecessary. The request accepts at most ${MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST} operations.`),
+    .describe(`Move operations. Pass one operation for a single move or multiple operations for a batch move. The tool creates missing destination parent directories recursively, so a separate create_directories call is unnecessary. The request accepts at most ${MAX_OPERATIONS_PER_PATH_MUTATION_REQUEST} operations. Move operations act on the requested path itself: moving a symbolic link relocates the link and never touches its target.`),
   /**
    * Overwrite flag.
    *

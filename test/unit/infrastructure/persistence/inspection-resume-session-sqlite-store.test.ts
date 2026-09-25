@@ -1,3 +1,8 @@
+import { statSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -156,5 +161,44 @@ describe("inspection_resume_session_sqlite_store", () => {
     expect(
       inspectionResumeSessionStoreTestState.mockedWarn,
     ).toHaveBeenCalled();
+  });
+
+  it("reclaims database file space when vacuum runs after expired-session cleanup", async () => {
+    const sandboxRootPath = await mkdtemp(
+      join(tmpdir(), "mcp-fs-resume-session-store-vacuum-"),
+    );
+    const fileDatabasePath = join(sandboxRootPath, "inspection-resume-sessions.sqlite");
+    const store = new InspectionResumeSessionSqliteStore(fileDatabasePath);
+
+    try {
+      const largeResumeState = { payload: "x".repeat(200_000) };
+      const createdAt = new Date("2026-01-01T00:00:00.000Z");
+
+      for (let index = 0; index < 10; index++) {
+        store.createSession(
+          {
+            admissionOutcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+            endpointName: "search_file_contents_by_regex",
+            familyMember: "regex-search",
+            requestPayload: { roots: ["src"] },
+            resumeState: largeResumeState,
+          },
+          createdAt,
+        );
+      }
+
+      expect(
+        store.cleanupExpiredSessions(new Date("2026-03-01T00:00:00.000Z")),
+      ).toBe(10);
+
+      const sizeBeforeVacuum = statSync(fileDatabasePath).size;
+      store.vacuum();
+      const sizeAfterVacuum = statSync(fileDatabasePath).size;
+
+      expect(sizeAfterVacuum).toBeLessThan(sizeBeforeVacuum);
+    } finally {
+      store.close();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
   });
 });

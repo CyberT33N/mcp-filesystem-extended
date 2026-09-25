@@ -17,6 +17,24 @@ export function expandHome(filepath: string): string {
   return filepath;
 }
 
+/**
+ * Resolves a requested path to its absolute, normalized on-disk operation path
+ * WITHOUT following symbolic links.
+ *
+ * @remarks
+ * Scope security remains owned by `validatePath` / `validatePathForCreation`.
+ * This resolver only fixes the operation identity of the requested path itself,
+ * so mutation endpoints can act on a symbolic link as a link instead of
+ * mutating its resolved target.
+ */
+export function resolveRequestedPath(requestedPath: string): string {
+  const expandedPath = expandHome(requestedPath);
+  const absolute = path.isAbsolute(expandedPath)
+    ? path.resolve(expandedPath)
+    : path.resolve(process.cwd(), expandedPath);
+  return normalizePath(absolute);
+}
+
 // Security utilities
 export async function validatePath(requestedPath: string, allowedDirectories: string[]): Promise<string> {
   log.debug({ requestedPath, allowedDirectories }, "validatePath called");

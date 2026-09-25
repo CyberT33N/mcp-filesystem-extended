@@ -1,7 +1,37 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+/**
+ * Hoisted symlink-target resolver mock used to drive the vanished-alias guard deterministically.
+ */
+const findFilesByGlobMockState = vi.hoisted(() => {
+  const state: {
+    mockedResolveSymlinkTargetPath: ReturnType<typeof vi.fn>;
+    actualResolveSymlinkTargetPath:
+      | typeof import("@infrastructure/filesystem/filesystem-entry-metadata").resolveSymlinkTargetPath
+      | null;
+  } = {
+    mockedResolveSymlinkTargetPath: vi.fn(),
+    actualResolveSymlinkTargetPath: null,
+  };
+
+  return state;
+});
+
+vi.mock("@infrastructure/filesystem/filesystem-entry-metadata", async () => {
+  const actual = await vi.importActual<
+    typeof import("@infrastructure/filesystem/filesystem-entry-metadata")
+  >("@infrastructure/filesystem/filesystem-entry-metadata");
+
+  findFilesByGlobMockState.actualResolveSymlinkTargetPath = actual.resolveSymlinkTargetPath;
+
+  return {
+    ...actual,
+    resolveSymlinkTargetPath: findFilesByGlobMockState.mockedResolveSymlinkTargetPath,
+  };
+});
 
 import {
   formatFindFilesByGlobTextOutput,
@@ -21,6 +51,17 @@ describe("find_files_by_glob", () => {
   let allowedDirectories: string[] = [];
 
   beforeEach(async () => {
+    const actualResolveSymlinkTargetPath = findFilesByGlobMockState.actualResolveSymlinkTargetPath;
+
+    if (actualResolveSymlinkTargetPath === null) {
+      throw new Error("Expected the actual symlink-target resolver binding to be initialized.");
+    }
+
+    findFilesByGlobMockState.mockedResolveSymlinkTargetPath.mockReset();
+    findFilesByGlobMockState.mockedResolveSymlinkTargetPath.mockImplementation(
+      actualResolveSymlinkTargetPath,
+    );
+
     sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-find-glob-"));
     allowedDirectories = [sandboxRootPath];
 
@@ -96,6 +137,108 @@ describe("find_files_by_glob", () => {
     expect(output).toContain("Found 2 files matching pattern: **/*.ts");
     expect(output).toContain(join(sandboxRootPath, "alpha", "one.ts"));
     expect(output).toContain(join(sandboxRootPath, "beta", "two.ts"));
+  });
+
+  it("marks alias matches with their resolved link targets across structured and text surfaces", async () => {
+    const canonicalFilePath = join(sandboxRootPath, "alpha", "one.ts");
+    const aliasPath = join(sandboxRootPath, "beta", "alias.ts");
+    await symlink(canonicalFilePath, aliasPath, "file");
+
+    const result = await getFindFilesByGlobResult(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      "**/alias.ts",
+      [],
+      [],
+      false,
+      100,
+      allowedDirectories,
+    );
+
+    expect(result.roots[0]?.matches).toEqual([aliasPath]);
+    expect(result.roots[0]?.symlinkMatches).toEqual([
+      { path: aliasPath, linkTarget: canonicalFilePath },
+    ]);
+
+    const output = await handleSearchGlob(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      "**/alias.ts",
+      [],
+      [],
+      false,
+      100,
+      allowedDirectories,
+    );
+
+    expect(output).toContain(`${aliasPath} [symlink → ${canonicalFilePath}]`);
+  });
+
+  it("delivers an alias match without its marking when the link-target resolution fails mid-traversal", async () => {
+    const canonicalFilePath = join(sandboxRootPath, "alpha", "one.ts");
+    const aliasPath = join(sandboxRootPath, "beta", "alias.ts");
+    await symlink(canonicalFilePath, aliasPath, "file");
+
+    findFilesByGlobMockState.mockedResolveSymlinkTargetPath.mockRejectedValueOnce(
+      new Error("ENOENT: symbolic link vanished mid-traversal"),
+    );
+
+    const result = await getFindFilesByGlobResult(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      "**/alias.ts",
+      [],
+      [],
+      false,
+      100,
+      allowedDirectories,
+    );
+
+    expect(result.roots[0]?.matches).toEqual([aliasPath]);
+    expect(result.roots[0]?.symlinkMatches).toBeUndefined();
+  });
+
+  it("marks alias matches with their resolved link targets in completion-delta text output", () => {
+    const output = formatFindFilesByGlobTextOutput(
+      {
+        roots: [
+          {
+            root: "src",
+            matches: ["src/alias.ts"],
+            truncated: false,
+            symlinkMatches: [{ path: "src/alias.ts", linkTarget: "src/one.ts" }],
+          },
+        ],
+        totalMatches: 1,
+        truncated: false,
+        sessionDelivery: {
+          continuationPass: true,
+          previouslyDeliveredCount: 2,
+          sessionTotalCount: 3,
+        },
+        admission: {
+          outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+          guidanceText: null,
+          scopeReductionGuidanceText: null,
+        },
+        resume: {
+          resumeToken: null,
+          resumable: false,
+          status: null,
+          expiresAt: null,
+          supportedResumeModes: [],
+          recommendedResumeMode: null,
+        },
+      },
+      "**/*.ts",
+      100,
+    );
+
+    expect(output).toContain("Found 1 additional files matching pattern: **/*.ts in this completion pass");
+    expect(output).toContain("src/alias.ts [symlink → src/one.ts]");
   });
 
   it("rejects resume requests when resume-session storage is unavailable", async () => {

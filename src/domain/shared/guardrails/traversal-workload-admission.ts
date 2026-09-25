@@ -326,6 +326,31 @@ function buildNarrowingRequiredGuidance(
 }
 
 /**
+ * Reconstructs the admission decision for a resume pass from the persisted session.
+ *
+ * @remarks
+ * A persisted resume session exists only when its birth admission selected the preview-first
+ * lane — inline admissions never create sessions, and completion-backed sessions are
+ * preview-first sessions running completion passes. The resume pass therefore reads the
+ * persisted birth decision instead of re-running the blocking probe: the traversal-level
+ * outcome is preview-first by construction, and the per-pass lane still follows the effective
+ * resume mode.
+ *
+ * @param requestedRoot - Caller-supplied root path that anchors the continued traversal.
+ * @param toolName - Exact consumer surface that owns the resumed session.
+ * @returns The preview-first admission decision carried by the persisted session.
+ */
+export function resolveResumePassAdmissionDecision(
+  requestedRoot: string,
+  toolName: string,
+): TraversalWorkloadAdmissionGuidedDecision {
+  return {
+    outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+    guidanceText: buildPreviewFirstAdmissionGuidance(requestedRoot, toolName),
+  };
+}
+
+/**
  * Builds canonical caller guidance when a preview-first traversal lane stops before a full
  * recursive scan completes.
  *
