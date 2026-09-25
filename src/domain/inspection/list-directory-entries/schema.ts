@@ -16,8 +16,10 @@ import {
   InspectionResumeMetadataSchema,
   InspectionResumeModeFieldSchema,
   InspectionResumeTokenFieldSchema,
+  InspectionSessionDeliverySummarySchema,
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
+  type InspectionSessionDeliverySummary,
 } from "@domain/shared/resume/inspection-resume-contract";
 
 /**
@@ -216,6 +218,11 @@ interface ListDirectoryEntriesStructuredResult {
    * Listing roots in request order.
    */
   roots: ListedDirectoryRootOutput[];
+
+  /**
+   * Session-cumulative delivery summary for resume-capable listing responses.
+   */
+  sessionDelivery: InspectionSessionDeliverySummary;
 }
 
 const ListedDirectoryEntryBaseSchema = FileSystemEntryMetadataSchema.extend({
@@ -321,6 +328,15 @@ export const ListDirectoryEntriesStructuredResultSchema: z.ZodType<ListDirectory
         entries: z.array(ListedDirectoryEntryOutputSchema),
       }),
     ),
+    /**
+     * Session-cumulative delivery summary.
+     *
+     * @remarks
+     * This property carries the session truth for resume-capable delivery: whether the response
+     * continues a persisted preview-first session, how many entries prior passes already
+     * delivered, and the session-cumulative total including the current pass.
+     */
+    sessionDelivery: InspectionSessionDeliverySummarySchema,
     admission: InspectionResumeAdmissionSchema,
     resume: InspectionResumeMetadataSchema,
   });

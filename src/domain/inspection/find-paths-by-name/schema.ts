@@ -13,6 +13,7 @@ import {
   InspectionResumeMetadataSchema,
   InspectionResumeModeFieldSchema,
   InspectionResumeTokenFieldSchema,
+  InspectionSessionDeliverySummarySchema,
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
@@ -270,6 +271,15 @@ export const FindPathsByNameResultSchema = z.object({
    * ```
    */
   truncated: z.boolean(),
+  /**
+   * Session-cumulative delivery summary.
+   *
+   * @remarks
+   * This property carries the session truth for resume-capable delivery: whether the response
+   * continues a persisted preview-first session, how many matches prior passes already
+   * delivered, and the session-cumulative total including the current pass.
+   */
+  sessionDelivery: InspectionSessionDeliverySummarySchema,
   admission: InspectionResumeAdmissionSchema,
   resume: InspectionResumeMetadataSchema,
 });

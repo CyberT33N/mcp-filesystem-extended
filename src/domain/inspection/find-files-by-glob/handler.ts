@@ -10,16 +10,20 @@ import {
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
 } from "@domain/shared/guardrails/traversal-workload-admission";
 import {
+  createBaseSessionDeliverySummary,
+  createContinuationSessionDeliverySummary,
   createInlineResumeEnvelope,
   createPersistedResumeEnvelope,
   createResumeEnvelope,
   formatInspectionPreviewChunkTextBlock,
+  formatInspectionTerminalCompletionTextBlock,
   getResumeSessionNotFoundMessage,
   INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
   INSPECTION_RESUME_ADMISSION_OUTCOMES,
   INSPECTION_RESUME_MODES,
   INSPECTION_RESUME_STATUSES,
   type InspectionResumeMode,
+  type InspectionSessionDeliverySummary,
 } from "@domain/shared/resume/inspection-resume-contract";
 import type {
   InspectionResumeAdmission,
@@ -82,6 +86,17 @@ export interface FindFilesByGlobResult {
   roots: FindFilesByGlobRootResult[];
   totalMatches: number;
   truncated: boolean;
+
+  /**
+   * Session-cumulative delivery truth for the current response.
+   *
+   * @remarks
+   * On resume passes the per-root payloads stay frontier-scoped; this summary carries how many
+   * matches the session already delivered and delivers in total, so no pass ever has to present
+   * its delta as the absolute session result.
+   */
+  sessionDelivery: InspectionSessionDeliverySummary;
+
   admission: InspectionResumeAdmission;
   resume: InspectionResumeMetadata;
 }
@@ -97,6 +112,24 @@ interface FindFilesByGlobRequestPayload {
 
 interface FindFilesByGlobContinuationState {
   rootTraversalStates: Record<string, FindFilesByGlobRootContinuationState>;
+  /**
+   * Session-cumulative delivered match total persisted across passes.
+   *
+   * @remarks
+   * Optional because sessions persisted before this field existed carry no total; the
+   * consumption boundary normalizes their absence to zero.
+   */
+  deliveredTotals?: FindFilesByGlobDeliveredTotals;
+}
+
+/**
+ * Session-cumulative delivered-match totals persisted inside a glob-discovery continuation state.
+ */
+interface FindFilesByGlobDeliveredTotals {
+  /**
+   * Matches already delivered to the caller in prior passes of the session.
+   */
+  matchCount: number;
 }
 
 interface FindFilesByGlobRootExecutionResult extends FindFilesByGlobRootResult {
@@ -123,7 +156,62 @@ function buildFindFilesByGlobScopeReductionGuidance(searchPaths: string[]): stri
   return "Reduce the discovery scope by narrowing roots, tightening the glob, or limiting reopened descendants through includeExcludedGlobs.";
 }
 
-function formatFindFilesByGlobTextOutput(
+/**
+ * Formats one root-local glob delta of a continuation pass into the public text response surface.
+ *
+ * @remarks
+ * Continuation passes deliver only the frontier delta of a persisted preview-first session. This
+ * formatter keeps the wording completion-scoped so the delta is never presented as the absolute
+ * session result — the defect class behind the reported false negative.
+ *
+ * @param rootResult - Structured glob delta for one continued root.
+ * @param pattern - Glob expression restored from the persisted request context.
+ * @param maxResults - Effective result limit applied by the handler.
+ * @returns Human-readable text output for the current root delta.
+ */
+function formatFindFilesByGlobCompletionDeltaRootOutput(
+  rootResult: FindFilesByGlobRootResult,
+  pattern: string,
+  maxResults: number,
+): string {
+  if (rootResult.matches.length === 0) {
+    if (rootResult.truncated) {
+      return `Traversal scope exceeded the bounded preview-first lane before matching files could be collected. ${buildTraversalNarrowingGuidance(rootResult.root)}`;
+    }
+
+    return `No additional files matching pattern: ${pattern} in this completion pass`;
+  }
+
+  const sortedMatches = [...rootResult.matches].sort();
+  let output = `Found ${sortedMatches.length} additional files matching pattern: ${pattern} in this completion pass`;
+
+  if (rootResult.truncated) {
+    output += ` (limited to ${maxResults} results)`;
+  }
+
+  output += "\n\n";
+
+  for (const match of sortedMatches) {
+    output += `${match}\n`;
+  }
+
+  return output.trimEnd();
+}
+
+/**
+ * Formats the glob-search result into the caller-visible text response surface.
+ *
+ * @remarks
+ * Exported as an explicit white-box test seam, mirroring the search-family result modules.
+ * Continuation passes are frontier-delta-scoped by contract: resumable passes emit the bounded
+ * chunk block, and the terminal pass emits the delta payload plus the session-cumulative summary.
+ *
+ * @param result - Structured glob-search result across all requested roots.
+ * @param pattern - Glob expression supplied or restored from the persisted request context.
+ * @param maxResults - Effective result limit applied by the handler.
+ * @returns Human-readable glob-search output for the current delivery pass.
+ */
+export function formatFindFilesByGlobTextOutput(
   result: FindFilesByGlobResult,
   pattern: string,
   maxResults: number,
@@ -131,35 +219,64 @@ function formatFindFilesByGlobTextOutput(
   const hasResumableResume =
     result.resume.resumable
     && result.resume.resumeToken !== null;
+  const continuationPass = result.sessionDelivery.continuationPass;
 
-  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableResume) {
-    return result.roots.length === 1
-      ? formatFindFilesByGlobRootOutput(result.roots[0]!, pattern, maxResults)
-      : formatBatchTextOperationResults(
-          "search glob",
-          result.roots.map((rootResult) => ({
-            label: rootResult.root,
-            output: formatFindFilesByGlobRootOutput(rootResult, pattern, maxResults),
-          })),
-        );
+  // Pure inline base responses keep the absolute verdict wording. Every continuation pass is
+  // frontier-delta-scoped by contract and must never present its delta as the session result.
+  if (!continuationPass && !hasResumableResume) {
+    if (result.roots.length === 1) {
+      const firstRootResult = result.roots[0];
+
+      if (firstRootResult === undefined) {
+        throw new Error("Expected one root result for glob-search formatting.");
+      }
+
+      return formatFindFilesByGlobRootOutput(firstRootResult, pattern, maxResults);
+    }
+
+    return formatBatchTextOperationResults(
+      "search glob",
+      result.roots.map((rootResult) => ({
+        label: rootResult.root,
+        output: formatFindFilesByGlobRootOutput(rootResult, pattern, maxResults),
+      })),
+    );
   }
 
-  const totalMatches = result.totalMatches;
-  const rootLabel = result.roots.length === 1 ? "root" : "roots";
-  const zeroMatchesClarification = totalMatches === 0
-    ? " No matches found in this chunk — more paths may still be pending in the remaining traversal frontier."
-    : "";
-  const previewSummary =
-    result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
-      ? `Glob-discovery completion progress is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
-      : `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
+  if (hasResumableResume) {
+    const totalMatches = result.totalMatches;
+    const rootLabel = result.roots.length === 1 ? "root" : "roots";
+    const zeroMatchesClarification = totalMatches === 0
+      ? " No matches found in this chunk — more paths may still be pending in the remaining traversal frontier."
+      : "";
+    const previewSummary =
+      result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+        ? `Glob-discovery completion progress is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
+        : `Glob-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
 
-  return formatInspectionPreviewChunkTextBlock(
-    result.admission,
-    result.resume,
-    previewSummary,
-    FIND_FILES_BY_GLOB_NEXT_CHUNK_GUIDANCE,
-  );
+    return formatInspectionPreviewChunkTextBlock(
+      result.admission,
+      result.resume,
+      previewSummary,
+      FIND_FILES_BY_GLOB_NEXT_CHUNK_GUIDANCE,
+    );
+  }
+
+  // Terminal continuation pass: the session is complete and no longer resumable, so the response
+  // closes with the delta payload, the session-cumulative summary, and the additive guidance.
+  const deltaOutput = result.roots.length === 1
+    ? formatFindFilesByGlobCompletionDeltaRootOutput(
+        result.roots[0] ?? { root: "", matches: [], truncated: false },
+        pattern,
+        maxResults,
+      )
+    : result.roots
+        .map((rootResult) => formatFindFilesByGlobCompletionDeltaRootOutput(rootResult, pattern, maxResults))
+        .join("\n\n");
+  const rootLabel = result.roots.length === 1 ? "root" : "roots";
+  const completionSummary = `Glob-discovery completion finished for ${result.roots.length} ${rootLabel}: ${result.totalMatches} additional matches in this final pass; session total ${result.sessionDelivery.sessionTotalCount} matches (${result.sessionDelivery.previouslyDeliveredCount} already delivered in prior preview-chunk payloads).`;
+
+  return `${deltaOutput}\n\n${formatInspectionTerminalCompletionTextBlock(result.admission, completionSummary)}`;
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -182,11 +299,30 @@ async function readSortedDirectoryEntries(currentPath: string): Promise<import("
   return entries.sort((leftEntry, rightEntry) => leftEntry.name.localeCompare(rightEntry.name));
 }
 
+/**
+ * Describes the active persisted resume-session surface of one glob-discovery execution.
+ *
+ * @remarks
+ * Token and expiration timestamp are paired by construction: both originate from the same
+ * persisted session record, so the expiration timestamp is guaranteed to be present whenever
+ * a resume session is active.
+ */
+interface FindFilesByGlobActiveResumeSession {
+  /**
+   * Opaque persisted session handle of the active session.
+   */
+  resumeToken: string;
+
+  /**
+   * Expiration timestamp of the active persisted session.
+   */
+  expiresAt: string;
+}
+
 interface FindFilesByGlobExecutionContext {
   requestPayload: FindFilesByGlobRequestPayload;
   continuationState: FindFilesByGlobContinuationState | null;
-  activeResumeToken: string | null;
-  activeResumeExpiresAt: string | null;
+  activeResumeSession: FindFilesByGlobActiveResumeSession | null;
   requestedResumeMode: InspectionResumeMode | null;
 }
 
@@ -213,8 +349,7 @@ function resolveFindFilesByGlobExecutionContext(
         maxResults,
       },
       continuationState: null,
-      activeResumeToken: null,
-      activeResumeExpiresAt: null,
+      activeResumeSession: null,
       requestedResumeMode: null,
     };
   }
@@ -240,15 +375,16 @@ function resolveFindFilesByGlobExecutionContext(
   return {
     requestPayload: resumeSession.requestPayload,
     continuationState: resumeSession.resumeState,
-    activeResumeToken: resumeSession.resumeToken,
-    activeResumeExpiresAt: resumeSession.expiresAt,
+    activeResumeSession: {
+      resumeToken: resumeSession.resumeToken,
+      expiresAt: resumeSession.expiresAt,
+    },
     requestedResumeMode: resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK,
   };
 }
 
 function buildFindFilesByGlobResumeEnvelope(
-  resumeToken: string | null,
-  resumeExpiresAt: string | null,
+  activeResumeSession: FindFilesByGlobActiveResumeSession | null,
   resumeMode: InspectionResumeMode | null,
   nextContinuationState: FindFilesByGlobContinuationState | null,
   inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
@@ -277,14 +413,9 @@ function buildFindFilesByGlobResumeEnvelope(
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
 
   if (nextContinuationState === null) {
-    const completedGuidanceText =
-      effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
-        ? FIND_FILES_BY_GLOB_CONTINUATION_ADDITIVE_GUIDANCE
-        : null;
-
     return createResumeEnvelope(
       admissionOutcome,
-      completedGuidanceText,
+      FIND_FILES_BY_GLOB_CONTINUATION_ADDITIVE_GUIDANCE,
       scopeReductionGuidanceText,
       null,
     );
@@ -294,7 +425,7 @@ function buildFindFilesByGlobResumeEnvelope(
     throw new Error("Resume-session storage is unavailable for preview-first glob discovery.");
   }
 
-  if (resumeToken === null) {
+  if (activeResumeSession === null) {
     const resumeSession = inspectionResumeSessionStore.createSession(
       {
         endpointName: FIND_FILES_BY_GLOB_FAMILY_MEMBER,
@@ -319,21 +450,17 @@ function buildFindFilesByGlobResumeEnvelope(
     );
   }
 
-  if (resumeExpiresAt === null) {
-    throw new Error("Active glob-discovery resume session is missing an expiration timestamp.");
-  }
-
   inspectionResumeSessionStore.updateResumeState(
-    resumeToken,
+    activeResumeSession.resumeToken,
     nextContinuationState,
     now,
     effectiveResumeMode,
   );
 
   return createPersistedResumeEnvelope(
-    resumeToken,
+    activeResumeSession.resumeToken,
     INSPECTION_RESUME_STATUSES.ACTIVE,
-    resumeExpiresAt,
+    activeResumeSession.expiresAt,
     INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
     effectiveResumeMode,
     guidanceText,
@@ -593,7 +720,6 @@ async function getFindFilesByGlobRootResult(
 
   const nextContinuationState =
     traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
-    && !completeResultRequested
     && traversalFrames.length > 0
       ? {
           traversalFrames: cloneFindFilesByGlobTraversalFrames(traversalFrames),
@@ -657,16 +783,19 @@ export async function getFindFilesByGlobResult(
         (requestedSearchPath) =>
           executionContext.continuationState?.rootTraversalStates[requestedSearchPath] !== undefined,
       );
+  const previouslyDeliveredMatchCount =
+    executionContext.continuationState?.deliveredTotals?.matchCount ?? 0;
 
   if (activeSearchPaths.length === 0) {
-    if (executionContext.activeResumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeToken, now);
+    if (executionContext.activeResumeSession !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeSession.resumeToken, now);
     }
 
     return {
       roots: [],
       totalMatches: 0,
       truncated: false,
+      sessionDelivery: createContinuationSessionDeliverySummary(previouslyDeliveredMatchCount, 0),
       ...createInlineResumeEnvelope(),
     };
   }
@@ -702,11 +831,19 @@ export async function getFindFilesByGlobResult(
     },
     null,
   );
+  const currentPassMatchCount = roots.reduce((total, root) => total + root.matches.length, 0);
+  const nextContinuationStateWithDeliveredTotals = nextContinuationState === null
+    ? null
+    : {
+        ...nextContinuationState,
+        deliveredTotals: {
+          matchCount: previouslyDeliveredMatchCount + currentPassMatchCount,
+        },
+      };
   const continuationEnvelope = buildFindFilesByGlobResumeEnvelope(
-    executionContext.activeResumeToken,
-    executionContext.activeResumeExpiresAt,
+    executionContext.activeResumeSession,
     executionContext.requestedResumeMode,
-    nextContinuationState,
+    nextContinuationStateWithDeliveredTotals,
     inspectionResumeSessionStore,
     executionContext.requestPayload,
     roots,
@@ -721,6 +858,9 @@ export async function getFindFilesByGlobResult(
     })),
     totalMatches: roots.reduce((total, root) => total + root.matches.length, 0),
     truncated: roots.some((root) => root.truncated),
+    sessionDelivery: executionContext.continuationState === null
+      ? createBaseSessionDeliverySummary(currentPassMatchCount)
+      : createContinuationSessionDeliverySummary(previouslyDeliveredMatchCount, currentPassMatchCount),
     ...continuationEnvelope,
   };
 }

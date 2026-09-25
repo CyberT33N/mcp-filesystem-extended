@@ -147,19 +147,54 @@ export interface TraversalWorkloadAdmissionInput {
 }
 
 /**
- * Deterministic admission decision plus caller guidance produced before traversal begins.
+ * Deterministic admission decision for a workload admitted to the inline lane.
+ *
+ * @remarks
+ * The inline lane never carries caller guidance, so the guidance surface is
+ * fixed to `null` on this variant.
  */
-export interface TraversalWorkloadAdmissionDecision {
+export interface TraversalWorkloadAdmissionInlineDecision {
   /**
-   * Canonical admission outcome selected for the current workload.
+   * Canonical inline admission outcome selected for the current workload.
    */
-  outcome: TraversalWorkloadAdmissionOutcome;
+  outcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE;
+
+  /**
+   * Always `null`: the inline lane has no caller guidance to explain.
+   */
+  guidanceText: null;
+}
+
+/**
+ * Deterministic admission decision for a workload admitted beyond the inline lane.
+ *
+ * @remarks
+ * Every non-inline outcome is constructed with its deterministic caller
+ * guidance, so the guidance surface is guaranteed present on this variant by
+ * construction.
+ */
+export interface TraversalWorkloadAdmissionGuidedDecision {
+  /**
+   * Canonical non-inline admission outcome selected for the current workload.
+   */
+  outcome: Exclude<TraversalWorkloadAdmissionOutcome, typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE>;
 
   /**
    * Deterministic caller guidance that explains the selected outcome.
    */
-  guidanceText: string | null;
+  guidanceText: string;
 }
+
+/**
+ * Deterministic admission decision plus caller guidance produced before traversal begins.
+ *
+ * @remarks
+ * The union pairs the admission outcome with its guidance surface so a
+ * non-inline decision always proves its guidance at the type level.
+ */
+export type TraversalWorkloadAdmissionDecision =
+  | TraversalWorkloadAdmissionGuidedDecision
+  | TraversalWorkloadAdmissionInlineDecision;
 
 function isWithinInlineAdmissionBand(
   admissionEvidence: TraversalPreflightAdmissionEvidence,

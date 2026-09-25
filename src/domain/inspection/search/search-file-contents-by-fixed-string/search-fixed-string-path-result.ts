@@ -483,7 +483,6 @@ async function materializeFixedStringExecutionPlanFromTraversal(options: {
     effectiveTraversalRuntimeBudgetLimits,
     executionPolicy,
     filePatterns,
-    fixedString,
     traversalFrames,
     traversalNarrowingGuidance,
     traversalRuntimeBudgetState,

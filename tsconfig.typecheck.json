@@ -20,39 +20,70 @@
   "$schema": "https://json.schemastore.org/tsconfig",
 
   /**
-   * Extends: Inherit the canonical universal strict baseline.
+   * Extends: Reuse the Node-hosted runtime semantics without inheriting its
+   * delivery ownership; declaration output stays isolated from runtime output.
    */
-  "extends": "./tsconfig.base.json",
+  "extends": "./tsconfig.node.json",
 
   /**
-   * CompilerOptions: Node-hosted bundler consumer deltas.
-   * The bundler (tsdown), not TypeScript, owns the JavaScript runtime artifact.
+   * CompilerOptions: The only composite producer in the single-project graph.
+   * Emits declaration-only validation output into the internal build area.
    */
   "compilerOptions": {
     /**
-     * NoEmit: This lane validates only; it must not become a second producer.
+     * Composite: Enables project-reference build-mode participation.
      */
-    "noEmit": true,
+    "composite": true,
 
     /**
-     * Types: Reopen only the Node ambient declarations for this host.
+     * NoEmit: A no-emit config cannot fulfill producer responsibilities.
      */
-    "types": ["node"],
+    "noEmit": false,
 
     /**
-     * Lib: Leaf-local DOM reopening — the verified @modelcontextprotocol/sdk
-     * declaration surface (shared/transport.d.ts) requires the fetch-platform
-     * HeadersInit type. Host libraries stay leaf-local and never widen the root.
+     * EmitDeclarationOnly: Runtime JavaScript remains owned by the bundler.
      */
-    "lib": ["ES2025", "DOM"]
+    "emitDeclarationOnly": true,
+
+    /**
+     * Declaration: The graph exposes a real type producer for consumers.
+     */
+    "declaration": true,
+
+    /**
+     * DeclarationMap: Cross-project type navigation for internal artifacts.
+     */
+    "declarationMap": true,
+
+    /**
+     * IsolatedDeclarations: Documented deviation from the canonical producer
+     * reference. This repository is a private MCP server whose contracts are
+     * zod-inference-driven and whose real declaration artifact is owned by
+     * tsdown; this producer is a validation lane only. Full compliance would
+     * require manual annotations across the entire schema surface for zero
+     * delivery value. Composite graph validation does not require this flag.
+     */
+    "isolatedDeclarations": false,
+
+    /**
+     * SourceMap: This lane emits declarations only and owns no JavaScript maps.
+     */
+    "sourceMap": false,
+
+    /**
+     * OutDir: Validation declarations live outside the runtime distribution.
+     */
+    "outDir": "./.tsbuild/typecheck",
+
+    /**
+     * TsBuildInfoFile: Incremental build state stays in the internal build area.
+     */
+    "tsBuildInfoFile": "./.tsbuild/tsconfig.typecheck.tsbuildinfo"
   },
 
   /**
-   * Include: The runtime source tree plus the repo-root config surfaces owned
-   * by this leaf. Test sources live in their own consumer lanes.
+   * Include: Only implementation source enters the graph-validation producer;
+   * consumer test source retains separate ownership.
    */
-  "include": [
-    "src/**/*.ts",
-    "*.config.ts"
-  ]
+  "include": ["src/**/*.ts"]
 }

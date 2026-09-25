@@ -1,6 +1,7 @@
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import {
   formatInspectionPreviewChunkTextBlock,
+  formatInspectionTerminalCompletionTextBlock,
   INSPECTION_RESUME_ADMISSION_OUTCOMES,
   INSPECTION_RESUME_MODES,
   type InspectionResumeAdmission,
@@ -17,6 +18,10 @@ import {
   isSearchMaxResultsLimitReached,
   type SearchStopReason,
 } from "../search-stop-state";
+import {
+  formatSearchCompletionSummaryLine,
+  type SearchSessionDeliverySummary,
+} from "../search-session-delivery";
 
 /**
  * Describes one collected fixed-string match location.
@@ -111,6 +116,16 @@ export interface SearchFixedStringResult {
    * Indicates whether any root result stopped early because the effective result limit was reached.
    */
   truncated: boolean;
+
+  /**
+   * Session-cumulative delivery truth for the current response.
+   *
+   * @remarks
+   * On resume passes the per-root payloads stay frontier-scoped; this summary carries how many
+   * matches and locations the session already delivered and delivers in total, so no pass ever
+   * has to present its delta as the absolute session result.
+   */
+  sessionDelivery: SearchSessionDeliverySummary;
 
   admission: InspectionResumeAdmission;
   resume: InspectionResumeMetadata;
@@ -237,6 +252,74 @@ function formatSearchFixedStringPreviewPathOutput(
 }
 
 /**
+ * Formats one root-local fixed-string delta of a continuation pass into the public text response surface.
+ *
+ * @remarks
+ * Continuation passes deliver only the frontier delta of a persisted preview-first session. This
+ * formatter keeps the wording completion-scoped so the delta is never presented as the absolute
+ * session result — the defect class behind the reported false negative.
+ *
+ * @param result - Structured fixed-string delta for one continued search scope.
+ * @param fixedString - Exact literal string restored from the persisted request context.
+ * @param effectiveMaxResults - Effective hard-capped result limit applied by the handler.
+ * @returns Human-readable text output for the current root delta.
+ */
+export function formatSearchFixedStringCompletionDeltaPathOutput(
+  result: SearchFixedStringPathResult,
+  fixedString: string,
+  effectiveMaxResults: number,
+): string {
+  if (result.error !== null) {
+    if (result.error.startsWith("Preview-first traversal for root ")) {
+      return result.error;
+    }
+
+    return `Fixed-string search failed for root ${result.root}: ${result.error}`;
+  }
+
+  if (result.matches.length === 0) {
+    let output = `No additional matches found for fixed string: ${fixedString} in this completion pass\nSearched ${result.filesSearched} files in this completion pass`;
+    const stopStateLine = formatSearchStopStateLine(result);
+
+    if (stopStateLine !== null) {
+      output += `\n${stopStateLine}`;
+    }
+
+    return output;
+  }
+
+  let output = `Found ${result.totalMatches} additional matches in ${result.matches.length} locations in this completion pass`;
+
+  if (result.truncated && isSearchMaxResultsLimitReached(result.stopReason)) {
+    output += ` (limited to ${effectiveMaxResults} results)`;
+  }
+
+  output += "\n\n";
+
+  const fileGroups = new Map<string, FixedStringSearchMatch[]>();
+
+  for (const match of result.matches) {
+    if (!fileGroups.has(match.file)) {
+      fileGroups.set(match.file, []);
+    }
+
+    fileGroups.get(match.file)?.push(match);
+  }
+
+  for (const [file, fileResults] of fileGroups.entries()) {
+    output += `File: ${file}\n`;
+
+    for (const fileResult of fileResults) {
+      output += `  Line ${fileResult.line}: ${fileResult.content}\n`;
+    }
+
+    output += "\n";
+  }
+
+  return output.trimEnd();
+}
+
+/**
  * Formats the structured fixed-string search result into the public text response surface.
  *
  * @param result - Structured fixed-string search result across all requested roots.
@@ -280,27 +363,35 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
   const hasResumableContinuation =
     result.resume.resumable
     && result.resume.resumeToken !== null;
+  const continuationPass = result.sessionDelivery.continuationPass;
   const previewSliceIsActive =
     result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST
     && hasResumableContinuation;
 
+  // Pure inline base responses keep the absolute verdict wording. Every continuation pass is
+  // frontier-delta-scoped by contract and must never present its delta as the session result.
+  if (!continuationPass && !hasResumableContinuation) {
+    return formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
+  }
+
   // Always emit the full match data first — content.text must be the complete primary information
   // carrier regardless of delivery mode. Text-only consumers must never depend on structuredContent
   // to obtain result data. See conventions/mcp-response-contract/structured-content-contract.md.
+  const emptyRootResult: SearchFixedStringPathResult = {
+    root: "",
+    matches: [],
+    filesSearched: 0,
+    totalMatches: 0,
+    truncated: false,
+    error: null,
+    stopReason: null,
+    stopMessage: null,
+  };
   const fullOutput = previewSliceIsActive
     ? (
         result.roots.length === 1
           ? formatSearchFixedStringPreviewPathOutput(
-              result.roots[0] ?? {
-                root: "",
-                matches: [],
-                filesSearched: 0,
-                totalMatches: 0,
-                truncated: false,
-                error: null,
-                stopReason: null,
-                stopMessage: null,
-              },
+              result.roots[0] ?? emptyRootResult,
               fixedString,
               effectiveMaxResults,
             )
@@ -314,31 +405,59 @@ export function formatSearchFixedStringContinuationAwareTextOutput(
               )
               .join("\n\n")
       )
-    : formatSearchFixedStringResultOutput(result, fixedString, effectiveMaxResults);
+    : (
+        result.roots.length === 1
+          ? formatSearchFixedStringCompletionDeltaPathOutput(
+              result.roots[0] ?? emptyRootResult,
+              fixedString,
+              effectiveMaxResults,
+            )
+          : result.roots
+              .map((rootResult) =>
+                formatSearchFixedStringCompletionDeltaPathOutput(
+                  rootResult,
+                  fixedString,
+                  effectiveMaxResults,
+                )
+              )
+              .join("\n\n")
+      );
 
-  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableContinuation) {
-    return fullOutput;
+  if (hasResumableContinuation) {
+    // Append the continuation guidance block after the full match data so text-only consumers
+    // receive both the complete result and the resume instructions in one content.text surface.
+    const rootLabel = result.roots.length === 1 ? "root" : "roots";
+    const zeroMatchesClarification = result.totalMatches === 0
+      ? " No matches found in this chunk — more files may still be pending in the remaining traversal frontier."
+      : "";
+    const previewSummary =
+      result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+        ? `Fixed-string-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
+        : `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches already reached in this bounded preview slice.${zeroMatchesClarification}`;
+
+    const continuationBlock = formatInspectionPreviewChunkTextBlock(
+      result.admission,
+      result.resume,
+      previewSummary,
+      "Resume the same fixed-string-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
+    );
+
+    return `${fullOutput}\n\n${continuationBlock}`;
   }
 
-  // Append the continuation guidance block after the full match data so text-only consumers
-  // receive both the complete result and the resume instructions in one content.text surface.
-  const rootLabel = result.roots.length === 1 ? "root" : "roots";
-  const zeroMatchesClarification = result.totalMatches === 0
-    ? " No matches found in this chunk — more files may still be pending in the remaining traversal frontier."
-    : "";
-  const previewSummary =
-    result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
-      ? `Fixed-string-search completion progress is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
-      : `Fixed-string-search preview is available for ${result.roots.length} ${rootLabel} with ${result.totalMatches} matches already reached in this bounded preview slice.${zeroMatchesClarification}`;
-
-  const continuationBlock = formatInspectionPreviewChunkTextBlock(
-    result.admission,
-    result.resume,
-    previewSummary,
-    "Resume the same fixed-string-search request by sending only resumeToken with resumeMode='next-chunk' to the same endpoint to receive the next bounded chunk of matches.",
+  // Terminal continuation pass: the session is complete and no longer resumable, so the response
+  // closes with the session-cumulative summary and the additive continuation guidance.
+  const completionSummary = formatSearchCompletionSummaryLine(
+    "Fixed-string-search",
+    result.roots.length,
+    {
+      matchCount: result.totalMatches,
+      locationCount: result.totalLocations,
+    },
+    result.sessionDelivery,
   );
 
-  return `${fullOutput}\n\n${continuationBlock}`;
+  return `${fullOutput}\n\n${formatInspectionTerminalCompletionTextBlock(result.admission, completionSummary)}`;
 }
 
 /**

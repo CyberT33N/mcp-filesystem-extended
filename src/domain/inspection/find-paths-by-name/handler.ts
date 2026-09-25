@@ -6,16 +6,20 @@ import {
 import { buildTraversalNarrowingGuidance } from "@domain/shared/guardrails/filesystem-preflight";
 import type { TraversalWorkloadAdmissionOutcome } from "@domain/shared/guardrails/traversal-workload-admission";
 import {
+  createBaseSessionDeliverySummary,
+  createContinuationSessionDeliverySummary,
   createInlineResumeEnvelope,
   createPersistedResumeEnvelope,
   createResumeEnvelope,
   formatInspectionPreviewChunkTextBlock,
+  formatInspectionTerminalCompletionTextBlock,
   getResumeSessionNotFoundMessage,
   INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
   INSPECTION_RESUME_ADMISSION_OUTCOMES,
   INSPECTION_RESUME_MODES,
   INSPECTION_RESUME_STATUSES,
   type InspectionResumeMode,
+  type InspectionSessionDeliverySummary,
 } from "@domain/shared/resume/inspection-resume-contract";
 import type {
   InspectionResumeAdmission,
@@ -55,6 +59,17 @@ export interface FindPathsByNameResult {
   roots: FindPathsByNameRootResult[];
   totalMatches: number;
   truncated: boolean;
+
+  /**
+   * Session-cumulative delivery truth for the current response.
+   *
+   * @remarks
+   * On resume passes the per-root payloads stay frontier-scoped; this summary carries how many
+   * matches the session already delivered and delivers in total, so no pass ever has to present
+   * its delta as the absolute session result.
+   */
+  sessionDelivery: InspectionSessionDeliverySummary;
+
   admission: InspectionResumeAdmission;
   resume: InspectionResumeMetadata;
 }
@@ -70,13 +85,50 @@ interface FindPathsByNameRequestPayload {
 
 interface FindPathsByNameBatchContinuationState {
   rootTraversalStates: Record<string, FindPathsByNameContinuationState>;
+  /**
+   * Session-cumulative delivered match total persisted across passes.
+   *
+   * @remarks
+   * Optional because sessions persisted before this field existed carry no total; the
+   * consumption boundary normalizes their absence to zero.
+   */
+  deliveredTotals?: FindPathsByNameDeliveredTotals;
+}
+
+/**
+ * Session-cumulative delivered-match totals persisted inside a name-discovery continuation state.
+ */
+interface FindPathsByNameDeliveredTotals {
+  /**
+   * Matches already delivered to the caller in prior passes of the session.
+   */
+  matchCount: number;
+}
+
+/**
+ * Describes the active persisted resume-session surface of one name-discovery execution.
+ *
+ * @remarks
+ * Token and expiration timestamp are paired by construction: both originate from the same
+ * persisted session record, so the expiration timestamp is guaranteed to be present whenever
+ * a resume session is active.
+ */
+interface FindPathsByNameActiveResumeSession {
+  /**
+   * Opaque persisted session handle of the active session.
+   */
+  resumeToken: string;
+
+  /**
+   * Expiration timestamp of the active persisted session.
+   */
+  expiresAt: string;
 }
 
 interface FindPathsByNameExecutionContext {
   requestPayload: FindPathsByNameRequestPayload;
   continuationState: FindPathsByNameBatchContinuationState | null;
-  activeResumeToken: string | null;
-  activeResumeExpiresAt: string | null;
+  activeResumeSession: FindPathsByNameActiveResumeSession | null;
   requestedResumeMode: InspectionResumeMode | null;
 }
 
@@ -102,15 +154,70 @@ function buildFindPathsByNameScopeReductionGuidance(directoryPaths: string[]): s
   return "Reduce the discovery scope by narrowing roots or making nameContains more specific.";
 }
 
-function formatFindPathsByNameTextOutput(
+/**
+ * Formats one root-local name-search delta of a continuation pass into the public text response surface.
+ *
+ * @remarks
+ * Continuation passes deliver only the frontier delta of a persisted preview-first session. This
+ * formatter keeps the wording completion-scoped so the delta is never presented as the absolute
+ * session result — the defect class behind the reported false negative.
+ *
+ * @param result - Structured name-search delta for one continued root.
+ * @param maxResults - Effective result limit applied by the handler.
+ * @returns Human-readable text output for the current root delta.
+ */
+function formatFindPathsByNameCompletionDeltaRootOutput(
+  result: FindPathsByNameRootResult,
+  maxResults: number,
+): string {
+  if (result.matches.length === 0) {
+    if (result.truncated) {
+      return `Traversal scope exceeded the bounded preview-first lane before matching paths could be collected. ${buildTraversalNarrowingGuidance(result.root)}`;
+    }
+
+    return "No additional matches found in this completion pass";
+  }
+
+  let output = `Found ${result.matches.length} additional matches in this completion pass\n\n${result.matches.join("\n")}`;
+
+  if (result.truncated) {
+    output += `\n(limited to ${maxResults} results)`;
+  }
+
+  assertActualTextBudget(
+    "find_paths_by_name",
+    output.length,
+    DISCOVERY_RESPONSE_CAP_CHARS,
+    "formatted name-based search results",
+  );
+
+  return output;
+}
+
+/**
+ * Formats the name-search result into the caller-visible text response surface.
+ *
+ * @remarks
+ * Exported as an explicit white-box test seam, mirroring the search-family result modules.
+ * Continuation passes are frontier-delta-scoped by contract: resumable passes emit the bounded
+ * chunk block, and the terminal pass emits the delta payload plus the session-cumulative summary.
+ *
+ * @param result - Structured name-search result across all requested roots.
+ * @param maxResults - Effective result limit applied by the handler.
+ * @returns Human-readable name-search output for the current delivery pass.
+ */
+export function formatFindPathsByNameTextOutput(
   result: FindPathsByNameResult,
   maxResults: number,
 ): string {
   const hasResumableResume =
     result.resume.resumable
     && result.resume.resumeToken !== null;
+  const continuationPass = result.sessionDelivery.continuationPass;
 
-  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableResume) {
+  // Pure inline base responses keep the absolute verdict wording. Every continuation pass is
+  // frontier-delta-scoped by contract and must never present its delta as the session result.
+  if (!continuationPass && !hasResumableResume) {
     if (result.roots.length === 1) {
       const firstRootResult = result.roots[0];
 
@@ -130,22 +237,39 @@ function formatFindPathsByNameTextOutput(
         );
   }
 
-  const totalMatches = result.totalMatches;
-  const rootLabel = result.roots.length === 1 ? "root" : "roots";
-  const zeroMatchesClarification = totalMatches === 0
-    ? " No matches found in this chunk — more paths may still be pending in the remaining traversal frontier."
-    : "";
-  const previewSummary =
-    result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
-      ? `Name-discovery completion progress is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
-      : `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
+  if (hasResumableResume) {
+    const totalMatches = result.totalMatches;
+    const rootLabel = result.roots.length === 1 ? "root" : "roots";
+    const zeroMatchesClarification = totalMatches === 0
+      ? " No matches found in this chunk — more paths may still be pending in the remaining traversal frontier."
+      : "";
+    const previewSummary =
+      result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+        ? `Name-discovery completion progress is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`
+        : `Name-discovery preview is available for ${result.roots.length} ${rootLabel} with ${totalMatches} matches in this bounded chunk.${zeroMatchesClarification}`;
 
-  return formatInspectionPreviewChunkTextBlock(
-    result.admission,
-    result.resume,
-    previewSummary,
-    FIND_PATHS_BY_NAME_CONTINUATION_GUIDANCE,
-  );
+    return formatInspectionPreviewChunkTextBlock(
+      result.admission,
+      result.resume,
+      previewSummary,
+      FIND_PATHS_BY_NAME_CONTINUATION_GUIDANCE,
+    );
+  }
+
+  // Terminal continuation pass: the session is complete and no longer resumable, so the response
+  // closes with the delta payload, the session-cumulative summary, and the additive guidance.
+  const deltaOutput = result.roots.length === 1
+    ? formatFindPathsByNameCompletionDeltaRootOutput(
+        result.roots[0] ?? { root: "", matches: [], truncated: false },
+        maxResults,
+      )
+    : result.roots
+        .map((rootResult) => formatFindPathsByNameCompletionDeltaRootOutput(rootResult, maxResults))
+        .join("\n\n");
+  const rootLabel = result.roots.length === 1 ? "root" : "roots";
+  const completionSummary = `Name-discovery completion finished for ${result.roots.length} ${rootLabel}: ${result.totalMatches} additional matches in this final pass; session total ${result.sessionDelivery.sessionTotalCount} matches (${result.sessionDelivery.previouslyDeliveredCount} already delivered in prior preview-chunk payloads).`;
+
+  return `${deltaOutput}\n\n${formatInspectionTerminalCompletionTextBlock(result.admission, completionSummary)}`;
 }
 
 function resolveFindPathsByNameExecutionContext(
@@ -171,8 +295,7 @@ function resolveFindPathsByNameExecutionContext(
         maxResults,
       },
       continuationState: null,
-      activeResumeToken: null,
-      activeResumeExpiresAt: null,
+      activeResumeSession: null,
       requestedResumeMode: null,
     };
   }
@@ -198,15 +321,16 @@ function resolveFindPathsByNameExecutionContext(
   return {
     requestPayload: continuationSession.requestPayload,
     continuationState: continuationSession.resumeState,
-    activeResumeToken: continuationSession.resumeToken,
-    activeResumeExpiresAt: continuationSession.expiresAt,
+    activeResumeSession: {
+      resumeToken: continuationSession.resumeToken,
+      expiresAt: continuationSession.expiresAt,
+    },
     requestedResumeMode: resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK,
   };
 }
 
 function buildFindPathsByNameResumeEnvelope(
-  resumeToken: string | null,
-  resumeExpiresAt: string | null,
+  activeResumeSession: FindPathsByNameActiveResumeSession | null,
   resumeMode: InspectionResumeMode | null,
   nextContinuationState: FindPathsByNameBatchContinuationState | null,
   inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
@@ -235,14 +359,9 @@ function buildFindPathsByNameResumeEnvelope(
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
 
   if (nextContinuationState === null) {
-    const completedGuidanceText =
-      effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
-        ? FIND_PATHS_BY_NAME_CONTINUATION_ADDITIVE_GUIDANCE
-        : null;
-
     return createResumeEnvelope(
       admissionOutcome,
-      completedGuidanceText,
+      FIND_PATHS_BY_NAME_CONTINUATION_ADDITIVE_GUIDANCE,
       scopeReductionGuidanceText,
       null,
     );
@@ -252,7 +371,7 @@ function buildFindPathsByNameResumeEnvelope(
     throw new Error("Resume-session storage is unavailable for preview-first name discovery.");
   }
 
-  if (resumeToken === null) {
+  if (activeResumeSession === null) {
     const continuationSession = inspectionResumeSessionStore.createSession(
       {
         endpointName: FIND_PATHS_BY_NAME_FAMILY_MEMBER,
@@ -277,21 +396,17 @@ function buildFindPathsByNameResumeEnvelope(
     );
   }
 
-  if (resumeExpiresAt === null) {
-    throw new Error("Active name-discovery resume session is missing an expiration timestamp.");
-  }
-
   inspectionResumeSessionStore.updateResumeState(
-    resumeToken,
+    activeResumeSession.resumeToken,
     nextContinuationState,
     now,
     effectiveResumeMode,
   );
 
   return createPersistedResumeEnvelope(
-    resumeToken,
+    activeResumeSession.resumeToken,
     INSPECTION_RESUME_STATUSES.ACTIVE,
-    resumeExpiresAt,
+    activeResumeSession.expiresAt,
     INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
     effectiveResumeMode,
     guidanceText,
@@ -410,16 +525,19 @@ export async function getFindPathsByNameResult(
         (requestedDirectoryPath) =>
           executionContext.continuationState?.rootTraversalStates[requestedDirectoryPath] !== undefined,
       );
+  const previouslyDeliveredMatchCount =
+    executionContext.continuationState?.deliveredTotals?.matchCount ?? 0;
 
   if (activeDirectoryPaths.length === 0) {
-    if (executionContext.activeResumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeToken, now);
+    if (executionContext.activeResumeSession !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeSession.resumeToken, now);
     }
 
     return {
       roots: [],
       totalMatches: 0,
       truncated: false,
+      sessionDelivery: createContinuationSessionDeliverySummary(previouslyDeliveredMatchCount, 0),
       ...createInlineResumeEnvelope(),
     };
   }
@@ -456,11 +574,19 @@ export async function getFindPathsByNameResult(
     },
     null,
   );
+  const currentPassMatchCount = roots.reduce((total, root) => total + root.matches.length, 0);
+  const nextContinuationStateWithDeliveredTotals = nextContinuationState === null
+    ? null
+    : {
+        ...nextContinuationState,
+        deliveredTotals: {
+          matchCount: previouslyDeliveredMatchCount + currentPassMatchCount,
+        },
+      };
   const continuationEnvelope = buildFindPathsByNameResumeEnvelope(
-    executionContext.activeResumeToken,
-    executionContext.activeResumeExpiresAt,
+    executionContext.activeResumeSession,
     executionContext.requestedResumeMode,
-    nextContinuationState,
+    nextContinuationStateWithDeliveredTotals,
     inspectionResumeSessionStore,
     executionContext.requestPayload,
     roots,
@@ -475,6 +601,9 @@ export async function getFindPathsByNameResult(
     })),
     totalMatches: roots.reduce((total, root) => total + root.matches.length, 0),
     truncated: roots.some((root) => root.truncated),
+    sessionDelivery: executionContext.continuationState === null
+      ? createBaseSessionDeliverySummary(currentPassMatchCount)
+      : createContinuationSessionDeliverySummary(previouslyDeliveredMatchCount, currentPassMatchCount),
     ...continuationEnvelope,
   };
 }

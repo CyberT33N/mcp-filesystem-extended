@@ -23,6 +23,13 @@ import type { InspectionResumeSessionSqliteStore } from "@infrastructure/persist
 
 import { SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME } from "./schema";
 import {
+  createEmptySearchDeliveredTotals,
+  createSearchSessionDeliverySummary,
+  resolveSearchDeliveredTotals,
+  sumSearchDeliveredTotals,
+  type SearchDeliveredTotals,
+} from "../search-session-delivery";
+import {
   createRegexSearchAggregateBudgetState,
   getSearchRegexPathResult,
   type SearchRegexRootContinuationState,
@@ -49,13 +56,40 @@ interface SearchRegexRequestPayload {
 
 interface SearchRegexContinuationState {
   rootTraversalStates: Record<string, SearchRegexRootContinuationState>;
+  /**
+   * Session-cumulative delivered totals persisted across passes.
+   *
+   * @remarks
+   * Optional because sessions persisted before this field existed carry no totals; the
+   * consumption boundary normalizes their absence to the empty totals.
+   */
+  deliveredTotals?: SearchDeliveredTotals;
+}
+
+/**
+ * Describes the active persisted resume-session surface of one regex-search execution.
+ *
+ * @remarks
+ * Token and expiration timestamp are paired by construction: both originate from the same
+ * persisted session record, so the expiration timestamp is guaranteed to be present whenever
+ * a resume session is active.
+ */
+interface SearchRegexActiveResumeSession {
+  /**
+   * Opaque persisted session handle of the active session.
+   */
+  resumeToken: string;
+
+  /**
+   * Expiration timestamp of the active persisted session.
+   */
+  expiresAt: string;
 }
 
 interface SearchRegexExecutionContext {
   requestPayload: SearchRegexRequestPayload;
   continuationState: SearchRegexContinuationState | null;
-  activeResumeToken: string | null;
-  activeResumeExpiresAt: string | null;
+  activeResumeSession: SearchRegexActiveResumeSession | null;
   requestedResumeMode: InspectionResumeMode | null;
 }
 
@@ -110,8 +144,7 @@ type SearchRegexRootExecutionResult = SearchRegexPathResult & {
 };
 
 interface BuildSearchRegexContinuationEnvelopeOptions {
-  resumeToken: string | null;
-  resumeExpiresAt: string | null;
+  activeResumeSession: SearchRegexActiveResumeSession | null;
   nextContinuationState: SearchRegexContinuationState | null;
   inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined;
   requestPayload: SearchRegexRequestPayload;
@@ -194,8 +227,7 @@ function resolveSearchRegexExecutionContext(
         caseSensitive,
       },
       continuationState: null,
-      activeResumeToken: null,
-      activeResumeExpiresAt: null,
+      activeResumeSession: null,
       requestedResumeMode: null,
     };
   }
@@ -221,8 +253,10 @@ function resolveSearchRegexExecutionContext(
   return {
     requestPayload: resumeSession.requestPayload,
     continuationState: resumeSession.resumeState,
-    activeResumeToken: resumeSession.resumeToken,
-    activeResumeExpiresAt: resumeSession.expiresAt,
+    activeResumeSession: {
+      resumeToken: resumeSession.resumeToken,
+      expiresAt: resumeSession.expiresAt,
+    },
     requestedResumeMode:
       resumeMode
       ?? resumeSession.lastRequestedResumeMode
@@ -240,8 +274,7 @@ function buildSearchRegexContinuationEnvelope(
   options: BuildSearchRegexContinuationEnvelopeOptions,
 ): Pick<SearchRegexResult, "admission" | "resume"> {
   const {
-    resumeToken,
-    resumeExpiresAt,
+    activeResumeSession,
     nextContinuationState,
     inspectionResumeSessionStore,
     requestPayload,
@@ -254,11 +287,11 @@ function buildSearchRegexContinuationEnvelope(
   const admissionOutcome = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
     ? INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
-  const guidanceText = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
-    ? nextContinuationState === null
-      ? "Continuation response. This payload contains entries from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset."
-      : "Continuation response. This payload contains entries from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset. More work remains; resume the same regex-search request by sending only resumeToken with resumeMode='complete-result' to continue the server-owned completion attempt."
-    : SEARCH_REGEX_CONTINUATION_GUIDANCE;
+  const guidanceText = nextContinuationState === null
+    ? "Continuation response. This payload contains entries from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset."
+    : effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
+      ? "Continuation response. This payload contains entries from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset. More work remains; resume the same regex-search request by sending only resumeToken with resumeMode='complete-result' to continue the server-owned completion attempt."
+      : SEARCH_REGEX_CONTINUATION_GUIDANCE;
   const scopeReductionGuidanceText =
     "Scope reduction alternative: narrow roots, add includeGlobs, or tighten the regex to the intended file set.";
   const previewFirstActive = roots.some(
@@ -283,7 +316,7 @@ function buildSearchRegexContinuationEnvelope(
     throw new Error("Resume-session storage is unavailable for preview-first regex search.");
   }
 
-  if (resumeToken === null) {
+  if (activeResumeSession === null) {
     const resumeSession = inspectionResumeSessionStore.createSession(
       {
         endpointName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
@@ -308,21 +341,17 @@ function buildSearchRegexContinuationEnvelope(
     );
   }
 
-  if (resumeExpiresAt === null) {
-    throw new Error("Active regex-search resume session is missing an expiration timestamp.");
-  }
-
   inspectionResumeSessionStore.updateResumeState(
-    resumeToken,
+    activeResumeSession.resumeToken,
     nextContinuationState,
     now,
     effectiveResumeMode,
   );
 
   return createPersistedResumeEnvelope(
-    resumeToken,
+    activeResumeSession.resumeToken,
     INSPECTION_RESUME_STATUSES.ACTIVE,
-    resumeExpiresAt,
+    activeResumeSession.expiresAt,
     INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
     effectiveResumeMode,
     guidanceText,
@@ -496,10 +525,13 @@ export async function getSearchRegexResult(
         (requestedSearchPath) =>
           executionContext.continuationState?.rootTraversalStates[requestedSearchPath] !== undefined,
       );
+  const previouslyDelivered = resolveSearchDeliveredTotals(
+    executionContext.continuationState?.deliveredTotals,
+  );
 
   if (activeSearchPaths.length === 0) {
-    if (executionContext.activeResumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeToken, now);
+    if (executionContext.activeResumeSession !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeSession.resumeToken, now);
     }
 
     return {
@@ -507,6 +539,11 @@ export async function getSearchRegexResult(
       totalLocations: 0,
       totalMatches: 0,
       truncated: false,
+      sessionDelivery: createSearchSessionDeliverySummary(
+        executionContext.continuationState !== null,
+        previouslyDelivered,
+        createEmptySearchDeliveredTotals(),
+      ),
       ...createInlineResumeEnvelope(),
     };
   }
@@ -565,10 +602,19 @@ export async function getSearchRegexResult(
     },
     null,
   );
+  const currentPassDelivered: SearchDeliveredTotals = {
+    matchCount: roots.reduce((total, root) => total + root.totalMatches, 0),
+    locationCount: roots.reduce((total, root) => total + root.matches.length, 0),
+  };
+  const nextContinuationStateWithDeliveredTotals = nextContinuationState === null
+    ? null
+    : {
+        ...nextContinuationState,
+        deliveredTotals: sumSearchDeliveredTotals(previouslyDelivered, currentPassDelivered),
+      };
   const continuationEnvelope = buildSearchRegexContinuationEnvelope({
-    resumeToken: executionContext.activeResumeToken,
-    resumeExpiresAt: executionContext.activeResumeExpiresAt,
-    nextContinuationState,
+    activeResumeSession: executionContext.activeResumeSession,
+    nextContinuationState: nextContinuationStateWithDeliveredTotals,
     inspectionResumeSessionStore,
     requestPayload: executionContext.requestPayload,
     roots,
@@ -592,6 +638,11 @@ export async function getSearchRegexResult(
     totalLocations: roots.reduce((total, root) => total + root.matches.length, 0),
     totalMatches: roots.reduce((total, root) => total + root.totalMatches, 0),
     truncated: roots.some((root) => root.truncated),
+    sessionDelivery: createSearchSessionDeliverySummary(
+      executionContext.continuationState !== null,
+      previouslyDelivered,
+      currentPassDelivered,
+    ),
     ...continuationEnvelope,
   };
 }

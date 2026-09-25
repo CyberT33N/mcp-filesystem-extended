@@ -95,9 +95,6 @@ import {
 const STRUCTURED_CONTINUATION_AUTHORITY_DESCRIPTION =
   "When additive `admission` and `resume` metadata are returned, `structuredContent.admission` and `structuredContent.resume` remain the authoritative machine-readable envelope, while primary result data remains complete in `content.text` and any mirrored structured result data must not replace it.";
 
-const TOKEN_ONLY_RESUME_DESCRIPTION =
-  "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`.";
-
 const FINAL_PREVIEW_FIRST_DESCRIPTION =
   "A preview-first response may finalize without an active resume token only when the current bounded final payload is already present in `content.text` and mirrored in `structuredContent`, and no further resume step exists.";
 
@@ -205,6 +202,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           content: [{ type: "text", text }],
           structuredContent: {
             roots: result.roots,
+            sessionDelivery: result.sessionDelivery,
             admission: result.admission,
             resume: result.resume,
           },
@@ -258,6 +256,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             roots: result.roots,
             totalMatches: result.totalMatches,
             truncated: result.truncated,
+            sessionDelivery: result.sessionDelivery,
             admission: result.admission,
             resume: result.resume,
           },
@@ -311,6 +310,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             roots: result.roots,
             totalMatches: result.totalMatches,
             truncated: result.truncated,
+            sessionDelivery: result.sessionDelivery,
             admission: result.admission,
             resume: result.resume,
           },
@@ -365,6 +365,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             totalLocations: result.totalLocations,
             totalMatches: result.totalMatches,
             truncated: result.truncated,
+            sessionDelivery: result.sessionDelivery,
             admission: result.admission,
             resume: result.resume,
           },
@@ -418,6 +419,7 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
             totalLocations: result.totalLocations,
             totalMatches: result.totalMatches,
             truncated: result.truncated,
+            sessionDelivery: result.sessionDelivery,
             admission: result.admission,
             resume: result.resume,
           },

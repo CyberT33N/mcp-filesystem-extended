@@ -603,6 +603,84 @@ export function createPersistedResumeEnvelope(
 }
 
 /**
+ * Session-cumulative delivery summary carried by every resume-capable inspection response.
+ *
+ * @remarks
+ * Preview-first sessions deliver their result payload across multiple bounded passes. Without a
+ * session-cumulative summary, the terminal pass would present the final frontier delta as if it
+ * were the absolute session result — the false-negative defect class this contract eliminates.
+ * The summary is additive metadata: the per-pass payload stays frontier-scoped, while the summary
+ * tells the caller how many result units the session has already delivered and in total.
+ */
+export interface InspectionSessionDeliverySummary {
+  /**
+   * Whether the current response continues a persisted preview-first session.
+   *
+   * @remarks
+   * `false` on base requests, `true` on every resume pass — including the terminal pass whose
+   * envelope is no longer resumable.
+   */
+  continuationPass: boolean;
+
+  /**
+   * Result units already delivered to the caller in prior passes of the same session.
+   */
+  previouslyDeliveredCount: number;
+
+  /**
+   * Session-cumulative result units including the current pass.
+   */
+  sessionTotalCount: number;
+}
+
+/**
+ * Builds the session delivery summary for a base (non-resume) inspection response.
+ *
+ * @param currentPassDeliveredCount - Result units delivered by the current base pass.
+ * @returns Delivery summary with zero previously delivered units.
+ */
+export function createBaseSessionDeliverySummary(
+  currentPassDeliveredCount: number,
+): InspectionSessionDeliverySummary {
+  return {
+    continuationPass: false,
+    previouslyDeliveredCount: 0,
+    sessionTotalCount: currentPassDeliveredCount,
+  };
+}
+
+/**
+ * Builds the session delivery summary for a resume pass of a persisted preview-first session.
+ *
+ * @param previouslyDeliveredCount - Result units delivered by all prior passes of the session.
+ * @param currentPassDeliveredCount - Result units delivered by the current resume pass.
+ * @returns Delivery summary with the session-cumulative total.
+ */
+export function createContinuationSessionDeliverySummary(
+  previouslyDeliveredCount: number,
+  currentPassDeliveredCount: number,
+): InspectionSessionDeliverySummary {
+  return {
+    continuationPass: true,
+    previouslyDeliveredCount,
+    sessionTotalCount: previouslyDeliveredCount + currentPassDeliveredCount,
+  };
+}
+
+/**
+ * Zod schema for the session-cumulative delivery summary surface.
+ *
+ * @remarks
+ * Mirrors the {@link InspectionSessionDeliverySummary} interface so every resume-capable
+ * endpoint result schema can embed the same machine-readable delivery truth.
+ */
+export const InspectionSessionDeliverySummarySchema = z.object({
+  continuationPass: z.boolean(),
+  previouslyDeliveredCount: z.number(),
+  sessionTotalCount: z.number(),
+});
+
+/**
  * Returns the canonical not-found-class resume failure message for one family.
  *
  * @param familyMember - Exact family member that owns the missing or unusable session.
@@ -661,6 +739,41 @@ export function formatInspectionPreviewChunkTextBlock(
     admission.guidanceText ?? fallbackGuidanceText,
     INSPECTION_RESUME_STRUCTURED_PAYLOAD_GUIDANCE,
     admission.scopeReductionGuidanceText ?? "",
+  ].join("\n");
+}
+
+/**
+ * Canonical terminal continuation guidance for completed preview-first sessions.
+ *
+ * @remarks
+ * This is the single source of truth for the additive semantics statement on the terminal pass
+ * of a preview-first session. The terminal pass delivers the final frontier delta only; the
+ * statement keeps the caller aware that the complete dataset is the combination of all passes.
+ */
+export const INSPECTION_RESUME_TERMINAL_CONTINUATION_GUIDANCE =
+  "Continuation response. This payload contains the final entries from the persisted frontier position onward. Combine with the prior preview-chunk payloads for the complete dataset.";
+
+/**
+ * Formats the shared terminal-completion text block for resume-capable inspection endpoints.
+ *
+ * @remarks
+ * The terminal pass of a preview-first session is no longer resumable, so the preview chunk
+ * block (which always prints an active token line) cannot represent it. This block is the
+ * canonical terminal counterpart: it carries the endpoint-owned completion summary, the additive
+ * continuation guidance, and the structured-payload pointer — and never a fresh resume token.
+ *
+ * @param admission - Admission metadata for the terminal response; its guidance text wins when set.
+ * @param completionSummary - Endpoint-family-specific session completion summary line.
+ * @returns Formatted text block for the terminal continuation response surface.
+ */
+export function formatInspectionTerminalCompletionTextBlock(
+  admission: InspectionResumeAdmission,
+  completionSummary: string,
+): string {
+  return [
+    completionSummary,
+    admission.guidanceText ?? INSPECTION_RESUME_TERMINAL_CONTINUATION_GUIDANCE,
+    INSPECTION_RESUME_STRUCTURED_PAYLOAD_GUIDANCE,
   ].join("\n");
 }
 

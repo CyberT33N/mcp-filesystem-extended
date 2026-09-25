@@ -22,6 +22,7 @@ import {
   INSPECTION_RESUME_TOKEN_FIELD,
 } from "@domain/shared/resume/inspection-resume-contract";
 import { SEARCH_STOP_REASON_VALUES } from "../search-stop-state";
+import { SearchSessionDeliverySummarySchema } from "../search-session-delivery";
 
 /**
  * Canonical request contract for guarded fixed-string content search.
@@ -171,6 +172,15 @@ export const SearchFileContentsByFixedStringResultSchema = z.object({
   totalLocations: z.number(),
   totalMatches: z.number(),
   truncated: z.boolean(),
+  /**
+   * Session-cumulative delivery summary.
+   *
+   * @remarks
+   * This property carries the session truth for resume-capable delivery: whether the response
+   * continues a persisted preview-first session, how many matches and locations prior passes
+   * already delivered, and the session-cumulative totals including the current pass.
+   */
+  sessionDelivery: SearchSessionDeliverySummarySchema,
   admission: InspectionResumeAdmissionSchema,
   resume: InspectionResumeMetadataSchema,
 });

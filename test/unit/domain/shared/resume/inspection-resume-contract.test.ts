@@ -3,10 +3,13 @@ import { z } from "zod";
 
 import {
   applyCommonResumeSchemaRefinement,
+  createBaseSessionDeliverySummary,
+  createContinuationSessionDeliverySummary,
   createInlineResumeEnvelope,
   createPersistedResumeEnvelope,
   createResumeEnvelope,
   formatInspectionPreviewChunkTextBlock,
+  formatInspectionTerminalCompletionTextBlock,
   getResumeSessionNotFoundMessage,
   InspectionCompletionOnlyAdmissionSchema,
   InspectionCompletionOnlyResumeMetadataSchema,
@@ -15,12 +18,14 @@ import {
   InspectionResumeMetadataSchema,
   InspectionResumeModeFieldSchema,
   InspectionResumeTokenFieldSchema,
+  InspectionSessionDeliverySummarySchema,
   INSPECTION_COMPLETION_ONLY_RESUME_MODES,
   INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
   INSPECTION_RESUME_ADMISSION_OUTCOMES,
   INSPECTION_RESUME_MODE_FIELD,
   INSPECTION_RESUME_MODES,
   INSPECTION_RESUME_STATUSES,
+  INSPECTION_RESUME_TERMINAL_CONTINUATION_GUIDANCE,
   INSPECTION_RESUME_TOKEN_FIELD,
   validateResumeOnlyRequest,
 } from "@domain/shared/resume/inspection-resume-contract";
@@ -306,6 +311,71 @@ describe("inspection_resume_contract", () => {
     expect(getResumeSessionNotFoundMessage("fixed-string-search")).toBe(
       "Resume request for family 'fixed-string-search' could not be fulfilled because the supplied resume token does not resolve to an active server-owned resume session.",
     );
+  });
+
+  it("builds base and continuation session delivery summaries with cumulative totals", () => {
+    expect(createBaseSessionDeliverySummary(7)).toEqual({
+      continuationPass: false,
+      previouslyDeliveredCount: 0,
+      sessionTotalCount: 7,
+    });
+
+    expect(createContinuationSessionDeliverySummary(5, 2)).toEqual({
+      continuationPass: true,
+      previouslyDeliveredCount: 5,
+      sessionTotalCount: 7,
+    });
+  });
+
+  it("validates the session delivery summary schema surface", () => {
+    expect(
+      InspectionSessionDeliverySummarySchema.safeParse({
+        continuationPass: true,
+        previouslyDeliveredCount: 5,
+        sessionTotalCount: 7,
+      }).success,
+    ).toBe(true);
+    expect(
+      InspectionSessionDeliverySummarySchema.safeParse({
+        continuationPass: "yes",
+        previouslyDeliveredCount: 5,
+        sessionTotalCount: 7,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("formats terminal completion blocks with admission guidance and the structured payload pointer", () => {
+    expect(
+      formatInspectionTerminalCompletionTextBlock(
+        {
+          outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+          guidanceText: "Continuation response. Combine with the prior preview-chunk payload.",
+          scopeReductionGuidanceText: null,
+        },
+        "Regex-search completion finished for 1 root: 0 additional matches in this final pass; session total 1 matches in 1 locations (1 already delivered in prior preview-chunk payloads).",
+      ).split("\n"),
+    ).toEqual([
+      "Regex-search completion finished for 1 root: 0 additional matches in this final pass; session total 1 matches in 1 locations (1 already delivered in prior preview-chunk payloads).",
+      "Continuation response. Combine with the prior preview-chunk payload.",
+      "The authoritative match payload remains in structuredContent.",
+    ]);
+  });
+
+  it("falls back to the canonical terminal continuation guidance when the admission carries none", () => {
+    expect(
+      formatInspectionTerminalCompletionTextBlock(
+        {
+          outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+          guidanceText: null,
+          scopeReductionGuidanceText: null,
+        },
+        "Name-discovery completion finished for 1 root: 0 additional matches in this final pass; session total 2 matches (2 already delivered in prior preview-chunk payloads).",
+      ).split("\n"),
+    ).toEqual([
+      "Name-discovery completion finished for 1 root: 0 additional matches in this final pass; session total 2 matches (2 already delivered in prior preview-chunk payloads).",
+      INSPECTION_RESUME_TERMINAL_CONTINUATION_GUIDANCE,
+      "The authoritative match payload remains in structuredContent.",
+    ]);
   });
 
   it("clones traversal frames without reusing mutable references and commits traversal entries in place", () => {

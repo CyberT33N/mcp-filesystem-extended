@@ -372,4 +372,257 @@ describe("register-inspection-tool-catalog", () => {
       registerInspectionToolCatalogTestState.readFileContentResultSchema,
     );
   });
+
+  it("passes the session delivery summary through the structured content of every resume-capable endpoint", async () => {
+    const registerTool = vi.fn();
+    const executeTool = vi.fn(
+      (_toolName: string, operation: () => unknown) => operation(),
+    );
+    const context = {
+      server: {
+        registerTool,
+      },
+      allowedDirectories: ["C:/allowed"],
+      inspectionResumeSessionStore: {
+        cleanupExpiredSessions: vi.fn(),
+      },
+      executeTool,
+    };
+    const sessionDelivery = {
+      continuationPass: true,
+      previouslyDeliveredCount: 2,
+      sessionTotalCount: 3,
+    };
+
+    Reflect.apply(registerInspectionToolCatalog, undefined, [context]);
+
+    const registeredCallbackByToolName = new Map(
+      registerTool.mock.calls.map(([toolName, , callback]) => [
+        toolName,
+        callback,
+      ]),
+    );
+    const invokeCallback = (toolName: string, args: Record<string, unknown>): unknown => {
+      const callback = registeredCallbackByToolName.get(toolName);
+
+      if (callback === undefined) {
+        throw new Error(`Expected ${toolName} to be registered.`);
+      }
+
+      return Reflect.apply(callback, undefined, [args]);
+    };
+    const readSessionDelivery = (toolResult: unknown): unknown => {
+      if (
+        typeof toolResult !== "object"
+        || toolResult === null
+        || !("structuredContent" in toolResult)
+      ) {
+        throw new Error("Expected a tool result with a structuredContent surface.");
+      }
+
+      const structuredContent = toolResult.structuredContent;
+
+      if (
+        typeof structuredContent !== "object"
+        || structuredContent === null
+        || !("sessionDelivery" in structuredContent)
+      ) {
+        throw new Error("Expected the structuredContent surface to carry sessionDelivery.");
+      }
+
+      return structuredContent.sessionDelivery;
+    };
+
+    registerInspectionToolCatalogTestState.getListDirectoryEntriesResult.mockResolvedValue({
+      roots: [],
+      sessionDelivery,
+      admission: { outcome: "inline" },
+      resume: { resumable: false },
+    });
+    registerInspectionToolCatalogTestState.handleListDirectoryEntries.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.getFindPathsByNameResult.mockResolvedValue({
+      roots: [],
+      totalMatches: 0,
+      truncated: false,
+      sessionDelivery,
+      admission: { outcome: "inline" },
+      resume: { resumable: false },
+    });
+    registerInspectionToolCatalogTestState.handleSearchFiles.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.getFindFilesByGlobResult.mockResolvedValue({
+      roots: [],
+      totalMatches: 0,
+      truncated: false,
+      sessionDelivery,
+      admission: { outcome: "inline" },
+      resume: { resumable: false },
+    });
+    registerInspectionToolCatalogTestState.handleSearchGlob.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.buildSearchRegexToolResult.mockResolvedValue({
+      text: "text",
+      result: {
+        roots: [],
+        totalLocations: 0,
+        totalMatches: 0,
+        truncated: false,
+        sessionDelivery,
+        admission: { outcome: "inline" },
+        resume: { resumable: false },
+      },
+    });
+    registerInspectionToolCatalogTestState.buildSearchFixedStringToolResult.mockResolvedValue({
+      text: "text",
+      result: {
+        roots: [],
+        totalLocations: 0,
+        totalMatches: 0,
+        truncated: false,
+        sessionDelivery,
+        admission: { outcome: "inline" },
+        resume: { resumable: false },
+      },
+    });
+
+    const listResult = await invokeCallback("list_directory_entries", {});
+    const nameResult = await invokeCallback("find_paths_by_name", {});
+    const globResult = await invokeCallback("find_files_by_glob", {});
+    const regexResult = await invokeCallback("search_file_contents_by_regex", {});
+    const fixedStringResult = await invokeCallback("search_file_contents_by_fixed_string", {});
+
+    expect(readSessionDelivery(listResult)).toEqual(sessionDelivery);
+    expect(readSessionDelivery(nameResult)).toEqual(sessionDelivery);
+    expect(readSessionDelivery(globResult)).toEqual(sessionDelivery);
+    expect(readSessionDelivery(regexResult)).toEqual(sessionDelivery);
+    expect(readSessionDelivery(fixedStringResult)).toEqual(sessionDelivery);
+  });
+
+  it("invokes every registered inspection tool callback through the executeTool boundary", async () => {
+    const registerTool = vi.fn();
+    const executeTool = vi.fn(
+      (_toolName: string, operation: () => unknown) => operation(),
+    );
+    const context = {
+      server: {
+        registerTool,
+      },
+      allowedDirectories: ["C:/allowed"],
+      inspectionResumeSessionStore: {
+        cleanupExpiredSessions: vi.fn(),
+      },
+      executeTool,
+    };
+
+    Reflect.apply(registerInspectionToolCatalog, undefined, [context]);
+
+    const registeredCallbackByToolName = new Map(
+      registerTool.mock.calls.map(([toolName, , callback]) => [
+        toolName,
+        callback,
+      ]),
+    );
+
+    registerInspectionToolCatalogTestState.handleReadFiles.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.normalizeReadFileContentArgs.mockReturnValue({});
+    registerInspectionToolCatalogTestState.getReadFileContentResult.mockResolvedValue({});
+    registerInspectionToolCatalogTestState.handleReadFileContent.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.getListDirectoryEntriesResult.mockResolvedValue({
+      roots: [],
+      sessionDelivery: {},
+      admission: {},
+      resume: {},
+    });
+    registerInspectionToolCatalogTestState.handleListDirectoryEntries.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.getFindPathsByNameResult.mockResolvedValue({
+      roots: [],
+      totalMatches: 0,
+      truncated: false,
+      sessionDelivery: {},
+      admission: {},
+      resume: {},
+    });
+    registerInspectionToolCatalogTestState.handleSearchFiles.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.getFindFilesByGlobResult.mockResolvedValue({
+      roots: [],
+      totalMatches: 0,
+      truncated: false,
+      sessionDelivery: {},
+      admission: {},
+      resume: {},
+    });
+    registerInspectionToolCatalogTestState.handleSearchGlob.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.buildSearchRegexToolResult.mockResolvedValue({
+      text: "text",
+      result: {
+        roots: [],
+        totalLocations: 0,
+        totalMatches: 0,
+        truncated: false,
+        sessionDelivery: {},
+        admission: {},
+        resume: {},
+      },
+    });
+    registerInspectionToolCatalogTestState.buildSearchFixedStringToolResult.mockResolvedValue({
+      text: "text",
+      result: {
+        roots: [],
+        totalLocations: 0,
+        totalMatches: 0,
+        truncated: false,
+        sessionDelivery: {},
+        admission: {},
+        resume: {},
+      },
+    });
+    registerInspectionToolCatalogTestState.getCountLinesResult.mockResolvedValue({
+      paths: [],
+      totalFiles: 0,
+      totalLines: 0,
+      totalMatchingLines: 0,
+      admission: {},
+      resume: {},
+    });
+    registerInspectionToolCatalogTestState.formatCountLinesResultOutput.mockReturnValue("text");
+    registerInspectionToolCatalogTestState.getFileChecksumsResult.mockResolvedValue({
+      entries: [],
+      errors: [],
+    });
+    registerInspectionToolCatalogTestState.handleChecksumFiles.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.getFileChecksumVerificationResult.mockResolvedValue({
+      entries: [],
+      errors: [],
+      summary: {},
+    });
+    registerInspectionToolCatalogTestState.handleChecksumFilesVerif.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.getPathMetadataResult.mockResolvedValue({
+      entries: [],
+      errors: [],
+    });
+    registerInspectionToolCatalogTestState.handleGetPathMetadata.mockResolvedValue("text");
+
+    for (const toolName of registeredCallbackByToolName.keys()) {
+      const callback = registeredCallbackByToolName.get(toolName);
+
+      if (callback === undefined) {
+        throw new Error(`Expected ${toolName} to be registered.`);
+      }
+
+      await Reflect.apply(callback, undefined, [{}]);
+    }
+
+    expect(executeTool).toHaveBeenCalledTimes(11);
+    expect(executeTool.mock.calls.map(([toolName]) => toolName)).toEqual([
+      "read_files_with_line_numbers",
+      "read_file_content",
+      "list_directory_entries",
+      "find_paths_by_name",
+      "find_files_by_glob",
+      "search_file_contents_by_regex",
+      "search_file_contents_by_fixed_string",
+      "count_lines",
+      "get_file_checksums",
+      "verify_file_checksums",
+      "get_path_metadata",
+    ]);
+  });
 });

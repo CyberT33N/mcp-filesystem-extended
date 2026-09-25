@@ -1,7 +1,6 @@
 import {
   classifyInspectionContentState,
   INSPECTION_CONTENT_OPERATION_LITERALS,
-  INSPECTION_CONTENT_STATE_LITERALS,
   type InspectionContentStateClassification,
   resolveInspectionContentOperationCapability,
   type InspectionContentStateInput,

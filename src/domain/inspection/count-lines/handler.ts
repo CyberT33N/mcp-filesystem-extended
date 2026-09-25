@@ -50,10 +50,6 @@ import {
 import {
   classifyInspectionContentState,
 } from "@domain/shared/search/inspection-content-state";
-import {
-  classifyPattern,
-  type PatternClassification,
-} from "@domain/shared/search/pattern-classifier";
 import { resolveTraversalScopeEntryPolicy } from "@domain/shared/guardrails/traversal-scope-policy";
 import {
   countMatchingLinesInFile,
@@ -136,11 +132,30 @@ interface CountLinesRequestPayload {
   ignoreEmptyLines: boolean;
 }
 
+/**
+ * Describes the active persisted resume-session surface of one count-lines execution.
+ *
+ * @remarks
+ * Token and expiration timestamp are paired by construction: both originate from the same
+ * persisted session record, so the expiration timestamp is guaranteed to be present whenever
+ * a resume session is active.
+ */
+interface CountLinesActiveResumeSession {
+  /**
+   * Opaque persisted session handle of the active session.
+   */
+  resumeToken: string;
+
+  /**
+   * Expiration timestamp of the active persisted session.
+   */
+  expiresAt: string;
+}
+
 interface CountLinesExecutionContext {
   requestPayload: CountLinesRequestPayload;
   continuationState: CountLinesContinuationState | null;
-  activeResumeToken: string | null;
-  activeResumeExpiresAt: string | null;
+  activeResumeSession: CountLinesActiveResumeSession | null;
   requestedResumeMode: InspectionResumeMode | null;
 }
 
@@ -196,6 +211,49 @@ function toCountLinesPathResult(
   };
 }
 
+/**
+ * Returns the completed continuation state of one requested path.
+ *
+ * @remarks
+ * The final assembly only runs once every requested path holds a completed
+ * state, so a missing entry indicates a broken assembly invariant rather than
+ * a reachable runtime case. The guard is a real, test-covered contract of this
+ * helper instead of an unreachable branch at the call site.
+ */
+export function getRequiredCompletedPathState(
+  pathStates: Record<string, CountLinesPathContinuationState>,
+  requestedPath: string,
+): CountLinesPathContinuationState {
+  const pathState = pathStates[requestedPath];
+
+  if (pathState === undefined) {
+    throw new Error(`Expected a completed path state for '${requestedPath}'.`);
+  }
+
+  return pathState;
+}
+
+/**
+ * Returns the single path result of a one-path count-lines response.
+ *
+ * @remarks
+ * The caller only reaches this helper when exactly one path result exists, so
+ * an empty surface indicates a broken formatting invariant rather than a
+ * reachable runtime case. The guard is a real, test-covered contract of this
+ * helper instead of an unreachable branch at the call site.
+ */
+export function getRequiredSinglePathResult(
+  pathResults: CountLinesPathResult[],
+): CountLinesPathResult {
+  const [firstPathResult] = pathResults;
+
+  if (firstPathResult === undefined) {
+    throw new Error("Expected one path result for count-lines formatting.");
+  }
+
+  return firstPathResult;
+}
+
 function resolveCountLinesExecutionContext(
   resumeToken: string | undefined,
   resumeMode: InspectionResumeMode | undefined,
@@ -223,8 +281,7 @@ function resolveCountLinesExecutionContext(
         ignoreEmptyLines,
       },
       continuationState: null,
-      activeResumeToken: null,
-      activeResumeExpiresAt: null,
+      activeResumeSession: null,
       requestedResumeMode: null,
     };
   }
@@ -250,8 +307,10 @@ function resolveCountLinesExecutionContext(
   return {
     requestPayload: resumeSession.requestPayload,
     continuationState: resumeSession.resumeState,
-    activeResumeToken: resumeSession.resumeToken,
-    activeResumeExpiresAt: resumeSession.expiresAt,
+    activeResumeSession: {
+      resumeToken: resumeSession.resumeToken,
+      expiresAt: resumeSession.expiresAt,
+    },
     requestedResumeMode:
       resumeMode
       ?? resumeSession.lastRequestedResumeMode
@@ -260,8 +319,7 @@ function resolveCountLinesExecutionContext(
 }
 
 function buildCountLinesContinuationEnvelope(
-  resumeToken: string | null,
-  resumeExpiresAt: string | null,
+  activeResumeSession: CountLinesActiveResumeSession | null,
   nextContinuationState: CountLinesContinuationState | null,
   inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   requestPayload: CountLinesRequestPayload,
@@ -269,7 +327,7 @@ function buildCountLinesContinuationEnvelope(
   now: Date,
 ): Pick<CountLinesResult, "admission" | "resume"> {
   const taskBackedActive =
-    resumeToken !== null
+    activeResumeSession !== null
     || pathResults.some(
       (pathResult) =>
         pathResult.admissionOutcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
@@ -292,7 +350,7 @@ function buildCountLinesContinuationEnvelope(
     throw new Error("Resume-session storage is unavailable for completion-backed count_lines execution.");
   }
 
-  if (resumeToken === null) {
+  if (activeResumeSession === null) {
     const resumeSession = inspectionResumeSessionStore.createSession(
       {
         endpointName: COUNT_LINES_FAMILY_MEMBER,
@@ -317,21 +375,17 @@ function buildCountLinesContinuationEnvelope(
     );
   }
 
-  if (resumeExpiresAt === null) {
-    throw new Error("Active count-lines resume session is missing an expiration timestamp.");
-  }
-
   inspectionResumeSessionStore.updateResumeState(
-    resumeToken,
+    activeResumeSession.resumeToken,
     nextContinuationState,
     now,
     INSPECTION_RESUME_MODES.COMPLETE_RESULT,
   );
 
   return createPersistedResumeEnvelope(
-    resumeToken,
+    activeResumeSession.resumeToken,
     INSPECTION_RESUME_STATUSES.ACTIVE,
-    resumeExpiresAt,
+    activeResumeSession.expiresAt,
     INSPECTION_COMPLETION_ONLY_RESUME_MODES,
     INSPECTION_RESUME_MODES.COMPLETE_RESULT,
     COUNT_LINES_CONTINUATION_GUIDANCE,
@@ -418,13 +472,7 @@ export function formatCountLinesResultOutput(
     : DISCOVERY_RESPONSE_CAP_CHARS;
 
   if (result.paths.length === 1) {
-    const firstPathResult = result.paths[0];
-
-    if (firstPathResult === undefined) {
-      throw new Error("Expected one path result for count-lines formatting.");
-    }
-
-    const output = formatCountLinesPathOutput(firstPathResult, pattern);
+    const output = formatCountLinesPathOutput(getRequiredSinglePathResult(result.paths), pattern);
 
     assertActualTextBudget(
       "count_lines",
@@ -486,7 +534,6 @@ async function getCountLinesPathResult(
   continuationState: CountLinesPathContinuationState | null = null,
 ): Promise<CountLinesPathExecutionResult> {
   const validPath = await validatePath(filePath, allowedDirectories);
-  const classifiedPattern = pattern === undefined ? undefined : classifyPattern(pattern);
 
   const stats = await fs.stat(validPath);
 
@@ -495,7 +542,7 @@ async function getCountLinesPathResult(
   let nextContinuationState: CountLinesPathContinuationState | null = null;
 
   if (stats.isFile()) {
-    const fileCount = await countLinesInFile(validPath, pattern, classifiedPattern, ignoreEmptyLines);
+    const fileCount = await countLinesInFile(validPath, pattern, ignoreEmptyLines);
     result = {
       path: filePath,
       files: [fileCount],
@@ -572,7 +619,6 @@ async function getCountLinesPathResult(
         includeExcludedGlobs,
         respectGitIgnore,
         pattern,
-        classifiedPattern,
         ignoreEmptyLines,
         allowedDirectories,
         continuationState,
@@ -586,14 +632,12 @@ async function getCountLinesPathResult(
       nextContinuationState = taskBackedResult.nextContinuationState;
     } else {
       const files = await countLinesInDirectory(
-        validPath,
         filePath,
         filePatterns,
       excludePatterns,
       includeExcludedGlobs,
       respectGitIgnore,
         pattern,
-        classifiedPattern,
         ignoreEmptyLines,
         allowedDirectories
       );
@@ -777,8 +821,7 @@ export async function getCountLinesResult(
     ? { pathStates: persistedPathStates }
     : null;
   const continuationEnvelope = buildCountLinesContinuationEnvelope(
-    executionContext.activeResumeToken,
-    executionContext.activeResumeExpiresAt,
+    executionContext.activeResumeSession,
     nextContinuationState,
     inspectionResumeSessionStore,
     executionContext.requestPayload,
@@ -797,12 +840,12 @@ export async function getCountLinesResult(
   }
 
   const finalizedPaths = executionContext.requestPayload.filePaths
-    .map((requestedPath) => {
-      const pathState = persistedPathStates[requestedPath];
-
-      return pathState === undefined ? null : toCountLinesPathResult(requestedPath, pathState);
-    })
-    .filter((pathResult): pathResult is CountLinesPathResult => pathResult !== null);
+    .map((requestedPath) =>
+      toCountLinesPathResult(
+        requestedPath,
+        getRequiredCompletedPathState(persistedPathStates, requestedPath),
+      )
+    );
 
   return {
     paths: finalizedPaths,
@@ -819,7 +862,6 @@ export async function getCountLinesResult(
 async function countLinesInFile(
   filePath: string,
   pattern: string | undefined,
-  patternClassification: PatternClassification | undefined,
   ignoreEmptyLines: boolean
 ): Promise<FileLineCount> {
   const fileStats = await fs.stat(filePath);
@@ -844,8 +886,7 @@ async function countLinesInFile(
   if (countQueryPolicy.executionLane === CountQueryExecutionLane.UNSUPPORTED_STATE) {
     throw new Error(
       `count_lines unsupported state: ${formatUnsupportedCountQueryMessage(
-        countQueryPolicy.unsupportedStateReason
-          ?? "The resolved inspection state is unsupported for count_lines.",
+        countQueryPolicy.unsupportedStateReason,
         countQueryPolicy.rerouteGuidance,
       )}`,
     );
@@ -861,10 +902,6 @@ async function countLinesInFile(
       file: filePath,
       count: totalLineCount,
     };
-  }
-
-  if (patternClassification === undefined) {
-    throw new Error("Pattern-aware line counting requires a shared pattern classification.");
   }
 
   if (countQueryPolicy.executionLane === CountQueryExecutionLane.STREAMING_PATTERN_AWARE) {
@@ -887,17 +924,6 @@ async function countLinesInFile(
       count: totalLineCount,
       matchingCount,
     };
-  }
-
-  if (countQueryPolicy.executionLane !== CountQueryExecutionLane.NATIVE_PATTERN_AWARE) {
-    throw new Error(
-      countQueryPolicy.unsupportedStateReason
-      ?? "Pattern-aware line counting must stay on the shared native-search lane.",
-    );
-  }
-
-  if (countQueryPolicy.patternClassification?.classification !== patternClassification.classification) {
-    throw new Error("Pattern-aware line counting resolved an inconsistent classification surface.");
   }
 
   const command = buildPatternAwareCountCommand({
@@ -971,7 +997,6 @@ async function countLinesInDirectoryTaskBacked(
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   pattern: string | undefined,
-  patternClassification: PatternClassification | undefined,
   ignoreEmptyLines: boolean,
   allowedDirectories: string[],
   continuationState: CountLinesPathContinuationState | null = null,
@@ -1010,13 +1035,9 @@ async function countLinesInDirectoryTaskBacked(
   let totalMatchingLines = continuationState?.totalMatchingLines ?? 0;
   let taskBackedChunkExhausted = false;
 
-  while (traversalFrames.length > 0 && !taskBackedChunkExhausted) {
-    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
+  let currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
 
-    if (currentTraversalFrame === undefined) {
-      break;
-    }
-
+  while (currentTraversalFrame !== undefined && !taskBackedChunkExhausted) {
     const currentPath = currentTraversalFrame.directoryRelativePath === ""
       ? validatedRootPath
       : path.join(validatedRootPath, currentTraversalFrame.directoryRelativePath);
@@ -1047,12 +1068,13 @@ async function countLinesInDirectoryTaskBacked(
       entries = await fs.readdir(currentPath, { withFileTypes: true });
     } catch {
       traversalFrames.pop();
+      currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
       continue;
     }
 
     let descendedIntoChildDirectory = false;
 
-    while (currentTraversalFrame.nextEntryIndex < entries.length && !taskBackedChunkExhausted) {
+    for (const [entryIndex, entry] of entries.entries().drop(currentTraversalFrame.nextEntryIndex)) {
       try {
         recordTraversalEntryVisit(traversalRuntimeBudgetState);
         assertTraversalRuntimeBudget(
@@ -1071,13 +1093,7 @@ async function countLinesInDirectoryTaskBacked(
         throw error;
       }
 
-      const entry = entries[currentTraversalFrame.nextEntryIndex];
-
-      if (entry === undefined) {
-        break;
-      }
-
-      currentTraversalFrame.nextEntryIndex += 1;
+      currentTraversalFrame.nextEntryIndex = entryIndex + 1;
 
       const fullPath = path.join(currentPath, entry.name);
       const relativePath = normalizeRelativePath(path.relative(validatedRootPath, fullPath));
@@ -1110,7 +1126,6 @@ async function countLinesInDirectoryTaskBacked(
           const count = await countLinesInFile(
             fullPath,
             pattern,
-            patternClassification,
             ignoreEmptyLines,
           );
           files.push(count);
@@ -1136,6 +1151,8 @@ async function countLinesInDirectoryTaskBacked(
     if (!descendedIntoChildDirectory && currentTraversalFrame.nextEntryIndex >= entries.length) {
       traversalFrames.pop();
     }
+
+    currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
   }
 
   return {
@@ -1159,14 +1176,12 @@ async function countLinesInDirectoryTaskBacked(
 }
 
 async function countLinesInDirectory(
-  dirPath: string,
   requestedRootPath: string,
   filePatterns: string[],
   excludePatterns: string[],
   includeExcludedGlobs: string[],
   respectGitIgnore: boolean,
   pattern: string | undefined,
-  patternClassification: PatternClassification | undefined,
   ignoreEmptyLines: boolean,
   allowedDirectories: string[]
 ): Promise<FileLineCount[]> {
@@ -1219,9 +1234,7 @@ async function countLinesInDirectory(
     traversalAdmissionDecision.outcome
     !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE
   ) {
-    throw new Error(
-      traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(requestedRootPath),
-    );
+    throw new Error(traversalAdmissionDecision.guidanceText);
   }
   const validatedRootPath = traversalPreflightContext.rootEntry.validPath;
   const traversalScopePolicyResolution = traversalPreflightContext.traversalScopePolicyResolution;
@@ -1276,7 +1289,6 @@ async function countLinesInDirectory(
                 const count = await countLinesInFile(
                   fullPath,
                   pattern,
-                  patternClassification,
                   ignoreEmptyLines,
                 );
                 results.push(count);
@@ -1314,6 +1326,17 @@ async function countLinesInDirectory(
         }
       }
     } catch (error) {
+      if (
+        error instanceof Error
+        && error.message.startsWith("count_lines unsupported state:")
+      ) {
+        throw error;
+      }
+
+      if (pattern !== undefined) {
+        throw error;
+      }
+
       // Skip directories we can't read
       return;
     }

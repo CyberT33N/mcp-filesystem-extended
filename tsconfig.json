@@ -3,7 +3,7 @@
  *██******************** PRESENTED BY t33n Software ***************************██
  *██                                                                           ██
  *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗████╗  ██║                      ██
+ *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
  *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
  *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
  *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
@@ -14,16 +14,29 @@
  */
 
 {
+  /**
+   * $schema: Better IDE support (completion/validation).
+   */
+  "$schema": "https://json.schemastore.org/tsconfig",
+
+  /**
+   * The root solution config owns no source files directly; it coordinates
+   * referenced projects only and never creates a second implicit program.
+   */
   "files": [],
+
+  /**
+   * Stop solution traversal when the referenced validation producer fails.
+   */
+  "stopBuildOnErrors": true,
+
+  /**
+   * Only the canonical declaration-validation producer is referenced at the
+   * root solution layer; runtime and test consumers are separate owners.
+   */
   "references": [
     {
-      "path": "./tsconfig.node.json"
-    },
-    {
-      "path": "./tsconfig.tests.json"
-    },
-    {
-      "path": "./tsconfig.types.json"
+      "path": "./tsconfig.typecheck.json"
     }
   ]
 }

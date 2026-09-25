@@ -4,3 +4,5 @@ logs
 .pnpm
 coverage/
 .npmrc
+.tsbuild/
+*.tsbuildinfo

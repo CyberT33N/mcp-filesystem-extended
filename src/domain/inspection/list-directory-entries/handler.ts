@@ -35,15 +35,19 @@ import {
   type FileSystemEntryMetadataSelection,
 } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 import {
+  createBaseSessionDeliverySummary,
+  createContinuationSessionDeliverySummary,
   createInlineResumeEnvelope,
   createPersistedResumeEnvelope,
   createResumeEnvelope,
+  formatInspectionTerminalCompletionTextBlock,
   getResumeSessionNotFoundMessage,
   INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
   INSPECTION_RESUME_ADMISSION_OUTCOMES,
   INSPECTION_RESUME_MODES,
   INSPECTION_RESUME_STATUSES,
   type InspectionResumeMode,
+  type InspectionSessionDeliverySummary,
 } from "@domain/shared/resume/inspection-resume-contract";
 import type {
   InspectionResumeAdmission,
@@ -103,6 +107,16 @@ export interface ListDirectoryEntriesResult {
    */
   roots: ListedDirectoryRoot[];
 
+  /**
+   * Session-cumulative delivery truth for the current response.
+   *
+   * @remarks
+   * On resume passes the per-root entry payloads stay frontier-scoped; this summary carries how
+   * many entries the session already delivered and delivers in total, so no pass ever has to
+   * present its delta as the absolute session result.
+   */
+  sessionDelivery: InspectionSessionDeliverySummary;
+
   admission: InspectionResumeAdmission;
 
   resume: InspectionResumeMetadata;
@@ -119,6 +133,24 @@ interface ListDirectoryEntriesRootContinuationState {
 
 interface ListDirectoryEntriesContinuationState {
   rootTraversalStates: Record<string, ListDirectoryEntriesRootContinuationState>;
+  /**
+   * Session-cumulative delivered entry total persisted across passes.
+   *
+   * @remarks
+   * Optional because sessions persisted before this field existed carry no total; the
+   * consumption boundary normalizes their absence to zero.
+   */
+  deliveredTotals?: ListDirectoryEntriesDeliveredTotals;
+}
+
+/**
+ * Session-cumulative delivered-entry totals persisted inside a directory-listing continuation state.
+ */
+interface ListDirectoryEntriesDeliveredTotals {
+  /**
+   * Entries already delivered to the caller in prior passes of the session.
+   */
+  entryCount: number;
 }
 
 interface ListDirectoryEntriesRequestPayload {
@@ -130,11 +162,30 @@ interface ListDirectoryEntriesRequestPayload {
   respectGitIgnore: boolean;
 }
 
+/**
+ * Describes the active persisted resume-session surface of one directory-listing execution.
+ *
+ * @remarks
+ * Token and expiration timestamp are paired by construction: both originate from the same
+ * persisted session record, so the expiration timestamp is guaranteed to be present whenever
+ * a resume session is active.
+ */
+interface ListDirectoryEntriesActiveResumeSession {
+  /**
+   * Opaque persisted session handle of the active session.
+   */
+  resumeToken: string;
+
+  /**
+   * Expiration timestamp of the active persisted session.
+   */
+  expiresAt: string;
+}
+
 interface ListDirectoryEntriesExecutionContext {
   requestPayload: ListDirectoryEntriesRequestPayload;
   continuationState: ListDirectoryEntriesContinuationState | null;
-  activeResumeToken: string | null;
-  activeResumeExpiresAt: string | null;
+  activeResumeSession: ListDirectoryEntriesActiveResumeSession | null;
   requestedResumeMode: InspectionResumeMode | null;
 }
 
@@ -177,14 +228,28 @@ function formatListDirectoryEntriesChunkPayload(
   });
 }
 
-function formatListDirectoryEntriesTextOutput(
+/**
+ * Formats the directory-listing result into the caller-visible text response surface.
+ *
+ * @remarks
+ * Exported as an explicit white-box test seam, mirroring the search-family result modules.
+ * Continuation passes are frontier-delta-scoped by contract: resumable passes emit the bounded
+ * chunk block, and the terminal pass emits the delta payload plus the session-cumulative summary.
+ *
+ * @param result - Structured directory-listing result across all requested roots.
+ * @returns Human-readable directory-listing output for the current delivery pass.
+ */
+export function formatListDirectoryEntriesTextOutput(
   result: ListDirectoryEntriesResult,
 ): string {
   const hasResumableResume =
     result.resume.resumable
     && result.resume.resumeToken !== null;
+  const continuationPass = result.sessionDelivery.continuationPass;
 
-  if (result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE || !hasResumableResume) {
+  // Pure inline base responses keep the plain encoded result. Every continuation pass is
+  // frontier-delta-scoped by contract and must never present its delta as the session result.
+  if (!continuationPass && !hasResumableResume) {
     return encode(result);
   }
 
@@ -193,24 +258,37 @@ function formatListDirectoryEntriesTextOutput(
     0,
   );
   const rootLabel = result.roots.length === 1 ? "root" : "roots";
-  const zeroEntriesClarification = totalListedEntries === 0
-    ? " No entries collected in this chunk — more directories may still be pending in the remaining traversal frontier."
-    : "";
-  const previewSummary =
-    result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
-      ? `Directory listing completion progress is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.${zeroEntriesClarification}`
-      : `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.${zeroEntriesClarification}`;
-  const previewChunkPayload = formatListDirectoryEntriesChunkPayload(result);
-  const activeResumeToken = result.resume.resumeToken;
+
+  if (hasResumableResume) {
+    const zeroEntriesClarification = totalListedEntries === 0
+      ? " No entries collected in this chunk — more directories may still be pending in the remaining traversal frontier."
+      : "";
+    const previewSummary =
+      result.admission.outcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+        ? `Directory listing completion progress is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.${zeroEntriesClarification}`
+        : `Directory listing preview is available for ${result.roots.length} ${rootLabel} with ${totalListedEntries} entries in this bounded chunk.${zeroEntriesClarification}`;
+    const previewChunkPayload = formatListDirectoryEntriesChunkPayload(result);
+    const activeResumeToken = result.resume.resumeToken;
+
+    return [
+      previewSummary,
+      "Bounded directory-entry payload:",
+      previewChunkPayload,
+      `Active resumeToken: ${activeResumeToken}`,
+      `Supported resume modes: ${result.resume.supportedResumeModes.join(", ")}`,
+      result.admission.guidanceText ?? LIST_DIRECTORY_ENTRIES_NEXT_CHUNK_GUIDANCE,
+      result.admission.scopeReductionGuidanceText ?? "",
+    ].join("\n");
+  }
+
+  // Terminal continuation pass: the session is complete and no longer resumable, so the response
+  // closes with the delta payload, the session-cumulative summary, and the additive guidance.
+  const completionSummary = `Directory-listing completion finished for ${result.roots.length} ${rootLabel}: ${totalListedEntries} additional entries in this final pass; session total ${result.sessionDelivery.sessionTotalCount} entries (${result.sessionDelivery.previouslyDeliveredCount} already delivered in prior preview-chunk payloads).`;
 
   return [
-    previewSummary,
     "Bounded directory-entry payload:",
-    previewChunkPayload,
-    `Active resumeToken: ${activeResumeToken}`,
-    `Supported resume modes: ${result.resume.supportedResumeModes.join(", ")}`,
-    result.admission.guidanceText ?? LIST_DIRECTORY_ENTRIES_NEXT_CHUNK_GUIDANCE,
-    result.admission.scopeReductionGuidanceText ?? "",
+    formatListDirectoryEntriesChunkPayload(result),
+    formatInspectionTerminalCompletionTextBlock(result.admission, completionSummary),
   ].join("\n");
 }
 
@@ -335,8 +413,7 @@ function resolveListDirectoryEntriesExecutionContext(
         respectGitIgnore,
       },
       continuationState: null,
-      activeResumeToken: null,
-      activeResumeExpiresAt: null,
+      activeResumeSession: null,
       requestedResumeMode: null,
     };
   }
@@ -387,15 +464,16 @@ function resolveListDirectoryEntriesExecutionContext(
   return {
     requestPayload: resumeSession.requestPayload,
     continuationState: resumeSession.resumeState,
-    activeResumeToken: resumeSession.resumeToken,
-    activeResumeExpiresAt: resumeSession.expiresAt,
+    activeResumeSession: {
+      resumeToken: resumeSession.resumeToken,
+      expiresAt: resumeSession.expiresAt,
+    },
     requestedResumeMode: resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK,
   };
 }
 
 function buildListDirectoryEntriesResumeEnvelope(
-  resumeToken: string | null,
-  resumeExpiresAt: string | null,
+  activeResumeSession: ListDirectoryEntriesActiveResumeSession | null,
   resumeMode: InspectionResumeMode | null,
   nextContinuationState: ListDirectoryEntriesContinuationState | null,
   inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
@@ -424,14 +502,9 @@ function buildListDirectoryEntriesResumeEnvelope(
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
 
   if (nextContinuationState === null) {
-    const completedGuidanceText =
-      effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
-        ? LIST_DIRECTORY_ENTRIES_CONTINUATION_ADDITIVE_GUIDANCE
-        : null;
-
     return createResumeEnvelope(
       admissionOutcome,
-      completedGuidanceText,
+      LIST_DIRECTORY_ENTRIES_CONTINUATION_ADDITIVE_GUIDANCE,
       scopeReductionGuidanceText,
       null,
     );
@@ -441,7 +514,7 @@ function buildListDirectoryEntriesResumeEnvelope(
     throw new Error("Resume-session storage is unavailable for directory-listing resume.");
   }
 
-  if (resumeToken === null) {
+  if (activeResumeSession === null) {
     const resumeSession = inspectionResumeSessionStore.createSession(
       {
         endpointName: LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
@@ -466,21 +539,17 @@ function buildListDirectoryEntriesResumeEnvelope(
     );
   }
 
-  if (resumeExpiresAt === null) {
-    throw new Error("Active directory-listing resume session is missing an expiration timestamp.");
-  }
-
   inspectionResumeSessionStore.updateResumeState(
-    resumeToken,
+    activeResumeSession.resumeToken,
     nextContinuationState,
     now,
     effectiveResumeMode,
   );
 
   return createPersistedResumeEnvelope(
-    resumeToken,
+    activeResumeSession.resumeToken,
     INSPECTION_RESUME_STATUSES.ACTIVE,
-    resumeExpiresAt,
+    activeResumeSession.expiresAt,
     INSPECTION_PREVIEW_SUPPORTED_RESUME_MODES,
     effectiveResumeMode,
     guidanceText,
@@ -939,14 +1008,17 @@ export async function getListDirectoryEntriesResult(
         (requestedRoot) =>
           executionContext.continuationState?.rootTraversalStates[requestedRoot] !== undefined,
       );
+  const previouslyDeliveredEntryCount =
+    executionContext.continuationState?.deliveredTotals?.entryCount ?? 0;
 
   if (activeRequestedPaths.length === 0) {
-    if (executionContext.activeResumeToken !== null && inspectionResumeSessionStore !== undefined) {
-      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeToken, now);
+    if (executionContext.activeResumeSession !== null && inspectionResumeSessionStore !== undefined) {
+      inspectionResumeSessionStore.markSessionCompleted(executionContext.activeResumeSession.resumeToken, now);
     }
 
     return {
       roots: [],
+      sessionDelivery: createContinuationSessionDeliverySummary(previouslyDeliveredEntryCount, 0),
       ...createInlineResumeEnvelope(),
     };
   }
@@ -982,11 +1054,19 @@ export async function getListDirectoryEntriesResult(
     },
     null,
   );
+  const currentPassEntryCount = roots.reduce((total, root) => total + root.entries.length, 0);
+  const nextContinuationStateWithDeliveredTotals = nextContinuationState === null
+    ? null
+    : {
+        ...nextContinuationState,
+        deliveredTotals: {
+          entryCount: previouslyDeliveredEntryCount + currentPassEntryCount,
+        },
+      };
   const continuationEnvelope = buildListDirectoryEntriesResumeEnvelope(
-    executionContext.activeResumeToken,
-    executionContext.activeResumeExpiresAt,
+    executionContext.activeResumeSession,
     executionContext.requestedResumeMode,
-    nextContinuationState,
+    nextContinuationStateWithDeliveredTotals,
     inspectionResumeSessionStore,
     executionContext.requestPayload,
     roots,
@@ -998,6 +1078,9 @@ export async function getListDirectoryEntriesResult(
       requestedPath,
       entries,
     })),
+    sessionDelivery: executionContext.continuationState === null
+      ? createBaseSessionDeliverySummary(currentPassEntryCount)
+      : createContinuationSessionDeliverySummary(previouslyDeliveredEntryCount, currentPassEntryCount),
     ...continuationEnvelope,
   };
 }

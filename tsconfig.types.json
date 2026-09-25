@@ -3,7 +3,7 @@
  *██******************** PRESENTED BY t33n Software ***************************██
  *██                                                                           ██
  *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗████╗  ██║                      ██
+ *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
  *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
  *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
  *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
@@ -12,7 +12,7 @@
  *███████████████████████████████████████████████████████████████████████████████
  *███████████████████████████████████████████████████████████████████████████████
  */
- 
+
 {
   /**
    * $schema: Better IDE support (completion/validation).
@@ -20,35 +20,50 @@
   "$schema": "https://json.schemastore.org/tsconfig",
 
   /**
-   * Extends: Inherit from the node configuration.
+   * Extends: Reuse the Node-hosted runtime semantics; type-only tests validate
+   * the same Node module contract as the runtime surface.
    */
   "extends": "./tsconfig.node.json",
 
   /**
-   * CompilerOptions: Test-specific overrides.
+   * References: Anchor type-only tests to the declaration-validation producer
+   * graph instead of duplicating source ownership.
+   */
+  "references": [
+    {
+      "path": "./tsconfig.typecheck.json"
+    }
+  ],
+
+  /**
+   * CompilerOptions: Type-only consumer deltas.
    */
   "compilerOptions": {
     /**
-     * NoEmit: Type-checking only, no JavaScript output.
+     * Composite: Type-only suites validate contracts; they do not emit them.
+     */
+    "composite": false,
+
+    /**
+     * NoEmit: A type-only suite is a verification lane, not an artifact lane.
      */
     "noEmit": true,
 
     /**
-     * Skip type checking of .d.ts from dependencies to reduce noise.
-     */
-    "skipLibCheck": true,
-    /**
-     * Types: Include Vitest globals for test environment.
+     * Types: Only the Vitest and Node globals this lane truly needs.
      */
     "types": ["vitest/globals", "node"]
   },
 
-  "exclude": [],
   /**
-   * Include: Source files, test files, and test-only ambient types.
+   * Exclude: The explicit include list already bounds the scope tightly.
+   */
+  "exclude": [],
+
+  /**
+   * Include: Type-test files, supporting fixtures, and shared testing constants.
    */
   "include": [
-    "src/**/*.ts",
     "test/types/**/*.test-d.ts",
     "test/types/**/*.ts",
     "tooling/testing/constants/**/*.ts"

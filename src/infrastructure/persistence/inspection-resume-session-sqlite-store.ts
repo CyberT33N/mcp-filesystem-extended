@@ -44,7 +44,7 @@ function toIsoString(date: Date): string {
 
 function resolveServerStateDirectory(): string {
   if (process.platform === "win32") {
-    const localAppData = process.env.LOCALAPPDATA;
+    const localAppData = process.env["LOCALAPPDATA"];
 
     if (localAppData !== undefined && localAppData !== "") {
       return path.join(localAppData, "mcp-filesystem-extended");
@@ -57,7 +57,7 @@ function resolveServerStateDirectory(): string {
     return path.join(homedir(), "Library", "Application Support", "mcp-filesystem-extended");
   }
 
-  const xdgStateHome = process.env.XDG_STATE_HOME;
+  const xdgStateHome = process.env["XDG_STATE_HOME"];
 
   if (xdgStateHome !== undefined && xdgStateHome !== "") {
     return path.join(xdgStateHome, "mcp-filesystem-extended");

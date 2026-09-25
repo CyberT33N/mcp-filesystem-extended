@@ -34,19 +34,15 @@ export enum CountQueryExecutionLane {
 }
 
 /**
- * Shared policy contract for one `count_lines` request shape.
+ * Shared policy vocabulary carried by every count-lines request shape.
  *
  * @remarks
- * The policy makes the total-only versus pattern-aware split explicit while
- * carrying forward the shared preview-first and task-escalation vocabulary from
- * the runtime-governed search execution policy.
+ * The base members stay lane-neutral; the lane-correlated members
+ * (`executionLane`, `unsupportedStateReason`) are paired by the discriminated
+ * `CountQueryPolicy` union so consumers can narrow them by construction
+ * instead of defending against combinations the policy never produces.
  */
-export interface CountQueryPolicy {
-  /**
-   * Selected execution lane for the current request.
-   */
-  executionLane: CountQueryExecutionLane;
-
+interface CountQueryPolicyBase {
   /**
    * Shared inspection content state resolved for the current candidate surface.
    */
@@ -88,15 +84,60 @@ export interface CountQueryPolicy {
   serviceHardGapBytes: number | null;
 
   /**
-   * Canonical explanation when the current request must refuse or reroute on the resolved state.
-   */
-  unsupportedStateReason: string | null;
-
-  /**
    * Explicit caller guidance when a pattern-aware request lands on an unsupported non-text state.
    */
   rerouteGuidance: string | null;
 }
+
+/**
+ * Describes the policy of a request whose resolved state can serve count_lines.
+ *
+ * @remarks
+ * A supported lane never carries an unsupported-state explanation, so the
+ * reason is fixed to `null` on this variant.
+ */
+export interface SupportedCountQueryPolicy extends CountQueryPolicyBase {
+  /**
+   * Selected supported execution lane for the current request.
+   */
+  executionLane: Exclude<CountQueryExecutionLane, typeof CountQueryExecutionLane.UNSUPPORTED_STATE>;
+
+  /**
+   * Always `null`: a supported lane has no refusal explanation.
+   */
+  unsupportedStateReason: null;
+}
+
+/**
+ * Describes the policy of a request whose resolved state must refuse or reroute.
+ *
+ * @remarks
+ * The unsupported lane is always constructed with its canonical explanation,
+ * so the reason is guaranteed present on this variant by construction.
+ */
+export interface UnsupportedCountQueryPolicy extends CountQueryPolicyBase {
+  /**
+   * Selected unsupported execution lane for the current request.
+   */
+  executionLane: typeof CountQueryExecutionLane.UNSUPPORTED_STATE;
+
+  /**
+   * Canonical explanation why the current request must refuse or reroute.
+   */
+  unsupportedStateReason: string;
+}
+
+/**
+ * Shared policy contract for one `count_lines` request shape.
+ *
+ * @remarks
+ * The policy makes the total-only versus pattern-aware split explicit while
+ * carrying forward the shared preview-first and task-escalation vocabulary from
+ * the runtime-governed search execution policy. The union pairs the execution
+ * lane with its explanation surface so an unsupported lane always proves its
+ * reason at the type level.
+ */
+export type CountQueryPolicy = SupportedCountQueryPolicy | UnsupportedCountQueryPolicy;
 
 /**
  * Input contract for count-query policy resolution.
@@ -176,7 +217,7 @@ function createUnsupportedCountQueryPolicy(
   unsupportedStateReason: string,
   rerouteGuidance: string | null,
   patternClassification: PatternClassification | null,
-): CountQueryPolicy {
+): UnsupportedCountQueryPolicy {
   return {
     executionLane: CountQueryExecutionLane.UNSUPPORTED_STATE,
     inspectionContentState,
