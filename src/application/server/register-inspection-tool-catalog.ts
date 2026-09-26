@@ -75,6 +75,14 @@ import {
   VerifyFileChecksumsArgsSchema,
   VerifyFileChecksumsResultSchema,
 } from "@domain/inspection/verify-file-checksums/schema";
+import {
+  getFileByteIdentityResult,
+  handleVerifyFileByteIdentity,
+} from "@domain/inspection/verify-file-byte-identity/handler";
+import {
+  VerifyFileByteIdentityArgsSchema,
+  VerifyFileByteIdentityResultSchema,
+} from "@domain/inspection/verify-file-byte-identity/schema";
 
 import type { RegisterToolCatalogContext } from "./register-tool-catalog";
 import {
@@ -88,6 +96,7 @@ import {
   buildReadFilesWithLineNumbersToolDescription,
   buildSearchFileContentsByFixedStringToolDescription,
   buildSearchFileContentsByRegexToolDescription,
+  buildVerifyFileByteIdentityToolDescription,
   buildVerifyFileChecksumsToolDescription,
   READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
 } from "./tool-registration-presets";
@@ -546,6 +555,43 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           structuredContent: {
             entries: result.entries,
             errors: result.errors,
+          },
+        };
+      }),
+  );
+
+  server.registerTool(
+    "verify_file_byte_identity",
+    {
+      title: "Verify file byte identity",
+      description:
+        buildVerifyFileByteIdentityToolDescription(),
+      annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
+      inputSchema: VerifyFileByteIdentityArgsSchema,
+      outputSchema: VerifyFileByteIdentityResultSchema,
+    },
+    async ({ reference, targets, algorithm }) =>
+      executeTool("verify_file_byte_identity", async () => {
+        const result = await getFileByteIdentityResult(
+          reference,
+          targets,
+          algorithm,
+          allowedDirectories,
+        );
+        const text = await handleVerifyFileByteIdentity(
+          reference,
+          targets,
+          algorithm,
+          allowedDirectories,
+        );
+
+        return {
+          content: [{ type: "text", text }],
+          structuredContent: {
+            reference: result.reference,
+            entries: result.entries,
+            errors: result.errors,
+            summary: result.summary,
           },
         };
       }),

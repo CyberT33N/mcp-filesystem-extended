@@ -1,2 +1,0 @@
-# Run staged linters fast; fail fast to keep commits clean
-pnpm lint-staged

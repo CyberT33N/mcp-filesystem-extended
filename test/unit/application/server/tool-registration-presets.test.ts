@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
+  buildVerifyFileByteIdentityToolDescription,
   DESTRUCTIVE_LOCAL_TOOL_ANNOTATIONS,
   IDEMPOTENT_ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
   READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
@@ -36,5 +37,14 @@ describe("tool-registration-presets", () => {
       idempotentHint: true,
       openWorldHint: false,
     });
+  });
+
+  it("builds the verify_file_byte_identity description from the shared metadata-family cap", () => {
+    const description = buildVerifyFileByteIdentityToolDescription();
+
+    expect(description).toContain("byte-identical to a reference file");
+    expect(description).toContain("governed-region proofs that end at a marker line");
+    expect(description).toContain("100,000 characters");
+    expect(description).toContain("does not use preview-style resume behavior");
   });
 });

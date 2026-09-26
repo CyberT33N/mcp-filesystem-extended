@@ -114,6 +114,18 @@ export const REGEX_PATTERN_MAX_CHARS = 2_048;
 export const HASH_STRING_MAX_CHARS = 256;
 
 /**
+ * Maximum length for a caller-supplied marker string used by region-bound verification.
+ *
+ * @remarks
+ * Marker strings select byte regions by first-occurrence matching, so they must stay compact
+ * enough to remain a request-shape surface instead of a raw content payload.
+ *
+ * @example
+ * `z.string().max(MARKER_MAX_CHARS)`
+ */
+export const MARKER_MAX_CHARS = 512;
+
+/**
  * Maximum length for concise freeform text fields.
  *
  * @remarks
@@ -360,6 +372,7 @@ export const TOOL_GUARDRAIL_LIMITS = Object.freeze({
   GLOB_PATTERN_MAX_CHARS,
   REGEX_PATTERN_MAX_CHARS,
   HASH_STRING_MAX_CHARS,
+  MARKER_MAX_CHARS,
   SHORT_TEXT_MAX_CHARS,
   RAW_CONTENT_MAX_CHARS,
   REPLACEMENT_TEXT_MAX_CHARS,

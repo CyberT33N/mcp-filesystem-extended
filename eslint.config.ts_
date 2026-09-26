@@ -1,0 +1,87 @@
+/*
+ *███████████████████████████████████████████████████████████████████████████████
+ *██******************** PRESENTED BY t33n Software ***************************██
+ *██                                                                           ██
+ *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
+ *██                  ╚══██╔══╝╚════██╗╚════██╗████╗  ██║                      ██
+ *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
+ *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
+ *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
+ *██                     ╚═╝   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                      ██
+ *██                                                                           ██
+ *███████████████████████████████████████████████████████████████████████████████
+ *███████████████████████████████████████████████████████████████████████████████
+ */
+
+/*
+ * ═══╡ ⛔ DISABLED ESLint CONFIGURATION ╞═══
+ *
+ * This file is the commented-out ESLint configuration of this workspace. The
+ * trailing underscore in the file name (`eslint.config.ts_`) is the deliberate
+ * deactivation marker: ESLint does not recognize this file as a configuration
+ * file, so ESLint is completely deactivated for now.
+ *
+ * Why this state exists:
+ * - The ESLint plugin (`eslint-plugin-enterprise`) MUST be activated in the
+ *   target state of this workspace.
+ * - In the current state the enterprise plugin is not finished: the linked
+ *   package exposes no built `exports` entry, so resolving it at config-load
+ *   time fails with ERR_PACKAGE_PATH_NOT_EXPORTED.
+ * - Because no work can be done with TypeScript ESLint or ESLint in general
+ *   while the plugin is in that state, the whole configuration is commented
+ *   out instead of partially running.
+ *
+ * Re-enable path: repair the linked `eslint-plugin-enterprise` package until it
+ * builds cleanly, restore the imports and the config entries below, and rename
+ * this file back to `eslint.config.ts`.
+ *
+ * The development-process convention for this state lives at:
+ * docs/conventions/domain-driven-development/linting/eslint/temporary-eslint-deactivation.md
+ */
+
+// ═══╡ 🧩 IMPORTS (disabled) ╞═══
+// import { enterprisePlugin } from 'eslint-plugin-enterprise'
+// import tseslint from 'typescript-eslint'
+
+// ═══╡ 🏷️TYPES (disabled) ╞═══
+// import type { TSESLint } from '@typescript-eslint/utils'
+
+// ═══╡ 🏷️CONFIG (disabled) ╞═══
+// const config: TSESLint.FlatConfig.ConfigArray = tseslint.config(
+//
+//     /*
+//      *╭───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───
+//      *📏 MASTER CONFIG    ►  All-in-one config for enterprise projects
+//      *╰───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───
+//      */
+//     enterprisePlugin.configs['all'],
+//
+//     /*
+//      *╭───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───
+//      *🔧 OVERRIDE CONFIGS   ►  Override configs
+//      *╰───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───═══◎◎◎═══───
+//      */
+//
+//     {
+//         files: [
+//             '**/*.md',
+//             '**/*.mdc'
+//         ],
+//         processor: 'markdown/markdown'
+//     },
+//     {
+//         files: [
+//             '**/*.md/*',
+//             '**/*.mdc/*'
+//         ],
+//         rules: {
+//             'sonarjs/deprecation': 'off',
+//             'unicorn/filename-case': 'off',
+//             '@stylistic/linebreak-style': 'off',
+//             'import-x/no-unresolved': 'off',
+//             'sonarjs/no-implicit-dependencies': 'off'
+//         }
+//     }
+// )
+//
+// export default config

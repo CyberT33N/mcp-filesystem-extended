@@ -219,6 +219,19 @@ export function buildVerifyFileChecksumsToolDescription(): string {
 }
 
 /**
+ * Builds the caller-visible metadata-family description for `verify_file_byte_identity`.
+ */
+export function buildVerifyFileByteIdentityToolDescription(): string {
+  return (
+    "Verifies whether one or more target files are byte-identical to a reference file, optionally restricted to a byte region. "
+    + "Use this tool when a reference file defines the expected bytes, including governed-region proofs that end at a marker line. "
+    + "Public request parameters carry the path-length, marker-length, batch-size, and algorithm-selection limits directly. "
+    + `Caller-visible verification output remains bounded by the metadata-family response cap of ${formatToolDescriptionCharacterLimit(METADATA_RESPONSE_CAP_CHARS)}, so oversized multi-target verification requests may still be refused. `
+    + "This endpoint does not use preview-style resume behavior."
+  );
+}
+
+/**
  * Builds the caller-visible mutation-family description for `create_files`.
  */
 export function buildCreateFilesToolDescription(): string {

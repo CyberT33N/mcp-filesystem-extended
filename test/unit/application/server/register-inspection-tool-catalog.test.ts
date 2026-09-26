@@ -55,6 +55,12 @@ const registerInspectionToolCatalogTestState = vi.hoisted(() => ({
   verifyFileChecksumsResultSchema: {
     schema: "verify-file-checksums-result",
   },
+  getFileByteIdentityResult: vi.fn(),
+  handleVerifyFileByteIdentity: vi.fn(),
+  verifyFileByteIdentityArgsSchema: { schema: "verify-file-byte-identity" },
+  verifyFileByteIdentityResultSchema: {
+    schema: "verify-file-byte-identity-result",
+  },
   buildCountLinesToolDescription: vi.fn(() => "count-lines description"),
   buildFindFilesByGlobToolDescription: vi.fn(() => "find-files-by-glob description"),
   buildFindPathsByNameToolDescription: vi.fn(() => "find-paths-by-name description"),
@@ -67,6 +73,7 @@ const registerInspectionToolCatalogTestState = vi.hoisted(() => ({
   buildReadFilesWithLineNumbersToolDescription: vi.fn(() => "read-files-with-line-numbers description"),
   buildSearchFileContentsByFixedStringToolDescription: vi.fn(() => "search-fixed-string description"),
   buildSearchFileContentsByRegexToolDescription: vi.fn(() => "search-regex description"),
+  buildVerifyFileByteIdentityToolDescription: vi.fn(() => "verify-file-byte-identity description"),
   buildVerifyFileChecksumsToolDescription: vi.fn(() => "verify-file-checksums description"),
   readOnlyLocalToolAnnotations: { audience: "read-only" },
 }));
@@ -213,6 +220,20 @@ vi.mock("@domain/inspection/verify-file-checksums/schema", () => ({
     registerInspectionToolCatalogTestState.verifyFileChecksumsResultSchema,
 }));
 
+vi.mock("@domain/inspection/verify-file-byte-identity/handler", () => ({
+  getFileByteIdentityResult:
+    registerInspectionToolCatalogTestState.getFileByteIdentityResult,
+  handleVerifyFileByteIdentity:
+    registerInspectionToolCatalogTestState.handleVerifyFileByteIdentity,
+}));
+
+vi.mock("@domain/inspection/verify-file-byte-identity/schema", () => ({
+  VerifyFileByteIdentityArgsSchema:
+    registerInspectionToolCatalogTestState.verifyFileByteIdentityArgsSchema,
+  VerifyFileByteIdentityResultSchema:
+    registerInspectionToolCatalogTestState.verifyFileByteIdentityResultSchema,
+}));
+
 vi.mock("@application/server/tool-registration-presets", () => ({
   buildCountLinesToolDescription:
     registerInspectionToolCatalogTestState.buildCountLinesToolDescription,
@@ -234,6 +255,8 @@ vi.mock("@application/server/tool-registration-presets", () => ({
     registerInspectionToolCatalogTestState.buildSearchFileContentsByFixedStringToolDescription,
   buildSearchFileContentsByRegexToolDescription:
     registerInspectionToolCatalogTestState.buildSearchFileContentsByRegexToolDescription,
+  buildVerifyFileByteIdentityToolDescription:
+    registerInspectionToolCatalogTestState.buildVerifyFileByteIdentityToolDescription,
   buildVerifyFileChecksumsToolDescription:
     registerInspectionToolCatalogTestState.buildVerifyFileChecksumsToolDescription,
   READ_ONLY_LOCAL_TOOL_ANNOTATIONS:
@@ -264,6 +287,8 @@ describe("register-inspection-tool-catalog", () => {
     registerInspectionToolCatalogTestState.handleChecksumFiles.mockClear();
     registerInspectionToolCatalogTestState.getFileChecksumVerificationResult.mockClear();
     registerInspectionToolCatalogTestState.handleChecksumFilesVerif.mockClear();
+    registerInspectionToolCatalogTestState.getFileByteIdentityResult.mockClear();
+    registerInspectionToolCatalogTestState.handleVerifyFileByteIdentity.mockClear();
   });
 
   it("registers the complete inspection tool catalog in a stable order", () => {
@@ -281,7 +306,7 @@ describe("register-inspection-tool-catalog", () => {
 
     Reflect.apply(registerInspectionToolCatalog, undefined, [context]);
 
-    expect(registerTool).toHaveBeenCalledTimes(11);
+    expect(registerTool).toHaveBeenCalledTimes(12);
     expect(registerTool.mock.calls.map(([toolName]) => toolName)).toEqual([
       "read_files_with_line_numbers",
       "read_file_content",
@@ -294,6 +319,7 @@ describe("register-inspection-tool-catalog", () => {
       "get_file_checksums",
       "verify_file_checksums",
       "get_path_metadata",
+      "verify_file_byte_identity",
     ]);
 
     expect(registerTool).toHaveBeenNthCalledWith(
@@ -333,6 +359,20 @@ describe("register-inspection-tool-catalog", () => {
           registerInspectionToolCatalogTestState.getPathMetadataArgsSchema,
         outputSchema:
           registerInspectionToolCatalogTestState.getPathMetadataResultSchema,
+      }),
+      expect.any(Function),
+    );
+    expect(registerTool).toHaveBeenNthCalledWith(
+      12,
+      "verify_file_byte_identity",
+      expect.objectContaining({
+        title: "Verify file byte identity",
+        annotations:
+          registerInspectionToolCatalogTestState.readOnlyLocalToolAnnotations,
+        inputSchema:
+          registerInspectionToolCatalogTestState.verifyFileByteIdentityArgsSchema,
+        outputSchema:
+          registerInspectionToolCatalogTestState.verifyFileByteIdentityResultSchema,
       }),
       expect.any(Function),
     );
@@ -599,6 +639,13 @@ describe("register-inspection-tool-catalog", () => {
       errors: [],
     });
     registerInspectionToolCatalogTestState.handleGetPathMetadata.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.getFileByteIdentityResult.mockResolvedValue({
+      reference: {},
+      entries: [],
+      errors: [],
+      summary: {},
+    });
+    registerInspectionToolCatalogTestState.handleVerifyFileByteIdentity.mockResolvedValue("text");
 
     for (const toolName of registeredCallbackByToolName.keys()) {
       const callback = registeredCallbackByToolName.get(toolName);
@@ -610,7 +657,7 @@ describe("register-inspection-tool-catalog", () => {
       await Reflect.apply(callback, undefined, [{}]);
     }
 
-    expect(executeTool).toHaveBeenCalledTimes(11);
+    expect(executeTool).toHaveBeenCalledTimes(12);
     expect(executeTool.mock.calls.map(([toolName]) => toolName)).toEqual([
       "read_files_with_line_numbers",
       "read_file_content",
@@ -623,6 +670,7 @@ describe("register-inspection-tool-catalog", () => {
       "get_file_checksums",
       "verify_file_checksums",
       "get_path_metadata",
+      "verify_file_byte_identity",
     ]);
   });
 });

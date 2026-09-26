@@ -62,6 +62,7 @@ Shared ownership boundaries that remain true across the workspace:
 | `get_path_metadata` | [`DESCRIPTION.md`](src/domain/inspection/get-path-metadata/DESCRIPTION.md) |
 | `get_file_checksums` | [`DESCRIPTION.md`](src/domain/inspection/get-file-checksums/DESCRIPTION.md) |
 | `verify_file_checksums` | [`DESCRIPTION.md`](src/domain/inspection/verify-file-checksums/DESCRIPTION.md) |
+| `verify_file_byte_identity` | [`DESCRIPTION.md`](src/domain/inspection/verify-file-byte-identity/DESCRIPTION.md) |
 
 ### 4.3 Inspection — search family and count
 

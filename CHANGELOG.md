@@ -10,11 +10,11 @@
 |-------|-------|
 | Scope Root | `.` |
 | Versioning Standard | `Semantic Versioning 2.0.0` |
-| Current Version | `1.0.0` |
-| Semver Class | `major` |
-| Breaking Change | `yes` |
+| Current Version | `1.1.0` |
+| Semver Class | `minor` |
+| Breaking Change | `no` |
 | Commit Scope | `filesystem-server` |
-| Current HEAD Commit Hash | `30a55a921cfd0e92857c5978cb72bf681a821ca5` |
+| Current HEAD Commit Hash | `0c1ad4a0907d0897a4eb5c5771ee10ddb01fe9d0` |
 
 ---
 
@@ -23,6 +23,7 @@
 
 | Version | Date | Class | Breaking | Commit Type | HEAD Commit Hash | Summary | Commit Subject |
 |---------|------|-------|----------|-------------|------------------|---------|----------------|
+| `1.1.0` | `2026-09-26` | `minor` | `no` | `feat` | `0c1ad4a0907d0897a4eb5c5771ee10ddb01fe9d0` | `Add the read-only verify_file_byte_identity endpoint for reference-based, region-aware byte-identity verification.` | `feat(filesystem-server): add verify_file_byte_identity endpoint` |
 | `1.0.0` | `2026-04-03` | `major` | `yes` | `feat` | `30a55a921cfd0e92857c5978cb72bf681a821ca5` | `Consolidate legacy directory listing tools into the canonical TOON-based list_directory_entries surface.` | `feat(filesystem-server)!: consolidate directory listing into list_directory_entries` |
 
 ---
@@ -30,7 +31,42 @@
 ## 3. Current Version Entry
 [INTENT: SPECIFICATION]
 
-### 3.1 Version `1.0.0`
+### 3.1 Version `1.1.0`
+[INTENT: SPECIFICATION]
+
+**Classification**
+
+| Field | Value |
+|-------|-------|
+| Semver Class | `minor` |
+| Breaking Change | `no` |
+| Rationale | `The workspace gains the read-only verify_file_byte_identity inspection endpoint, which proves byte identity of one or more target files against a reference file over the whole file or a bound byte region. The change is purely additive: no existing endpoint, contract, or convention is modified.` |
+
+**Change Units**
+
+| ID | Category | Breaking | Summary | Affected Files | Description Alignment |
+|----|----------|----------|---------|----------------|----------------------|
+| CHG-001 | `feature` | `no` | `Add the verify_file_byte_identity endpoint with its schema, handler, helpers, and endpoint-local documentation triplet.` | `src/domain/inspection/verify-file-byte-identity/schema.ts`, `src/domain/inspection/verify-file-byte-identity/handler.ts`, `src/domain/inspection/verify-file-byte-identity/helpers.ts`, `src/domain/inspection/verify-file-byte-identity/CONVENTIONS.md`, `src/domain/inspection/verify-file-byte-identity/DESCRIPTION.md`, `src/domain/inspection/verify-file-byte-identity/README.md` | `DESCRIPTION.md` documents the reference-based, region-aware identity-verification surface and its fail-closed semantics. |
+| CHG-002 | `feature` | `no` | `Extend the canonical checksum seam with region-scoped hashing (FileRegion, calculateFileRegionHash).` | `src/infrastructure/filesystem/checksum.ts` | `DESCRIPTION.md` records the region-hash seam as the single hashing home used by the new endpoint. |
+| CHG-003 | `contract` | `no` | `Register verify_file_byte_identity in the inspection tool catalog with its description builder and the shared MARKER_MAX_CHARS limit constant.` | `src/application/server/register-inspection-tool-catalog.ts`, `src/application/server/tool-registration-presets.ts`, `src/domain/shared/guardrails/tool-guardrail-limits.ts`, `CONVENTIONS.md`, `DESCRIPTION.md` | Root `CONVENTIONS.md` and root `DESCRIPTION.md` re-reference the endpoint-local documentation triplet. |
+| CHG-004 | `test` | `no` | `Cover the new endpoint, the region-hash seam, and the registration surface with unit tests at 100 percent white-box coverage of the new units.` | `test/unit/domain/inspection/verify-file-byte-identity/verify-file-byte-identity.test.ts`, `test/unit/infrastructure/filesystem/checksum.test.ts`, `test/unit/application/server/register-inspection-tool-catalog.test.ts`, `test/unit/application/server/tool-registration-presets.test.ts` | Coverage-measured execution proves the new units in the unit project. |
+
+**Migration / Consumer Impact**
+
+No migration is required. The new endpoint is additive; existing endpoints and contracts are unchanged.
+Consumers gain the read-only `verify_file_byte_identity` tool for reference-based, region-aware byte-identity proofs.
+
+**Commit Alignment**
+
+| Field | Value |
+|-------|-------|
+| Commit Subject | `feat(filesystem-server): add verify_file_byte_identity endpoint` |
+| Breaking Footer | `none` |
+| Current HEAD Commit Hash | `0c1ad4a0907d0897a4eb5c5771ee10ddb01fe9d0` |
+
+---
+
+### 3.2 Version `1.0.0`
 [INTENT: SPECIFICATION]
 
 **Classification**

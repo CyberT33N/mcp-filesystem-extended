@@ -49,6 +49,7 @@ Endpoint-specific policy stays in the linked endpoint-local convention files bel
 - [`get_path_metadata`](src/domain/inspection/get-path-metadata/CONVENTIONS.md)
 - [`get_file_checksums`](src/domain/inspection/get-file-checksums/CONVENTIONS.md)
 - [`verify_file_checksums`](src/domain/inspection/verify-file-checksums/CONVENTIONS.md)
+- [`verify_file_byte_identity`](src/domain/inspection/verify-file-byte-identity/CONVENTIONS.md)
 
 ### Inspection — search family and count
 
