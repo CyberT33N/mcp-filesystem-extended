@@ -16,6 +16,8 @@ import { handleMovePaths } from "@domain/mutation/move-paths/handler";
 import { MovePathsArgsSchema } from "@domain/mutation/move-paths/schema";
 import { handleDeletePaths } from "@domain/mutation/delete-paths/handler";
 import { DeletePathsArgsSchema } from "@domain/mutation/delete-paths/schema";
+import { handleCreateSymbolicLinks } from "@domain/mutation/create-symbolic-links/handler";
+import { CreateSymbolicLinksArgsSchema } from "@domain/mutation/create-symbolic-links/schema";
 
 import type { RegisterToolCatalogContext } from "./register-tool-catalog";
 import {
@@ -24,6 +26,7 @@ import {
   buildCopyPathsToolDescription,
   buildCreateDirectoriesToolDescription,
   buildCreateFilesToolDescription,
+  buildCreateSymbolicLinksToolDescription,
   buildDeletePathsToolDescription,
   buildDiffFilesToolDescription,
   buildDiffTextContentToolDescription,
@@ -212,5 +215,18 @@ export function registerComparisonAndMutationToolCatalog(
           allowedDirectories,
         ),
       ),
+  );
+
+  server.registerTool(
+    "create_symbolic_links",
+    {
+      title: "Create symbolic links",
+      description:
+        buildCreateSymbolicLinksToolDescription(),
+      annotations: ADDITIVE_LOCAL_TOOL_ANNOTATIONS,
+      inputSchema: CreateSymbolicLinksArgsSchema,
+    },
+    async ({ links }) =>
+      executeTool("create_symbolic_links", () => handleCreateSymbolicLinks(links, allowedDirectories)),
   );
 }

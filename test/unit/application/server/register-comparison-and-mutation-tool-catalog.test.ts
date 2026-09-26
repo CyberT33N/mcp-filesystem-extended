@@ -22,6 +22,8 @@ const registerComparisonAndMutationToolCatalogTestState = vi.hoisted(() => ({
   movePathsArgsSchema: { schema: "move-paths" },
   handleDeletePaths: vi.fn(),
   deletePathsArgsSchema: { schema: "delete-paths" },
+  handleCreateSymbolicLinks: vi.fn(),
+  createSymbolicLinksArgsSchema: { schema: "create-symbolic-links" },
   readOnlyLocalToolAnnotations: { audience: "read-only" },
   additiveLocalToolAnnotations: { audience: "additive" },
   idempotentAdditiveLocalToolAnnotations: { audience: "idempotent-additive" },
@@ -118,6 +120,16 @@ vi.mock("@domain/mutation/delete-paths/schema", () => ({
     registerComparisonAndMutationToolCatalogTestState.deletePathsArgsSchema,
 }));
 
+vi.mock("@domain/mutation/create-symbolic-links/handler", () => ({
+  handleCreateSymbolicLinks:
+    registerComparisonAndMutationToolCatalogTestState.handleCreateSymbolicLinks,
+}));
+
+vi.mock("@domain/mutation/create-symbolic-links/schema", () => ({
+  CreateSymbolicLinksArgsSchema:
+    registerComparisonAndMutationToolCatalogTestState.createSymbolicLinksArgsSchema,
+}));
+
 vi.mock("@application/server/tool-registration-presets", () => ({
   READ_ONLY_LOCAL_TOOL_ANNOTATIONS:
     registerComparisonAndMutationToolCatalogTestState.readOnlyLocalToolAnnotations,
@@ -131,6 +143,7 @@ vi.mock("@application/server/tool-registration-presets", () => ({
   buildCopyPathsToolDescription: () => "Copies files or directories to new destinations.",
   buildCreateDirectoriesToolDescription: () => "Creates one or more directory paths, including missing parent directories.",
   buildCreateFilesToolDescription: () => "Creates one or more new text files.",
+  buildCreateSymbolicLinksToolDescription: () => "Creates one or more symbolic links.",
   buildDeletePathsToolDescription: () => "Deletes files or directories.",
   buildDiffFilesToolDescription: () => "Compares the contents of one or more file pairs and returns unified diffs.",
   buildDiffTextContentToolDescription: () => "Compares one or more in-memory text content pairs and returns unified diffs.",
@@ -151,6 +164,7 @@ describe("register-comparison-and-mutation-tool-catalog", () => {
     registerComparisonAndMutationToolCatalogTestState.handleCopyPaths.mockClear();
     registerComparisonAndMutationToolCatalogTestState.handleMovePaths.mockClear();
     registerComparisonAndMutationToolCatalogTestState.handleDeletePaths.mockClear();
+    registerComparisonAndMutationToolCatalogTestState.handleCreateSymbolicLinks.mockClear();
   });
 
   it("registers the complete comparison and mutation tool catalog in a stable order", () => {
@@ -168,7 +182,7 @@ describe("register-comparison-and-mutation-tool-catalog", () => {
 
     Reflect.apply(registerComparisonAndMutationToolCatalog, undefined, [context]);
 
-    expect(registerTool).toHaveBeenCalledTimes(9);
+    expect(registerTool).toHaveBeenCalledTimes(10);
     expect(registerTool.mock.calls.map(([toolName]) => toolName)).toEqual([
       "create_files",
       "append_files",
@@ -179,6 +193,7 @@ describe("register-comparison-and-mutation-tool-catalog", () => {
       "replace_file_line_ranges",
       "create_directories",
       "move_paths",
+      "create_symbolic_links",
     ]);
 
     expect(registerTool).toHaveBeenNthCalledWith(
@@ -217,6 +232,18 @@ describe("register-comparison-and-mutation-tool-catalog", () => {
       }),
       expect.any(Function),
     );
+    expect(registerTool).toHaveBeenNthCalledWith(
+      10,
+      "create_symbolic_links",
+      expect.objectContaining({
+        title: "Create symbolic links",
+        annotations:
+          registerComparisonAndMutationToolCatalogTestState.additiveLocalToolAnnotations,
+        inputSchema:
+          registerComparisonAndMutationToolCatalogTestState.createSymbolicLinksArgsSchema,
+      }),
+      expect.any(Function),
+    );
   });
 
   it("keeps the replace-file-line-ranges registration bound to the canonical replacementText surface", () => {
@@ -249,5 +276,73 @@ describe("register-comparison-and-mutation-tool-catalog", () => {
     expect(registration.inputSchema).toBe(
       registerComparisonAndMutationToolCatalogTestState.replaceFileLineRangesArgsSchema,
     );
+  });
+
+  it("invokes every registered comparison and mutation tool callback through the executeTool boundary", async () => {
+    const registerTool = vi.fn();
+    const executeTool = vi.fn(
+      (_toolName: string, operation: () => unknown) => operation(),
+    );
+    const context = {
+      server: {
+        registerTool,
+      },
+      allowedDirectories: ["C:/allowed"],
+      inspectionResumeSessionStore: {
+        cleanupExpiredSessions: vi.fn(),
+      },
+      executeTool,
+    };
+
+    Reflect.apply(registerComparisonAndMutationToolCatalog, undefined, [context]);
+
+    const registeredCallbackByToolName = new Map(
+      registerTool.mock.calls.map(([toolName, , callback]) => [
+        toolName,
+        callback,
+      ]),
+    );
+
+    registerComparisonAndMutationToolCatalogTestState.handleFileDiff.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleContentDiff.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleCreateFiles.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleAppendFiles.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleReplaceFileLineRanges.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleCreateDirectories.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleCopyPaths.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleMovePaths.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleDeletePaths.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleCreateSymbolicLinks.mockResolvedValue("text");
+
+    for (const toolName of registeredCallbackByToolName.keys()) {
+      const callback = registeredCallbackByToolName.get(toolName);
+
+      if (callback === undefined) {
+        throw new Error(`Expected ${toolName} to be registered.`);
+      }
+
+      await Reflect.apply(callback, undefined, [{
+        files: [],
+        links: [],
+        operations: [],
+        pairs: [],
+        paths: [],
+        replacements: [],
+      }]);
+    }
+
+    expect(executeTool).toHaveBeenCalledTimes(10);
+    expect(executeTool.mock.calls.map(([toolName]) => toolName)).toEqual([
+      "create_files",
+      "append_files",
+      "delete_paths",
+      "copy_paths",
+      "diff_files",
+      "diff_text_content",
+      "replace_file_line_ranges",
+      "create_directories",
+      "move_paths",
+      "create_symbolic_links",
+    ]);
   });
 });

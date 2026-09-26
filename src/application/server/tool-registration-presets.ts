@@ -232,6 +232,19 @@ export function buildVerifyFileByteIdentityToolDescription(): string {
 }
 
 /**
+ * Builds the caller-visible metadata-family description for `verify_symbolic_links`.
+ */
+export function buildVerifySymbolicLinksToolDescription(): string {
+  return (
+    "Verifies one or more symbolic links by reading their stored targets and checking target resolvability. "
+    + "Use this tool when you need integrity validation of existing links: target drift detection, dangling-link detection, or an idempotency pre-check before creation. "
+    + "Public request parameters carry the path-length and batch-size ceilings directly. "
+    + `Caller-visible verification output remains bounded by the metadata-family response cap of ${formatToolDescriptionCharacterLimit(METADATA_RESPONSE_CAP_CHARS)}, so oversized multi-link verification requests may still be refused. `
+    + "This endpoint does not use preview-style resume behavior."
+  );
+}
+
+/**
  * Builds the caller-visible mutation-family description for `create_files`.
  */
 export function buildCreateFilesToolDescription(): string {
@@ -310,6 +323,20 @@ export function buildDeletePathsToolDescription(): string {
     "Deletes files or directories. "
     + "Use this tool only for removal, not for in-place rewrite workflows. "
     + "Public request parameters carry the bounded target-count and path-length limits directly, and directories still require explicit recursive intent."
+  );
+}
+
+/**
+ * Builds the caller-visible mutation-family description for `create_symbolic_links`.
+ */
+export function buildCreateSymbolicLinksToolDescription(): string {
+  return (
+    "Creates one or more symbolic links. "
+    + "Use this tool only when the link paths do not already exist. "
+    + "Relative targets are stored verbatim and resolve against the link's directory at access time; absolute targets stay stable when the link moves but remain machine-dependent. "
+    + "On Windows, portable symbolic-link creation requires Developer Mode or an elevated server process; directory links can use `type: \"junction\"` as the privilege-free, non-portable alternative. "
+    + "Public request parameters carry the per-link and batch ceilings directly, while successful output remains a concise mutation summary rather than a large echoed payload. "
+    + "Existing link paths are refused rather than overwritten."
   );
 }
 

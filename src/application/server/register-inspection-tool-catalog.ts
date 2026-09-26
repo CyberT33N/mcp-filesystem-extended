@@ -83,6 +83,14 @@ import {
   VerifyFileByteIdentityArgsSchema,
   VerifyFileByteIdentityResultSchema,
 } from "@domain/inspection/verify-file-byte-identity/schema";
+import {
+  getSymbolicLinkVerificationResult,
+  handleVerifySymbolicLinks,
+} from "@domain/inspection/verify-symbolic-links/handler";
+import {
+  VerifySymbolicLinksArgsSchema,
+  VerifySymbolicLinksResultSchema,
+} from "@domain/inspection/verify-symbolic-links/schema";
 
 import type { RegisterToolCatalogContext } from "./register-tool-catalog";
 import {
@@ -98,6 +106,7 @@ import {
   buildSearchFileContentsByRegexToolDescription,
   buildVerifyFileByteIdentityToolDescription,
   buildVerifyFileChecksumsToolDescription,
+  buildVerifySymbolicLinksToolDescription,
   READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
 } from "./tool-registration-presets";
 
@@ -589,6 +598,32 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           content: [{ type: "text", text }],
           structuredContent: {
             reference: result.reference,
+            entries: result.entries,
+            errors: result.errors,
+            summary: result.summary,
+          },
+        };
+      }),
+  );
+
+  server.registerTool(
+    "verify_symbolic_links",
+    {
+      title: "Verify symbolic links",
+      description:
+        buildVerifySymbolicLinksToolDescription(),
+      annotations: READ_ONLY_LOCAL_TOOL_ANNOTATIONS,
+      inputSchema: VerifySymbolicLinksArgsSchema,
+      outputSchema: VerifySymbolicLinksResultSchema,
+    },
+    async ({ links }) =>
+      executeTool("verify_symbolic_links", async () => {
+        const result = await getSymbolicLinkVerificationResult(links, allowedDirectories);
+        const text = await handleVerifySymbolicLinks(links, allowedDirectories);
+
+        return {
+          content: [{ type: "text", text }],
+          structuredContent: {
             entries: result.entries,
             errors: result.errors,
             summary: result.summary,

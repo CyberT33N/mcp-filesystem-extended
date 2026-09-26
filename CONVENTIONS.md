@@ -50,6 +50,7 @@ Endpoint-specific policy stays in the linked endpoint-local convention files bel
 - [`get_file_checksums`](src/domain/inspection/get-file-checksums/CONVENTIONS.md)
 - [`verify_file_checksums`](src/domain/inspection/verify-file-checksums/CONVENTIONS.md)
 - [`verify_file_byte_identity`](src/domain/inspection/verify-file-byte-identity/CONVENTIONS.md)
+- [`verify_symbolic_links`](src/domain/inspection/verify-symbolic-links/CONVENTIONS.md)
 
 ### Inspection — search family and count
 
@@ -80,6 +81,7 @@ Endpoint-specific policy stays in the linked endpoint-local convention files bel
 - [`copy_paths`](src/domain/mutation/copy-paths/CONVENTIONS.md)
 - [`move_paths`](src/domain/mutation/move-paths/CONVENTIONS.md)
 - [`delete_paths`](src/domain/mutation/delete-paths/CONVENTIONS.md)
+- [`create_symbolic_links`](src/domain/mutation/create-symbolic-links/CONVENTIONS.md)
 
 ## Core Invariants
 

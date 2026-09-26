@@ -73,6 +73,17 @@ ugrep --version
 
 If the MCP server still cannot start native search afterward, configure `UGREP_EXECUTABLE_PATH` with the absolute path to `ugrep.exe` for the process that launches the MCP server.
 
+## Symbolic link creation on Windows
+
+The `create_symbolic_links` endpoint creates portable symbolic links through the Node.js filesystem surface. Linux and macOS hosts need no special privilege — write permission on the parent directory is sufficient.
+
+Windows hosts MUST satisfy exactly one of the following deployment conditions:
+
+- **Windows Developer Mode is enabled (recommended)**, or
+- the MCP server process runs elevated.
+
+The server never self-elevates, never spawns elevated helper processes, and never probes the registry: environment readiness is a consumer/host responsibility. When neither condition holds, link creation fails deterministically with the `symlink_privilege_missing` failure family, which names the next valid action — enable Developer Mode, run the server elevated, or retry directory links with `type: "junction"` (the privilege-free, non-portable Windows variant).
+
 ## Endpoint README TOC
 
 ### Application/server scope
@@ -90,6 +101,7 @@ If the MCP server still cannot start native search afterward, configure `UGREP_E
 - [`get_path_metadata`](src/domain/inspection/get-path-metadata/README.md)
 - [`get_file_checksums`](src/domain/inspection/get-file-checksums/README.md)
 - [`verify_file_checksums`](src/domain/inspection/verify-file-checksums/README.md)
+- [`verify_symbolic_links`](src/domain/inspection/verify-symbolic-links/README.md)
 
 ### Inspection — search family and count
 
@@ -120,6 +132,7 @@ If the MCP server still cannot start native search afterward, configure `UGREP_E
 - [`copy_paths`](src/domain/mutation/copy-paths/README.md)
 - [`move_paths`](src/domain/mutation/move-paths/README.md)
 - [`delete_paths`](src/domain/mutation/delete-paths/README.md)
+- [`create_symbolic_links`](src/domain/mutation/create-symbolic-links/README.md)
 
 ## Documentation boundary
 

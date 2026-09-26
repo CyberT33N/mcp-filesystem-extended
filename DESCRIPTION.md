@@ -63,6 +63,7 @@ Shared ownership boundaries that remain true across the workspace:
 | `get_file_checksums` | [`DESCRIPTION.md`](src/domain/inspection/get-file-checksums/DESCRIPTION.md) |
 | `verify_file_checksums` | [`DESCRIPTION.md`](src/domain/inspection/verify-file-checksums/DESCRIPTION.md) |
 | `verify_file_byte_identity` | [`DESCRIPTION.md`](src/domain/inspection/verify-file-byte-identity/DESCRIPTION.md) |
+| `verify_symbolic_links` | [`DESCRIPTION.md`](src/domain/inspection/verify-symbolic-links/DESCRIPTION.md) |
 
 ### 4.3 Inspection — search family and count
 
@@ -103,6 +104,7 @@ Shared ownership boundaries that remain true across the workspace:
 | `copy_paths` | [`DESCRIPTION.md`](src/domain/mutation/copy-paths/DESCRIPTION.md) |
 | `move_paths` | [`DESCRIPTION.md`](src/domain/mutation/move-paths/DESCRIPTION.md) |
 | `delete_paths` | [`DESCRIPTION.md`](src/domain/mutation/delete-paths/DESCRIPTION.md) |
+| `create_symbolic_links` | [`DESCRIPTION.md`](src/domain/mutation/create-symbolic-links/DESCRIPTION.md) |
 
 ### 4.8 Application/server scope
 
