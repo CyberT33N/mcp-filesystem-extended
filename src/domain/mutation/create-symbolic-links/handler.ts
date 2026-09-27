@@ -12,10 +12,14 @@ import { assertPathMutationBatchBudget } from "../shared/mutation-guardrails";
 import { formatBatchMutationSummary } from "@infrastructure/formatting/batch-result-formatter";
 import { validatePathForCreation } from "@infrastructure/filesystem/path-guard";
 
+import { findLinkTypeTargetMismatch } from "./helpers";
 import type { CreateSymbolicLinkEntry } from "./schema";
 
 const SYMLINK_PRIVILEGE_MISSING_REMEDIATION =
   "enable Windows Developer Mode OR run the server process elevated OR retry directory links with type='junction' (privilege-free, not portable)";
+
+const LINK_TYPE_TARGET_MISMATCH_REMEDIATION =
+  "use type 'dir' or 'junction' for directory targets, type 'file' for non-directory targets, or omit type for runtime autodetection";
 
 /**
  * Reads the link-identity stats of a candidate path without following links.
@@ -50,6 +54,13 @@ async function readLinkEntryStatsOrUndefined(candidatePath: string): Promise<Sta
  * allowed directories before any link is created, so a relative target cannot
  * escape the server scope through `..` segments.
  *
+ * When an entry declares an explicit `type` and the resolved target already
+ * exists, the declared flavor is checked against the existing target entry
+ * type before creation: a mismatch is refused fail-closed with the
+ * deterministic `link_type_target_mismatch` failure family, while a missing
+ * target stays legal (dangling creation) and an omitted `type` keeps runtime
+ * autodetection.
+ *
  * Existing link paths are refused instead of being overwritten, and per-entry
  * failures are collected so one failed link never discards successful sibling
  * creations. On Windows, a host without Developer Mode and without elevation
@@ -82,6 +93,18 @@ export async function handleCreateSymbolicLinks(
 
         const resolvedTarget = path.resolve(path.dirname(validLinkPath), link.target);
         await validatePathForCreation(resolvedTarget, allowedDirectories);
+
+        if (link.type !== undefined) {
+          const targetStats = await fs.stat(resolvedTarget, { throwIfNoEntry: false });
+
+          if (isDefined(targetStats)) {
+            const mismatchKind = findLinkTypeTargetMismatch(link.type, targetStats);
+
+            if (isDefined(mismatchKind)) {
+              throw new Error(`link_type_target_mismatch (blocking layer: request contract) — the declared link type '${link.type}' does not match the existing target entry type ('${mismatchKind}'). Next valid action: ${LINK_TYPE_TARGET_MISMATCH_REMEDIATION}.`);
+            }
+          }
+        }
 
         const linkParentDirectory = path.dirname(validLinkPath);
         await fs.mkdir(linkParentDirectory, { recursive: true });

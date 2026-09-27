@@ -335,6 +335,7 @@ export function buildCreateSymbolicLinksToolDescription(): string {
     + "Use this tool only when the link paths do not already exist. "
     + "Relative targets are stored verbatim and resolve against the link's directory at access time; absolute targets stay stable when the link moves but remain machine-dependent. "
     + "On Windows, portable symbolic-link creation requires Developer Mode or an elevated server process; directory links can use `type: \"junction\"` as the privilege-free, non-portable alternative. "
+    + "An explicit link `type` is checked against the existing target's entry type, and mismatches are refused rather than materialized. "
     + "Public request parameters carry the per-link and batch ceilings directly, while successful output remains a concise mutation summary rather than a large echoed payload. "
     + "Existing link paths are refused rather than overwritten."
   );

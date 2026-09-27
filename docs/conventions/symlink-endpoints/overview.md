@@ -18,6 +18,7 @@ This document is the single source of truth for **what** was decided for the sym
 3. **Junction is a documented `type` enum value, not a separate endpoint pair.** The creation question is identical; only the Windows link flavor differs.
 4. **Windows readiness is a consumer-owned deployment convention.** No server-side pre-check exists; the failure contract is deterministic.
 5. **The server never works with elevation.** No self-elevation, no elevated helper processes, no UAC prompts, no registry probes.
+6. **Declared-type/target mismatches are refused fail-closed.** An explicit `type` is checked against the existing target entry type before creation (`dir`/`junction` require a directory, `file` requires a non-directory); missing targets stay legal, and an omitted `type` keeps runtime autodetection.
 
 ---
 
@@ -43,9 +44,10 @@ Privilege escalation is never the server's domain: an MCP server runs with the p
 2. Each link path is validated for creation against the allowed directories.
 3. An existing link path refuses creation — including an existing dangling link, because the existence check is link-identity based (`lstat`), not target-following.
 4. The resolved target form (target resolved against the link's directory) is scope-checked against the allowed directories; the stored form stays verbatim.
-5. Missing parent directories are created automatically.
-6. The link is created through the runtime filesystem surface; per-entry failures are collected (partial success).
-7. A concise, budget-bounded mutation summary is returned.
+5. When an explicit `type` is declared and the resolved target already exists, a flavor/target mismatch is refused fail-closed with the `link_type_target_mismatch` family before any write.
+6. Missing parent directories are created automatically.
+7. The link is created through the runtime filesystem surface; per-entry failures are collected (partial success).
+8. A concise, budget-bounded mutation summary is returned.
 
 ### Verification flow
 
@@ -80,6 +82,10 @@ Three binding reasons:
 
 Elevation preparation would be an architecture breach: the server's domain is correct syscall usage and honest failure contracts, while the host owns the process privilege level. A server that elevated itself would silently cross the least-privilege boundary its consumers rely on.
 
+### Why the type-match guard is not the rejected privilege pre-check
+
+The declared-type/target match guard inspects a filesystem-owned fact — the existing target's entry type — through the server's own domain surface, and its answer cannot go stale against an external authority, because the entry type at creation time is exactly the fact the syscall would act on. The rejected privilege pre-check was different in kind: it would have probed registry state outside the filesystem boundary, and its answer could expire before the syscall ran. The guard therefore strengthens the deterministic error contract without crossing the ownership boundary that kept the pre-check out.
+
 ### Why junction stays inside the two canonical endpoints
 
 A junction differs from a portable symlink in kind (Windows-only, directory-only, absolute, privilege-free, not portable), but the domain question — materialize or verify a link — is identical, and the runtime creates junctions through the same syscall with `type: "junction"`. Separate junction endpoints would proliferate the tool surface without a new domain question. The honesty requirement is carried by the schema-owned parameter description and the endpoint-local documentation.
@@ -100,6 +106,7 @@ A junction differs from a portable symlink in kind (Windows-only, directory-only
 
 - `create_symbolic_links` on a Windows host without Developer Mode and without elevation answers with the `symlink_privilege_missing` failure family and its next valid action.
 - `create_symbolic_links` with `type: "junction"` on a directory target succeeds without elevation.
+- `create_symbolic_links` with an explicit `type` whose existing target entry type mismatches (for example `type: "junction"` on a file) answers with the `link_type_target_mismatch` failure family and creates nothing.
 - `verify_symbolic_links` reports a dangling link as `resolvable: false` and `valid: false` without producing an error entry.
 - The endpoint-local triplets ([`create_symbolic_links`](../../../src/domain/mutation/create-symbolic-links/CONVENTIONS.md), [`verify_symbolic_links`](../../../src/domain/inspection/verify-symbolic-links/CONVENTIONS.md)) carry the endpoint-local mechanics.
 

@@ -61,6 +61,23 @@ A junction is not a substitute for a portable symlink. No separate junction endp
 
 ---
 
+## Architectural Principle: Declared-Type/Target Match Guard
+
+When the caller supplies an explicit `type` and the resolved target already exists, the declared link flavor is checked against the existing target entry type before creation. A mismatch is refused fail-closed instead of materializing a non-functional link:
+
+```text
+link_type_target_mismatch (blocking layer: request contract)
+Next valid action: use type 'dir' or 'junction' for directory targets, type 'file' for non-directory targets, or omit type for runtime autodetection
+```
+
+- `dir` and `junction` require an existing target to be a directory; `file` requires a non-directory.
+- A target that does not exist yet produces no mismatch: dangling creation stays legal.
+- An omitted `type` keeps the runtime autodetection and is never guarded.
+
+This guard is not the rejected privilege pre-check: it inspects a filesystem-owned fact through the server's own domain surface, its answer cannot go stale against an external authority, and the symlink syscall remains the final creation authority. The privilege pre-check was rejected because it would probe registry state outside the filesystem boundary.
+
+---
+
 ## Architectural Principle: Consumer-Owned Environment Readiness
 
 Windows portable symbolic-link creation requires exactly one of:

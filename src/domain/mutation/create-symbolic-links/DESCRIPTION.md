@@ -91,8 +91,9 @@ The current additive link-creation flow is:
 4. the handler validates each requested link path for creation,
 5. the handler refuses the creation when the link path already exists — including an existing dangling link,
 6. the handler scope-checks the resolved target form against the allowed directories,
-7. the handler creates missing parent directories automatically,
-8. the handler stores the caller-supplied target verbatim through the filesystem symlink call and returns a concise mutation summary.
+7. when an explicit `type` is declared and the resolved target already exists, the handler refuses a flavor/target mismatch fail-closed with the `link_type_target_mismatch` family — `dir`/`junction` require a directory, `file` requires a non-directory, and missing targets stay legal,
+8. the handler creates missing parent directories automatically,
+9. the handler stores the caller-supplied target verbatim through the filesystem symlink call and returns a concise mutation summary.
 
 This endpoint therefore owns additive new-link creation, not modification of existing links.
 
@@ -118,7 +119,7 @@ The endpoint returns a concise mutation summary rather than echoing the full cal
 This summary:
 
 - records successful creates,
-- records link-level failures, including the deterministic `symlink_privilege_missing` family,
+- records link-level failures, including the deterministic `symlink_privilege_missing` and `link_type_target_mismatch` families,
 - stays bounded by the mutation-summary response budget.
 
 ---

@@ -6,6 +6,7 @@ import { join, normalize } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handleCreateSymbolicLinks } from "@domain/mutation/create-symbolic-links/handler";
+import { findLinkTypeTargetMismatch } from "@domain/mutation/create-symbolic-links/helpers";
 import { CreateSymbolicLinksArgsSchema } from "@domain/mutation/create-symbolic-links/schema";
 
 const createErrnoError = (code: string, message: string): NodeJS.ErrnoException =>
@@ -217,5 +218,95 @@ describe("create_symbolic_links", () => {
 
   it("rejects an empty link batch through the schema", () => {
     expect(() => CreateSymbolicLinksArgsSchema.parse({ links: [] })).toThrow();
+  });
+
+  it("refuses a junction whose existing target is a file", async () => {
+    const linkPath = join(sandboxRootPath, "consumers", "file-target-junction");
+
+    const output = await handleCreateSymbolicLinks(
+      [{ linkPath, target: targetFilePath, type: "junction" }],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("link_type_target_mismatch");
+    expect(output).toContain("blocking layer: request contract");
+    await expect(lstat(linkPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("refuses a dir link whose existing target is a file", async () => {
+    const linkPath = join(sandboxRootPath, "consumers", "file-target-dir-link");
+
+    const output = await handleCreateSymbolicLinks(
+      [{ linkPath, target: targetFilePath, type: "dir" }],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("link_type_target_mismatch");
+    await expect(lstat(linkPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("refuses a file link whose existing target is a directory", async () => {
+    const linkPath = join(sandboxRootPath, "consumers", "dir-target-file-link");
+
+    const output = await handleCreateSymbolicLinks(
+      [{ linkPath, target: targetDirectoryPath, type: "file" }],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("link_type_target_mismatch");
+    await expect(lstat(linkPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("creates a dangling junction when the target does not exist yet", async () => {
+    const linkPath = join(sandboxRootPath, "consumers", "future-junction");
+
+    const output = await handleCreateSymbolicLinks(
+      [
+        {
+          linkPath,
+          target: join(sandboxRootPath, "canonical", "future-dir"),
+          type: "junction",
+        },
+      ],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("processed successfully");
+    expect((await lstat(linkPath)).isSymbolicLink()).toBe(true);
+  });
+
+  it("keeps partial success when one entry mismatches its declared type", async () => {
+    const successfulLinkPath = join(sandboxRootPath, "consumers", "typed-ok.md");
+
+    const output = await handleCreateSymbolicLinks(
+      [
+        { linkPath: successfulLinkPath, target: "../canonical/shared.md", type: "file" },
+        {
+          linkPath: join(sandboxRootPath, "consumers", "typed-bad"),
+          target: targetFilePath,
+          type: "junction",
+        },
+      ],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("1 symbolic links processed successfully");
+    expect(output).toContain("1 symbolic links failed");
+    expect(output).toContain("link_type_target_mismatch");
+    expect((await lstat(successfulLinkPath)).isSymbolicLink()).toBe(true);
+  });
+
+  describe("findLinkTypeTargetMismatch", () => {
+    it("matches declared types against the existing target entry kind", async () => {
+      const directoryStats = await lstat(targetDirectoryPath);
+      const fileStats = await lstat(targetFilePath);
+
+      expect(findLinkTypeTargetMismatch("junction", directoryStats)).toBeUndefined();
+      expect(findLinkTypeTargetMismatch("dir", directoryStats)).toBeUndefined();
+      expect(findLinkTypeTargetMismatch("file", fileStats)).toBeUndefined();
+      expect(findLinkTypeTargetMismatch("junction", fileStats)).toBe("non-directory");
+      expect(findLinkTypeTargetMismatch("dir", fileStats)).toBe("non-directory");
+      expect(findLinkTypeTargetMismatch("file", directoryStats)).toBe("directory");
+    });
   });
 });

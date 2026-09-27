@@ -58,6 +58,7 @@ describe("tool-registration-presets", () => {
     expect(description).toContain("Developer Mode");
     expect(description).toContain("junction");
     expect(description).toContain("refused rather than overwritten");
+    expect(description).toContain("mismatches are refused rather than materialized");
   });
 
   it("builds the verify_symbolic_links description from the shared metadata-family cap", () => {

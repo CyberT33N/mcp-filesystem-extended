@@ -20,6 +20,7 @@
 - Creates missing parent directories automatically.
 - Refuses creation when the link path already exists, including an existing dangling link.
 - Scope-checks the resolved target against the allowed directories before creation.
+- Refuses an explicit `type` that mismatches the existing target's entry type (`dir`/`junction` require directories, `file` requires a non-directory); targets that do not exist yet stay legal.
 - On Windows, portable link creation requires Developer Mode or an elevated server process; failures answer with the deterministic `symlink_privilege_missing` family and its next valid action.
 - Returns a concise mutation summary instead of echoing the full payload.
 

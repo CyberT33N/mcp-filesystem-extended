@@ -10,11 +10,11 @@
 |-------|-------|
 | Scope Root | `.` |
 | Versioning Standard | `Semantic Versioning 2.0.0` |
-| Current Version | `1.2.0` |
-| Semver Class | `minor` |
+| Current Version | `1.2.1` |
+| Semver Class | `patch` |
 | Breaking Change | `no` |
 | Commit Scope | `filesystem-server` |
-| Current HEAD Commit Hash | `d944213b19d87a7c8447a46c2fafcd9b5fe97880` |
+| Current HEAD Commit Hash | `e1cedea42268ec5e4f7cbd6db422b9c7fbd33a31` |
 
 ---
 
@@ -23,6 +23,7 @@
 
 | Version | Date | Class | Breaking | Commit Type | HEAD Commit Hash | Summary | Commit Subject |
 |---------|------|-------|----------|-------------|------------------|---------|----------------|
+| `1.2.1` | `2026-09-27` | `patch` | `no` | `fix` | `e1cedea42268ec5e4f7cbd6db422b9c7fbd33a31` | `Refuse explicit link-type/target mismatches fail-closed at creation time in create_symbolic_links.` | `fix(filesystem-server): refuse explicit link-type/target mismatches at creation` |
 | `1.2.0` | `2026-09-26` | `minor` | `no` | `feat` | `d944213b19d87a7c8447a46c2fafcd9b5fe97880` | `Add the create_symbolic_links and verify_symbolic_links endpoints for portable batch symbolic-link creation and read-only integrity verification.` | `feat(filesystem-server): add create_symbolic_links and verify_symbolic_links endpoints` |
 | `1.1.0` | `2026-09-26` | `minor` | `no` | `feat` | `0c1ad4a0907d0897a4eb5c5771ee10ddb01fe9d0` | `Add the read-only verify_file_byte_identity endpoint for reference-based, region-aware byte-identity verification.` | `feat(filesystem-server): add verify_file_byte_identity endpoint` |
 | `1.0.0` | `2026-04-03` | `major` | `yes` | `feat` | `30a55a921cfd0e92857c5978cb72bf681a821ca5` | `Consolidate legacy directory listing tools into the canonical TOON-based list_directory_entries surface.` | `feat(filesystem-server)!: consolidate directory listing into list_directory_entries` |
@@ -32,7 +33,41 @@
 ## 3. Current Version Entry
 [INTENT: SPECIFICATION]
 
-### 3.1 Version `1.2.0`
+### 3.1 Version `1.2.1`
+[INTENT: SPECIFICATION]
+
+**Classification**
+
+| Field | Value |
+|-------|-------|
+| Semver Class | `patch` |
+| Breaking Change | `no` |
+| Rationale | `Non-breaking correction: create_symbolic_links now refuses explicit link-type/target mismatches fail-closed at creation time. Only requests that previously materialized non-functional links (for example type "junction" on a file target) are affected; every previously valid request keeps its exact behavior.` |
+
+**Change Units**
+
+| ID | Category | Breaking | Summary | Affected Files | Description Alignment |
+|----|----------|----------|---------|----------------|----------------------|
+| CHG-001 | `fix` | `no` | `Add the declared-type/target match guard: an explicit type is checked against the existing target entry type before creation, and mismatches answer with the deterministic link_type_target_mismatch failure family.` | `src/domain/mutation/create-symbolic-links/handler.ts`, `src/domain/mutation/create-symbolic-links/helpers.ts` | `DESCRIPTION.md` documents the guard step in the execution pipeline and the new failure family in the output model. |
+| CHG-002 | `contract` | `no` | `Carry the qualitative mismatch-refusal cue in the create_symbolic_links tool description.` | `src/application/server/tool-registration-presets.ts` | The description stays qualitative; per-parameter type semantics remain owned by the schema parameter description. |
+| CHG-003 | `docs` | `no` | `Document the guard in the endpoint-local triplet and the symbolic-link endpoint conventions.` | `src/domain/mutation/create-symbolic-links/CONVENTIONS.md`, `src/domain/mutation/create-symbolic-links/DESCRIPTION.md`, `src/domain/mutation/create-symbolic-links/README.md`, `docs/conventions/symlink-endpoints/overview.md` | The conventions surfaces record why the guard is server-owned and why it is not the rejected privilege pre-check. |
+| CHG-004 | `test` | `no` | `Cover the guard and the helper with unit tests at 100 percent white-box coverage of the change scope.` | `test/unit/domain/mutation/create-symbolic-links/create-symbolic-links.test.ts`, `test/unit/application/server/tool-registration-presets.test.ts` | Coverage-measured execution proves the changed units in the unit project. |
+
+**Migration / Consumer Impact**
+
+No migration is required. The guard is fail-closed and corrective: requests that previously created non-functional links (a declared type whose existing target entry type mismatches) are now refused with a deterministic failure family and its next valid action. All previously valid requests remain unaffected.
+
+**Commit Alignment**
+
+| Field | Value |
+|-------|-------|
+| Commit Subject | `fix(filesystem-server): refuse explicit link-type/target mismatches at creation` |
+| Breaking Footer | `none` |
+| Current HEAD Commit Hash | `e1cedea42268ec5e4f7cbd6db422b9c7fbd33a31` |
+
+---
+
+### 3.2 Version `1.2.0`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -69,7 +104,7 @@ Windows hosts must satisfy the documented readiness convention (Developer Mode o
 
 ---
 
-### 3.2 Version `1.1.0`
+### 3.3 Version `1.1.0`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -104,7 +139,7 @@ Consumers gain the read-only `verify_file_byte_identity` tool for reference-base
 
 ---
 
-### 3.3 Version `1.0.0`
+### 3.4 Version `1.0.0`
 [INTENT: SPECIFICATION]
 
 **Classification**
