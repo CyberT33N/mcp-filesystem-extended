@@ -57,4 +57,15 @@ describe("text response budget", () => {
       ),
     ).toThrow("Failure code: runtime_budget_exceeded");
   });
+
+  it("rejects projected budgets with the default retry guidance when none is supplied", () => {
+    expect(() =>
+      assertProjectedTextBudget(
+        "read_files_with_line_numbers",
+        101,
+        100,
+        "line-numbered read response",
+      ),
+    ).toThrow("Narrow the target set or reduce the expected payload before retrying.");
+  });
 });

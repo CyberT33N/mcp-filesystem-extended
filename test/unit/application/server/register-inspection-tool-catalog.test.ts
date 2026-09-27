@@ -720,4 +720,141 @@ describe("register-inspection-tool-catalog", () => {
       "verify_symbolic_links",
     ]);
   });
+
+  it("maps full base-request arguments through the search callback contracts", async () => {
+    const registerTool = vi.fn();
+    const executeTool = vi.fn(
+      (_toolName: string, operation: () => unknown) => operation(),
+    );
+    const context = {
+      server: {
+        registerTool,
+      },
+      allowedDirectories: ["C:/allowed"],
+      inspectionResumeSessionStore: {
+        cleanupExpiredSessions: vi.fn(),
+      },
+      executeTool,
+    };
+
+    Reflect.apply(registerInspectionToolCatalog, undefined, [context]);
+
+    const registeredCallbackByToolName = new Map(
+      registerTool.mock.calls.map(([toolName, , callback]) => [
+        toolName,
+        callback,
+      ]),
+    );
+
+    registerInspectionToolCatalogTestState.buildSearchRegexToolResult.mockResolvedValue({
+      text: "text",
+      result: {
+        roots: [],
+        totalLocations: 0,
+        totalMatches: 0,
+        truncated: false,
+        sessionDelivery: {},
+        admission: {},
+        resume: {},
+      },
+    });
+    registerInspectionToolCatalogTestState.buildSearchFixedStringToolResult.mockResolvedValue({
+      text: "text",
+      result: {
+        roots: [],
+        totalLocations: 0,
+        totalMatches: 0,
+        truncated: false,
+        sessionDelivery: {},
+        admission: {},
+        resume: {},
+      },
+    });
+
+    const regexCallback = registeredCallbackByToolName.get("search_file_contents_by_regex");
+    const fixedStringCallback = registeredCallbackByToolName.get(
+      "search_file_contents_by_fixed_string",
+    );
+
+    if (regexCallback === undefined || fixedStringCallback === undefined) {
+      throw new Error("Expected both search callbacks to be registered.");
+    }
+
+    await Reflect.apply(regexCallback, undefined, [{
+      resumeToken: "token-1",
+      resumeMode: "next-chunk",
+      roots: ["src"],
+      regex: "preview-.*",
+      includeGlobs: ["**/*.ts"],
+      excludeGlobs: ["**/dist/**"],
+      includeExcludedGlobs: ["**/dist/keep/**"],
+      respectGitIgnore: true,
+      maxResults: 50,
+      caseSensitive: true,
+    }]);
+
+    await Reflect.apply(fixedStringCallback, undefined, [{
+      resumeToken: "token-2",
+      resumeMode: "complete-result",
+      roots: ["docs"],
+      fixedString: "needle",
+      includeGlobs: ["**/*.md"],
+      excludeGlobs: ["**/dist/**"],
+      includeExcludedGlobs: ["**/dist/keep/**"],
+      respectGitIgnore: true,
+      maxResults: 25,
+      caseSensitive: true,
+    }]);
+
+    await Reflect.apply(regexCallback, undefined, [{
+      resumeToken: "token-3",
+      resumeMode: "next-chunk",
+      regex: undefined,
+    }]);
+
+    await Reflect.apply(fixedStringCallback, undefined, [{
+      resumeToken: "token-4",
+      resumeMode: "complete-result",
+      fixedString: undefined,
+    }]);
+
+    expect(
+      registerInspectionToolCatalogTestState.buildSearchRegexToolResult,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resumeToken: "token-1",
+        resumeMode: "next-chunk",
+        searchPaths: ["src"],
+        pattern: "preview-.*",
+        filePatterns: ["**/*.ts"],
+        excludePatterns: ["**/dist/**"],
+        includeExcludedGlobs: ["**/dist/keep/**"],
+        respectGitIgnore: true,
+        maxResults: 50,
+        caseSensitive: true,
+      }),
+    );
+    expect(
+      registerInspectionToolCatalogTestState.buildSearchFixedStringToolResult,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resumeToken: "token-2",
+        resumeMode: "complete-result",
+        searchPaths: ["docs"],
+        fixedString: "needle",
+        filePatterns: ["**/*.md"],
+        excludePatterns: ["**/dist/**"],
+        includeExcludedGlobs: ["**/dist/keep/**"],
+        respectGitIgnore: true,
+        maxResults: 25,
+        caseSensitive: true,
+      }),
+    );
+    expect(
+      registerInspectionToolCatalogTestState.buildSearchRegexToolResult,
+    ).toHaveBeenLastCalledWith(expect.objectContaining({ pattern: "" }));
+    expect(
+      registerInspectionToolCatalogTestState.buildSearchFixedStringToolResult,
+    ).toHaveBeenLastCalledWith(expect.objectContaining({ fixedString: "" }));
+  });
 });

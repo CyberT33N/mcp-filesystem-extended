@@ -133,7 +133,6 @@ interface FixedStringBatchCandidateEntry {
 interface FixedStringNativeBatchEntry {
   candidateEntry: FixedStringBatchCandidateEntry;
   candidateRelativePath: string;
-  entryIndexAfter?: number;
   nextUnitIndexAfter?: number;
 }
 
@@ -182,13 +181,6 @@ function createInitialSearchFixedStringTraversalFrames(): SearchFixedStringTrave
 
 function normalizeBatchCandidatePath(candidatePath: string): string {
   return candidatePath.replaceAll("\\", "/").toLowerCase();
-}
-
-function sumFixedStringNativeBatchBytes(batchEntries: FixedStringNativeBatchEntry[]): number {
-  return batchEntries.reduce(
-    (totalBytes, batchEntry) => totalBytes + batchEntry.candidateEntry.size,
-    0,
-  );
 }
 
 function createFixedStringBatchCandidateEntry(
@@ -339,16 +331,14 @@ async function collectFixedStringMatchesFromNativeBatch(
   executionPolicy: SearchExecutionPolicy,
   maxAdditionalResults: number,
 ): Promise<FixedStringNativeBatchSearchResult> {
-  if (batchEntries.length === 0 || maxAdditionalResults <= 0) {
+  if (maxAdditionalResults <= 0) {
     return {
       matches: [],
       totalMatches: 0,
-      truncated: maxAdditionalResults <= 0,
+      truncated: true,
       activeBatchEntryIndex: null,
       activeBatchEntryMatchOffset: 0,
-      stopState: maxAdditionalResults <= 0
-        ? createSearchMaxResultsLimitReachedState(maxAdditionalResults)
-        : createUnstoppedSearchState(),
+      stopState: createSearchMaxResultsLimitReachedState(maxAdditionalResults),
     };
   }
 
@@ -517,16 +507,6 @@ async function collectFixedStringMatchesFromDecodedFallbackExecutionUnit(options
     maxAdditionalResults,
   } = options;
 
-  if (maxAdditionalResults <= 0) {
-    return {
-      matches: [],
-      fileSearched: true,
-      totalMatches: 0,
-      truncated: true,
-      stopState: createSearchMaxResultsLimitReachedState(maxAdditionalResults),
-    };
-  }
-
   const decodedTextFile = await readDecodedInspectionTextFile(
     executionUnit.candidateAbsolutePath,
     executionUnit.resolvedTextEncoding,
@@ -588,13 +568,11 @@ async function materializeFixedStringExecutionPlanFromTraversal(options: {
   let materializationStopState = createUnstoppedSearchState();
   let materializationStopped = false;
 
-  while (traversalFrames.length > 0 && !materializationStopped) {
-    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
-
-    if (currentTraversalFrame === undefined) {
-      break;
-    }
-
+  for (
+    let currentTraversalFrame = traversalFrames.at(-1);
+    currentTraversalFrame !== undefined && !materializationStopped;
+    currentTraversalFrame = traversalFrames.at(-1)
+  ) {
     const currentPath = currentTraversalFrame.directoryRelativePath === ""
       ? validRootPath
       : path.join(validRootPath, currentTraversalFrame.directoryRelativePath);
@@ -632,7 +610,11 @@ async function materializeFixedStringExecutionPlanFromTraversal(options: {
 
     let descendedIntoChildDirectory = false;
 
-    while (currentTraversalFrame.nextEntryIndex < entries.length && !materializationStopped) {
+    for (
+      let entry = entries[currentTraversalFrame.nextEntryIndex];
+      entry !== undefined && !materializationStopped;
+      entry = entries[currentTraversalFrame.nextEntryIndex]
+    ) {
       recordTraversalEntryVisit(traversalRuntimeBudgetState);
 
       try {
@@ -651,12 +633,6 @@ async function materializeFixedStringExecutionPlanFromTraversal(options: {
         }
 
         throw error;
-      }
-
-      const entry = entries[currentTraversalFrame.nextEntryIndex];
-
-      if (entry === undefined) {
-        break;
       }
 
       const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
@@ -708,17 +684,12 @@ async function materializeFixedStringExecutionPlanFromTraversal(options: {
 
       if (candidateEntry.type === "directory") {
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
-
-        if (entryPolicy.shouldTraverse) {
-          traversalFrames.push({
-            directoryRelativePath: rawRelativePath,
-            nextEntryIndex: 0,
-          });
-          descendedIntoChildDirectory = true;
-          break;
-        }
-
-        continue;
+        traversalFrames.push({
+          directoryRelativePath: rawRelativePath,
+          nextEntryIndex: 0,
+        });
+        descendedIntoChildDirectory = true;
+        break;
       }
 
       if (candidateEntry.type !== "file") {
@@ -835,19 +806,17 @@ async function executeMaterializedFixedStringExecutionPlan(options: {
   let totalMatches = 0;
   let nextUnitIndex = executionPlan.nextUnitIndex;
 
-  while (nextUnitIndex < executionPlan.units.length && !searchAborted) {
+  for (
+    let currentExecutionUnit = executionPlan.units[nextUnitIndex];
+    currentExecutionUnit !== undefined && !searchAborted;
+    currentExecutionUnit = executionPlan.units[nextUnitIndex]
+  ) {
     const remainingLocationBudget =
       rootResultLimit - (resultsAlreadyCollected + matches.length);
 
     if (remainingLocationBudget <= 0) {
       searchAborted = true;
       searchStopState = createSearchMaxResultsLimitReachedState(remainingLocationBudget);
-      break;
-    }
-
-    const currentExecutionUnit = executionPlan.units[nextUnitIndex];
-
-    if (currentExecutionUnit === undefined) {
       break;
     }
 
@@ -860,7 +829,7 @@ async function executeMaterializedFixedStringExecutionPlan(options: {
           maxAdditionalResults: remainingLocationBudget,
         });
 
-      filesSearched += decodedFallbackSearchResult.fileSearched ? 1 : 0;
+      filesSearched += 1;
       totalMatches += decodedFallbackSearchResult.totalMatches;
       matches.push(
         ...attachFixedStringAliasAttributions(
@@ -881,16 +850,14 @@ async function executeMaterializedFixedStringExecutionPlan(options: {
       continue;
     }
 
-    const batchEntries: FixedStringNativeBatchEntry[] = [];
+    const batchEntries: Array<FixedStringNativeBatchEntry & { nextUnitIndexAfter: number }> = [];
     let scanUnitIndex = nextUnitIndex;
 
-    while (scanUnitIndex < executionPlan.units.length) {
-      const batchUnit = executionPlan.units[scanUnitIndex];
-
-      if (batchUnit === undefined || batchUnit.kind !== "native") {
-        break;
-      }
-
+    for (
+      let batchUnit = executionPlan.units[scanUnitIndex];
+      batchUnit !== undefined && batchUnit.kind === "native";
+      batchUnit = executionPlan.units[scanUnitIndex]
+    ) {
       batchEntries.push({
         candidateEntry: createFixedStringBatchCandidateEntry(
           batchUnit.candidateAbsolutePath,
@@ -931,7 +898,7 @@ async function executeMaterializedFixedStringExecutionPlan(options: {
       if (activeBatchEntry !== undefined) {
         activeFileRelativePath = activeBatchEntry.candidateRelativePath;
         activeFileMatchOffset = batchSearchResult.activeBatchEntryMatchOffset;
-        nextUnitIndex = activeBatchEntry.nextUnitIndexAfter ?? scanUnitIndex;
+        nextUnitIndex = activeBatchEntry.nextUnitIndexAfter;
       } else {
         nextUnitIndex = scanUnitIndex;
       }
@@ -1116,10 +1083,8 @@ export async function getSearchFixedStringPathResult(
   const useBatchedNativeExecutionPath = !previewFirstAdmissionActive || completeResultRequested;
 
   if (
-    traversalAdmissionDecision.outcome
-    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED
-    || traversalAdmissionDecision.outcome
-    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+    traversalAdmissionDecision.outcome !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE
+    && traversalAdmissionDecision.outcome !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
   ) {
     return {
       root: searchPath,
@@ -1172,7 +1137,7 @@ export async function getSearchFixedStringPathResult(
     return {
       root: searchPath,
       matches: fileSearchResult.matches,
-      filesSearched: fileSearchResult.fileSearched ? 1 : 0,
+      filesSearched: 1,
       totalMatches: fileSearchResult.totalMatches,
       truncated: fileSearchResult.truncated || nextContinuationState !== null,
       error: null,
@@ -1217,9 +1182,7 @@ export async function getSearchFixedStringPathResult(
     return true;
   }
 
-  async function flushPendingNativeBatch(
-    currentTraversalFrame?: SearchFixedStringTraversalFrame,
-  ): Promise<void> {
+  async function flushPendingNativeBatch(): Promise<void> {
     if (pendingNativeBatch.length === 0 || searchAborted) {
       return;
     }
@@ -1248,43 +1211,20 @@ export async function getSearchFixedStringPathResult(
     );
 
     if (batchSearchResult.truncated) {
-      if (
-        completeResultRequested
-        && currentTraversalFrame !== undefined
-        && batchSearchResult.activeBatchEntryIndex !== null
-      ) {
-        const activeBatchEntry = batchEntries[batchSearchResult.activeBatchEntryIndex];
-
-        if (activeBatchEntry !== undefined) {
-          const unprocessedBatchEntries = batchEntries.slice(processedBatchEntryCount);
-          const unprocessedBatchBytes = sumFixedStringNativeBatchBytes(unprocessedBatchEntries);
-
-          totalBytesScanned -= unprocessedBatchBytes;
-          aggregateBudgetState.totalCandidateBytesScanned -= unprocessedBatchBytes;
-          currentTraversalFrame.nextEntryIndex =
-            activeBatchEntry.entryIndexAfter ?? currentTraversalFrame.nextEntryIndex;
-          activeFileRelativePath = activeBatchEntry.candidateRelativePath;
-          activeFileMatchOffset = batchSearchResult.activeBatchEntryMatchOffset;
-        }
-      }
-
       searchAborted = true;
       searchStopState = batchSearchResult.stopState;
     }
   }
 
   if (activeFileRelativePath !== null) {
-    const activeFileAbsolutePath = activeFileRelativePath === ""
-      ? validRootPath
-      : path.join(validRootPath, activeFileRelativePath);
+    const activeFileAbsolutePath = path.join(validRootPath, activeFileRelativePath);
     const activeFileCandidateEntry = await getValidatedPreflightEntry(activeFileAbsolutePath, allowedDirectories);
-    const resumedFilePatterns = activeFileRelativePath === "" ? [] : filePatterns;
 
     const resumedFileSearchResult = await collectFixedStringMatchesFromFileEntry(
       activeFileCandidateEntry,
-      activeFileRelativePath === "" ? searchPath : activeFileRelativePath,
+      activeFileRelativePath,
       fixedString,
-      resumedFilePatterns,
+      filePatterns,
       caseSensitive,
       executionPolicy,
       aggregateBudgetState,
@@ -1302,18 +1242,12 @@ export async function getSearchFixedStringPathResult(
 
     totalBytesScanned = resumedFileSearchResult.totalBytesScanned;
     matchesFound += resumedFileSearchResult.totalMatches;
-    // Deliberate guard (documented, not test-covered): the root-file identity "" is produced
-    // only by the single-file branch, which returns before this shared directory-resume block.
-    // The check keeps this block total over the continuation-state type and is unreachable
-    // through directory sessions by construction.
     results.push(
-      ...(activeFileRelativePath === ""
-        ? resumedFileSearchResult.matches
-        : attachFixedStringAliasAttributions(
-            resumedFileSearchResult.matches,
-            activeFileRelativePath,
-            aliasAttributionState,
-          )),
+      ...attachFixedStringAliasAttributions(
+        resumedFileSearchResult.matches,
+        activeFileRelativePath,
+        aliasAttributionState,
+      ),
     );
 
     if (resumedFileSearchResult.truncated) {
@@ -1383,13 +1317,11 @@ export async function getSearchFixedStringPathResult(
       }
     }
   } else {
-    while (traversalFrames.length > 0 && !searchAborted) {
-      const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
-
-      if (currentTraversalFrame === undefined) {
-        break;
-      }
-
+    for (
+      let currentTraversalFrame = traversalFrames.at(-1);
+      currentTraversalFrame !== undefined && !searchAborted;
+      currentTraversalFrame = traversalFrames.at(-1)
+    ) {
       const currentPath = currentTraversalFrame.directoryRelativePath === ""
         ? validRootPath
         : path.join(validRootPath, currentTraversalFrame.directoryRelativePath);
@@ -1424,7 +1356,11 @@ export async function getSearchFixedStringPathResult(
 
       let descendedIntoChildDirectory = false;
 
-      while (currentTraversalFrame.nextEntryIndex < entries.length && !searchAborted) {
+      for (
+        let entry = entries[currentTraversalFrame.nextEntryIndex];
+        entry !== undefined && !searchAborted;
+        entry = entries[currentTraversalFrame.nextEntryIndex]
+      ) {
         recordTraversalEntryVisit(traversalRuntimeBudgetState);
         try {
           assertTraversalRuntimeBudget(
@@ -1440,12 +1376,6 @@ export async function getSearchFixedStringPathResult(
           }
 
           throw error;
-        }
-
-        const entry = entries[currentTraversalFrame.nextEntryIndex];
-
-        if (entry === undefined) {
-          break;
         }
 
         const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
@@ -1499,15 +1429,12 @@ export async function getSearchFixedStringPathResult(
 
         if (candidateEntry.type === "directory") {
           commitInspectionResumeTraversalEntry(currentTraversalFrame);
-          if (entryPolicy.shouldTraverse) {
-            traversalFrames.push({
-              directoryRelativePath: rawRelativePath,
-              nextEntryIndex: 0,
-            });
-            descendedIntoChildDirectory = true;
-            break;
-          }
-          continue;
+          traversalFrames.push({
+            directoryRelativePath: rawRelativePath,
+            nextEntryIndex: 0,
+          });
+          descendedIntoChildDirectory = true;
+          break;
         }
 
         if (candidateEntry.type !== "file") {
@@ -1516,7 +1443,8 @@ export async function getSearchFixedStringPathResult(
         }
 
         if (
-          shouldStopTraversalPreviewLane(
+          previewLanePlan.candidateByteBudget !== null
+          && shouldStopTraversalPreviewLane(
             aggregateBudgetState.totalCandidateBytesScanned,
             candidateEntry.size,
             previewLanePlan,
@@ -1528,10 +1456,7 @@ export async function getSearchFixedStringPathResult(
             unsupportedStateReason = previewLanePlan.guidanceText;
           }
 
-          searchStopState = createSearchPreviewLaneBudgetState(
-            previewLanePlan.guidanceText
-              ?? `Preview-lane candidate byte budget was exhausted for root '${searchPath}'.`,
-          );
+          searchStopState = createSearchPreviewLaneBudgetState(previewLanePlan.guidanceText);
 
           break;
         }
@@ -1570,7 +1495,7 @@ export async function getSearchFixedStringPathResult(
           }
 
           if (searchCapability.requiresDecodedTextFallback) {
-            await flushPendingNativeBatch(currentTraversalFrame);
+            await flushPendingNativeBatch();
 
             const fileSearchResult = await collectFixedStringMatchesFromFileEntry(
               candidateEntry,
@@ -1618,12 +1543,11 @@ export async function getSearchFixedStringPathResult(
           pendingNativeBatch.push({
             candidateEntry,
             candidateRelativePath: relativePath,
-            entryIndexAfter: currentTraversalFrame.nextEntryIndex + 1,
           });
           commitInspectionResumeTraversalEntry(currentTraversalFrame);
 
           if (pendingNativeBatch.length >= SEARCH_FIXED_STRING_NATIVE_INLINE_BATCH_SIZE) {
-            await flushPendingNativeBatch(currentTraversalFrame);
+            await flushPendingNativeBatch();
 
             if (searchAborted) {
               break;

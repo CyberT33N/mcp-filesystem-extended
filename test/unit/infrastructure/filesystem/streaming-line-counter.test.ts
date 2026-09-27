@@ -49,4 +49,22 @@ describe("streaming_line_counter", () => {
       ),
     ).resolves.toBe(2);
   });
+
+  it("normalizes CRLF line endings while counting", async () => {
+    await writeFile(sampleFilePath, "alpha\r\nbeta\r\n", "utf8");
+
+    await expect(countTotalLinesInFile(sampleFilePath)).resolves.toBe(2);
+  });
+
+  it("counts the final line when the file does not end with a newline", async () => {
+    await writeFile(sampleFilePath, "alpha\nbeta", "utf8");
+
+    await expect(countTotalLinesInFile(sampleFilePath)).resolves.toBe(2);
+  });
+
+  it("trims a trailing carriage return at EOF without a final newline", async () => {
+    await writeFile(sampleFilePath, "alpha\r", "utf8");
+
+    await expect(countTotalLinesInFile(sampleFilePath)).resolves.toBe(1);
+  });
 });

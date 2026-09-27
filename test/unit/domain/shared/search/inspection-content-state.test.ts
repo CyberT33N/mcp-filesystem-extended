@@ -146,4 +146,133 @@ describe("inspection content state", () => {
     expect(capability.isAllowed).toBe(true);
     expect(capability.requiresDecodedTextFallback).toBe(true);
   });
+
+  it("classifies empty sampled content as strongly text-compatible", () => {
+    const classification = classifyInspectionContentState({
+      candidateFileBytes: 0,
+      candidatePath: "fixtures/empty.txt",
+      contentSample: new Uint8Array(0),
+    });
+
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT,
+    );
+    expect(decodeInspectionContentTextBytes(new Uint8Array(0), "utf8")).toBe("");
+  });
+
+  it("keeps tiny non-BOM samples on the UTF-8 encoding surface", () => {
+    const classification = classifyInspectionContentState({
+      candidatePath: "fixtures/two-bytes.custom",
+      contentSample: Uint8Array.from([0x61, 0x00]),
+    });
+
+    expect(classification.resolvedTextEncoding).toBe(
+      INSPECTION_CONTENT_TEXT_ENCODING_LITERALS.UTF8,
+    );
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.BINARY_CONFIDENT,
+    );
+  });
+
+  it("classifies UTF-16 LE surfaces with strong control-byte noise as binary-confident", () => {
+    const contentSample = Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from("\u0000\u0001\u0002\u0003", "utf16le"),
+    ]);
+    const classification = classifyInspectionContentState({
+      candidatePath: "fixtures/control-heavy.dat",
+      contentSample,
+    });
+
+    expect(classification.resolvedTextEncoding).toBe(
+      INSPECTION_CONTENT_TEXT_ENCODING_LITERALS.UTF16LE,
+    );
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.BINARY_CONFIDENT,
+    );
+  });
+
+  it("classifies UTF-16 LE surfaces with moderate control-byte noise as binary-dominant", () => {
+    const contentSample = Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from(`abcdefgh\u0001\u0002`, "utf16le"),
+    ]);
+    const classification = classifyInspectionContentState({
+      candidatePath: "fixtures/moderate-noise.dat",
+      contentSample,
+    });
+
+    expect(classification.resolvedTextEncoding).toBe(
+      INSPECTION_CONTENT_TEXT_ENCODING_LITERALS.UTF16LE,
+    );
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.HYBRID_BINARY_DOMINANT,
+    );
+  });
+
+  it("keeps mixed UTF-8 samples text-dominant when evidence stays below the strong-text bar", () => {
+    const classification = classifyInspectionContentState({
+      candidatePath: "fixtures/mixed.txt",
+      contentSample: new TextEncoder().encode(`${"a".repeat(49)}\u0001`),
+    });
+
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.HYBRID_TEXT_DOMINANT,
+    );
+  });
+
+  it("marks surfaces without any bounded evidence or extension hint as unknown", () => {
+    const classification = classifyInspectionContentState({
+      candidatePath: "fixtures/payload.dat",
+    });
+
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.UNKNOWN_LARGE_SURFACE,
+    );
+    expect(classification.classificationReason).toContain(
+      "No bounded sampled evidence is available for the candidate surface.",
+    );
+  });
+
+  it("keeps strongly text-compatible samples without an extension hint hybrid text-dominant", () => {
+    const classification = classifyInspectionContentState({
+      candidatePath: "fixtures/no-extension",
+      contentSample: new TextEncoder().encode("plain textual content\n"),
+    });
+
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.HYBRID_TEXT_DOMINANT,
+    );
+    expect(classification.classificationReason).toContain(
+      "without a canonical text extension hint",
+    );
+  });
+
+  it("skips replacement characters when counting text-compatible characters", () => {
+    const sampleBytes = new TextEncoder().encode("a".repeat(99));
+    const contentSample = new Uint8Array([...sampleBytes, 0xff]);
+    const classification = classifyInspectionContentState({
+      candidatePath: "fixtures/almost-clean.txt",
+      contentSample,
+    });
+
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.HYBRID_TEXT_DOMINANT,
+    );
+    expect(classification.evidence.nulByteCount).toBe(0);
+  });
+
+  it("evaluates the UTF-16 heuristic for no-BOM samples with zero bytes in even positions", () => {
+    const classification = classifyInspectionContentState({
+      candidatePath: "fixtures/zero-even.custom",
+      contentSample: Uint8Array.from([0x00, 0x00, 0x41, 0x00]),
+    });
+
+    expect(classification.resolvedTextEncoding).toBe(
+      INSPECTION_CONTENT_TEXT_ENCODING_LITERALS.UTF8,
+    );
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.BINARY_CONFIDENT,
+    );
+  });
 });

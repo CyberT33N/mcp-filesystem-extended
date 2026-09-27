@@ -10,6 +10,7 @@ import {
   resetRegexLastIndex,
 } from "@domain/shared/guardrails/regex-search-safety";
 import {
+  REGEX_PATTERN_MAX_CHARS,
   REGEX_SEARCH_EXCERPT_MAX_CHARS,
   REGEX_SEARCH_MAX_CANDIDATE_BYTES,
   REGEX_SEARCH_MAX_RESULTS_HARD_CAP,
@@ -115,5 +116,56 @@ describe("regex search safety", () => {
         REGEX_SEARCH_MAX_CANDIDATE_BYTES + 1,
       ),
     ).toThrow("regex candidate bytes scanned");
+  });
+
+  it("rejects empty regex patterns before compilation", () => {
+    expect(() =>
+      createGuardrailedSearchRegexExecutionPlan(
+        "search_file_contents_by_regex",
+        "",
+        false,
+      ),
+    ).toThrow("Empty regex patterns do not produce content-bearing matches");
+  });
+
+  it("truncates long pattern summaries in backend-dialect rejection errors", () => {
+    const longPattern = `(${"a".repeat(REGEX_PATTERN_MAX_CHARS)})`;
+
+    const error = createRegexBackendDialectRejectedError(
+      "search_file_contents_by_regex",
+      longPattern,
+      false,
+      "lane rejected the pattern",
+    );
+
+    expect(error.message).toContain("…");
+    expect(error.message).not.toContain(longPattern);
+  });
+
+  it("bounds regex excerpts for empty, missing, oversized, and tail-side matches", () => {
+    const longLine = "a".repeat(REGEX_SEARCH_EXCERPT_MAX_CHARS + 100);
+
+    const emptyMatchExcerpt = normalizeRegexMatchExcerpt(longLine, "");
+    expect(emptyMatchExcerpt.length).toBe(REGEX_SEARCH_EXCERPT_MAX_CHARS);
+
+    const missingMatchExcerpt = normalizeRegexMatchExcerpt(longLine, "zzz");
+    expect(missingMatchExcerpt).toBe(longLine.slice(0, REGEX_SEARCH_EXCERPT_MAX_CHARS));
+
+    const oversizedMatch = "m".repeat(REGEX_SEARCH_EXCERPT_MAX_CHARS + 50);
+    const lineWithOversizedMatch = `prefix-${oversizedMatch}-suffix`;
+    const oversizedExcerpt = normalizeRegexMatchExcerpt(
+      lineWithOversizedMatch,
+      oversizedMatch,
+    );
+    expect(oversizedExcerpt).toBe(oversizedMatch.slice(0, REGEX_SEARCH_EXCERPT_MAX_CHARS));
+
+    const tailLine = `${"a".repeat(400)}needle`;
+    const tailExcerpt = normalizeRegexMatchExcerpt(tailLine, "needle");
+    expect(tailExcerpt).toContain("needle");
+    expect(tailExcerpt.length).toBeLessThanOrEqual(REGEX_SEARCH_EXCERPT_MAX_CHARS);
+  });
+
+  it("returns short lines unchanged without windowing", () => {
+    expect(normalizeRegexMatchExcerpt("short line", "short")).toBe("short line");
   });
 });

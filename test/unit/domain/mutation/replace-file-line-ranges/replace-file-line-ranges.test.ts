@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { handleReplaceFileLineRanges } from "@domain/mutation/replace-file-line-ranges/handler";
 import { applyFileLineRangeReplacements } from "@domain/mutation/replace-file-line-ranges/helpers";
 import { ReplaceFileLineRangesArgsSchema } from "@domain/mutation/replace-file-line-ranges/schema";
+import { LINE_REPLACEMENT_TOTAL_INPUT_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 
 describe("replace_file_line_ranges", () => {
   let sandboxRootPath = "";
@@ -212,5 +213,84 @@ describe("replace_file_line_ranges", () => {
       },
     ]);
     expect(parsed.dryRun).toBe(true);
+  });
+
+  it("rejects oversize cumulative replacement payloads before any file write", async () => {
+    const oversizedReplacement = "x".repeat(LINE_REPLACEMENT_TOTAL_INPUT_CHARS + 1);
+
+    await expect(
+      handleReplaceFileLineRanges(
+        [
+          {
+            path: targetFilePath,
+            replacements: [
+              {
+                startLine: 1,
+                endLine: 1,
+                replacementText: oversizedReplacement,
+              },
+            ],
+          },
+        ],
+        false,
+        { preserveIndentation: true },
+        allowedDirectories,
+      ),
+    ).rejects.toThrow("replace_file_line_ranges");
+  });
+
+  it("keeps file-level failures in the batch summary", async () => {
+    const outsidePath = join(tmpdir(), "outside-replace-target.txt");
+
+    const output = await handleReplaceFileLineRanges(
+      [
+        {
+          path: targetFilePath,
+          replacements: [
+            {
+              startLine: 2,
+              endLine: 2,
+              replacementText: "'ok',",
+            },
+          ],
+        },
+        {
+          path: outsidePath,
+          replacements: [
+            {
+              startLine: 1,
+              endLine: 1,
+              replacementText: "nope",
+            },
+          ],
+        },
+      ],
+      true,
+      { preserveIndentation: true },
+      allowedDirectories,
+    );
+
+    expect(output).toContain("1 files updated successfully");
+    expect(output).toContain("1 files failed");
+    expect(output).toContain("Failed to replace line ranges in");
+  });
+
+  it("keeps the replacement unindented when the replaced line carries no indentation", async () => {
+    await writeFile(targetFilePath, "alpha\n  beta\n", "utf8");
+
+    await applyFileLineRangeReplacements(
+      targetFilePath,
+      [
+        {
+          startLine: 1,
+          endLine: 1,
+          replacementText: "gamma",
+        },
+      ],
+      false,
+      { preserveIndentation: true },
+    );
+
+    await expect(readFile(targetFilePath, "utf8")).resolves.toBe("gamma\n  beta\n");
   });
 });

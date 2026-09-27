@@ -575,6 +575,74 @@ describe("search_file_contents_by_regex", () => {
     }
   });
 
+  it("merges continuation states when every requested root still owns a pending frontier", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-handler-merge-"));
+    const store = new InspectionResumeSessionSqliteStore(
+      join(sandboxRootPath, "sessions.sqlite"),
+    );
+
+    try {
+      mockedGetSearchRegexPathResult.mockImplementation(async (options: { searchPath: string }) => ({
+        admissionOutcome: "preview-first",
+        error: null,
+        filesSearched: 5,
+        matches: [
+          {
+            content: "referenced by their project numbers;",
+            file: `${options.searchPath}/foundation.mdc`,
+            line: 398,
+            match: "project number",
+          },
+        ],
+        nextContinuationState: {
+          traversalFrames: [{ directoryRelativePath: "", nextEntryIndex: 5 }],
+          activeFileRelativePath: null,
+          activeFileMatchOffset: 0,
+        },
+        root: options.searchPath,
+        totalMatches: 1,
+        truncated: true,
+      }));
+
+      const result = await getSearchRegexResult({
+        resumeToken: undefined,
+        resumeMode: undefined,
+        searchPaths: ["src", "lib"],
+        pattern: "project[_ ]number",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 100,
+        caseSensitive: false,
+        allowedDirectories: [sandboxRootPath],
+        inspectionResumeSessionStore: store,
+      });
+
+      expect(result.resume.resumable).toBe(true);
+
+      const activeResumeToken = result.resume.resumeToken;
+
+      if (activeResumeToken === null) {
+        throw new Error("Expected an active resume token after the multi-root truncating base pass.");
+      }
+
+      const persistedSession = store.loadActiveSession(
+        activeResumeToken,
+        "search_file_contents_by_regex",
+        "search_file_contents_by_regex",
+      );
+
+      expect(Object.keys(persistedSession?.resumeState.rootTraversalStates ?? {}).sort()).toEqual([
+        "lib",
+        "src",
+      ]);
+    } finally {
+      store.close();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
   it("reports the session-cumulative delivery on the terminal completion pass of a resumed session", async () => {
     const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-handler-terminal-"));
     const store = new InspectionResumeSessionSqliteStore(

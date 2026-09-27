@@ -171,4 +171,57 @@ describe("gitignore traversal enrichment", () => {
       ),
     ).resolves.toBe(false);
   });
+
+  it("normalizes empty, dot-prefixed, and trailing-slash directory paths through the cache layer", async () => {
+    mockedReadFile.mockRejectedValue(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
+
+    const hierarchy = createGitIgnoreTraversalHierarchy("C:/workspace/root");
+
+    await expect(
+      getGitIgnoreTraversalEnrichmentForDirectory(hierarchy, ""),
+    ).resolves.toBeNull();
+    await expect(
+      getGitIgnoreTraversalEnrichmentForDirectory(hierarchy, "./nested/"),
+    ).resolves.toBeNull();
+    await expect(
+      getGitIgnoreTraversalEnrichmentForDirectory(hierarchy, "nested"),
+    ).resolves.toBeNull();
+
+    expect(mockedReadFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("never excludes the traversal root itself", async () => {
+    const hierarchy = createGitIgnoreTraversalHierarchy("C:/workspace/root");
+
+    await expect(
+      isGitIgnoreTraversalHierarchyExcluded(".", true, hierarchy),
+    ).resolves.toBe(false);
+  });
+
+  it("honors negation rules that re-include previously ignored candidates", async () => {
+    mockedReadFile.mockImplementation(async (candidatePath: string) => {
+      if (candidatePath.replaceAll("\\", "/") === "C:/workspace/root/.gitignore") {
+        return "*.log\n!keep.log\n";
+      }
+
+      throw Object.assign(new Error("missing"), { code: "ENOENT" });
+    });
+
+    const hierarchy = createGitIgnoreTraversalHierarchy("C:/workspace/root");
+
+    await expect(
+      isGitIgnoreTraversalHierarchyExcluded("keep.log", false, hierarchy),
+    ).resolves.toBe(false);
+    await expect(
+      isGitIgnoreTraversalHierarchyExcluded("drop.log", false, hierarchy),
+    ).resolves.toBe(true);
+  });
+
+  it("defaults the source-path label when no override is provided", () => {
+    const enrichment = createGitIgnoreTraversalEnrichment("dist/\n");
+
+    expect(enrichment?.sourcePath).toBe(ROOT_LOCAL_GITIGNORE_TRAVERSAL_SOURCE_PATH);
+  });
 });

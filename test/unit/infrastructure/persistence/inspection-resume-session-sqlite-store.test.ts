@@ -163,6 +163,17 @@ describe("inspection_resume_session_sqlite_store", () => {
     ).toHaveBeenCalled();
   });
 
+  it("returns null for unknown resume tokens", () => {
+    const store = new InspectionResumeSessionSqliteStore(databasePath);
+
+    expect(
+      store.loadActiveSession("insresume_missing", "count_lines", "count-lines"),
+    ).toBeNull();
+    expect(
+      inspectionResumeSessionStoreTestState.mockedWarn,
+    ).toHaveBeenCalled();
+  });
+
   it("reclaims database file space when vacuum runs after expired-session cleanup", async () => {
     const sandboxRootPath = await mkdtemp(
       join(tmpdir(), "mcp-fs-resume-session-store-vacuum-"),

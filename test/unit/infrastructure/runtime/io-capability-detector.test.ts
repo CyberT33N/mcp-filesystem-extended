@@ -80,4 +80,106 @@ describe("io_capability_detector", () => {
       ),
     ).toBe(PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE);
   });
+
+  it("classifies S, B, and D source-read tiers and S, A, and D spool-write tiers from calibrated evidence", () => {
+    expect(
+      detectIoCapabilityProfile({
+        calibration: {
+          measuredSourceReadBytesPerSecond: 2_500_000_000,
+          measuredSpoolWriteBytesPerSecond: 1_500_000_000,
+        },
+      }),
+    ).toMatchObject({
+      sourceReadTier: SourceReadTier.S,
+      spoolWriteTier: SpoolWriteTier.S,
+    });
+
+    expect(
+      detectIoCapabilityProfile({
+        calibration: {
+          measuredSourceReadBytesPerSecond: 250_000_000,
+          measuredSpoolWriteBytesPerSecond: 500_000_000,
+        },
+      }),
+    ).toMatchObject({
+      sourceReadTier: SourceReadTier.B,
+      spoolWriteTier: SpoolWriteTier.A,
+    });
+
+    expect(
+      detectIoCapabilityProfile({
+        calibration: {
+          measuredSourceReadBytesPerSecond: 1_000_000,
+          measuredSpoolWriteBytesPerSecond: 1_000_000,
+        },
+      }),
+    ).toMatchObject({
+      sourceReadTier: SourceReadTier.D,
+      spoolWriteTier: SpoolWriteTier.D,
+    });
+  });
+
+  it("prefers telemetry evidence for origin, confidence, and calibration timestamp during detection", () => {
+    const profile = detectIoCapabilityProfile({
+      telemetry: {
+        observedSourceReadBytesPerSecond: 900_000_000,
+        observedAt: "2026-01-09T00:00:00.000Z",
+      },
+    });
+
+    expect(profile.sampleOrigin).toBe(IoCapabilitySampleOrigin.RUNTIME_TELEMETRY);
+    expect(profile.runtimeConfidenceTier).toBe(RuntimeConfidenceTier.HIGH);
+    expect(profile.lastCalibratedAt).toBe("2026-01-09T00:00:00.000Z");
+    expect(profile.estimatedSourceReadBytesPerSecond).toBe(900_000_000);
+  });
+
+  it("keeps the current estimates when telemetry carries only a cpu tier signal", () => {
+    const merged = mergeIoCapabilityRuntimeTelemetry(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+      { detectedCpuRegexTier: CpuRegexTier.A },
+    );
+
+    expect(merged.cpuRegexTier).toBe(CpuRegexTier.A);
+    expect(merged.estimatedSourceReadBytesPerSecond).toBe(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE.estimatedSourceReadBytesPerSecond,
+    );
+    expect(merged.estimatedSpoolWriteBytesPerSecond).toBe(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE.estimatedSpoolWriteBytesPerSecond,
+    );
+    expect(merged.sampleOrigin).toBe(IoCapabilitySampleOrigin.RUNTIME_TELEMETRY);
+    expect(merged.lastCalibratedAt).toBeNull();
+  });
+
+  it("detects calibration data from any single calibrated evidence channel", () => {
+    expect(
+      detectIoCapabilityProfile({
+        calibration: { measuredSpoolWriteBytesPerSecond: 500_000_000 },
+      }).sampleOrigin,
+    ).toBe(IoCapabilitySampleOrigin.CALIBRATED_PROBE);
+
+    expect(
+      detectIoCapabilityProfile({
+        calibration: { detectedCpuRegexTier: CpuRegexTier.A },
+      }).sampleOrigin,
+    ).toBe(IoCapabilitySampleOrigin.CALIBRATED_PROBE);
+  });
+
+  it("keeps a null calibration timestamp when telemetry omits observedAt", () => {
+    const profile = detectIoCapabilityProfile({
+      telemetry: { observedSourceReadBytesPerSecond: 900_000_000 },
+    });
+
+    expect(profile.lastCalibratedAt).toBeNull();
+  });
+
+  it("keeps the current cpu tier when telemetry omits it", () => {
+    const merged = mergeIoCapabilityRuntimeTelemetry(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+      { observedSourceReadBytesPerSecond: 900_000_000 },
+    );
+
+    expect(merged.cpuRegexTier).toBe(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE.cpuRegexTier,
+    );
+  });
 });

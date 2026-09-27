@@ -112,4 +112,24 @@ describe("verify_file_checksums", () => {
 
     expect(parsed.algorithm).toBe("sha256");
   });
+
+  it("formats the error section when verification fails at the filesystem boundary", async () => {
+    const matchingHash = createHash("sha256").update("match\n").digest("hex");
+    const missingFilePath = join(sandboxRootPath, "missing.txt");
+
+    const output = await handleChecksumFilesVerif(
+      [
+        {
+          path: missingFilePath,
+          expectedHash: matchingHash,
+        },
+      ],
+      "sha256",
+      allowedDirectories,
+    );
+
+    expect(output).toContain("⚠️ Errors: 1");
+    expect(output).toContain("Errors:");
+    expect(output).toContain(`! ${missingFilePath}:`);
+  });
 });

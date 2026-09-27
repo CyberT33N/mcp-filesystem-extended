@@ -53,7 +53,15 @@ export interface SearchFilesResult {
    * stays in `matches` as the truthful traversal path; the marking adds the alias nature.
    */
   symlinkMatches?: FileSystemEntrySymlinkMarking[];
-  admissionOutcome?: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+
+  /**
+   * Canonical traversal-admission outcome chosen for the current root before execution began.
+   *
+   * @remarks
+   * Always present: every name-search traversal resolves its admission decision up front, so
+   * consumers never re-derive or default the outcome downstream.
+   */
+  admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
   nextContinuationState?: FindPathsByNameContinuationState | null;
 }
 
@@ -211,13 +219,11 @@ export async function searchFiles(
     ? createInitialFindPathsByNameTraversalFrames()
     : cloneFindPathsByNameTraversalFrames(continuationState.traversalFrames);
 
-  while (traversalFrames.length > 0 && !truncated) {
-    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
-
-    if (currentTraversalFrame === undefined) {
-      break;
-    }
-
+  for (
+    let currentTraversalFrame = traversalFrames.at(-1);
+    currentTraversalFrame !== undefined && !truncated;
+    currentTraversalFrame = traversalFrames.at(-1)
+  ) {
     const currentPath = currentTraversalFrame.directoryRelativePath === ""
       ? validatedRootPath
       : path.join(validatedRootPath, currentTraversalFrame.directoryRelativePath);
@@ -249,7 +255,11 @@ export async function searchFiles(
     const entries = await readSortedDirectoryEntries(currentPath);
     let descendedIntoChildDirectory = false;
 
-    while (currentTraversalFrame.nextEntryIndex < entries.length && !truncated) {
+    for (
+      let entry = entries[currentTraversalFrame.nextEntryIndex];
+      entry !== undefined && !truncated;
+      entry = entries[currentTraversalFrame.nextEntryIndex]
+    ) {
       try {
         recordTraversalEntryVisit(traversalRuntimeBudgetState);
         assertTraversalRuntimeBudget(
@@ -270,12 +280,6 @@ export async function searchFiles(
         }
 
         throw error;
-      }
-
-      const entry = entries[currentTraversalFrame.nextEntryIndex];
-
-      if (entry === undefined) {
-        break;
       }
 
       const fullPath = path.join(currentPath, entry.name);

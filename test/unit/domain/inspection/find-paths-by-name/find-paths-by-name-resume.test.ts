@@ -431,4 +431,148 @@ describe("find_paths_by_name resume lifecycle", () => {
       "Reduce the discovery scope by narrowing roots or making nameContains more specific.",
     );
   });
+
+  it("falls back to next-chunk mode when the resume request carries no explicit mode", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    const seededSession = activeStore.createSession({
+      endpointName: "find_paths_by_name",
+      familyMember: "find_paths_by_name",
+      requestPayload: {
+        directoryPaths: [sandboxRootPath],
+        pattern: "schema",
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+      },
+      resumeState: {
+        rootTraversalStates: {
+          [sandboxRootPath]: {
+            traversalFrames: [{ directoryRelativePath: "", nextEntryIndex: 0 }],
+          },
+        },
+        deliveredTotals: { matchCount: 0 },
+      },
+      admissionOutcome: "preview-first",
+    });
+
+    const result = await getFindPathsByNameResult(
+      seededSession.resumeToken,
+      undefined,
+      [],
+      "",
+      [],
+      [],
+      false,
+      activeStore,
+      [sandboxRootPath],
+      100,
+    );
+
+    expect(result.resume.resumable).toBe(true);
+    expect(result.admission.outcome).toBe("preview-first");
+  });
+
+  it("merges continuation states from multiple truncating roots into one persisted session", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    const secondaryRootPath = join(sandboxRootPath, "secondary");
+    await mkdir(secondaryRootPath, { recursive: true });
+    await writeFile(join(secondaryRootPath, "schema-four.ts"), "export const four = 4;\n");
+
+    const result = await getFindPathsByNameResult(
+      undefined,
+      undefined,
+      [sandboxRootPath, secondaryRootPath],
+      "schema",
+      [],
+      [],
+      false,
+      activeStore,
+      [sandboxRootPath, secondaryRootPath],
+      1,
+    );
+
+    expect(result.truncated).toBe(true);
+    expect(result.roots).toHaveLength(2);
+    expect(result.resume.resumable).toBe(true);
+  });
+
+  it("merges continuation states when every requested root still owns a pending frontier", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    const secondaryRootPath = join(sandboxRootPath, "secondary");
+    await mkdir(secondaryRootPath, { recursive: true });
+    await writeFile(join(secondaryRootPath, "schema-four.ts"), "export const four = 4;\n");
+    await writeFile(join(secondaryRootPath, "schema-five.ts"), "export const five = 5;\n");
+
+    const result = await getFindPathsByNameResult(
+      undefined,
+      undefined,
+      [sandboxRootPath, secondaryRootPath],
+      "schema",
+      [],
+      [],
+      false,
+      activeStore,
+      [sandboxRootPath, secondaryRootPath],
+      1,
+    );
+
+    expect(result.truncated).toBe(true);
+    expect(result.roots).toHaveLength(2);
+    expect(result.resume.resumable).toBe(true);
+
+    const activeResumeToken = result.resume.resumeToken;
+
+    if (activeResumeToken === null) {
+      throw new Error("Expected an active resume token after the multi-root truncating base pass.");
+    }
+
+    const persistedSession = activeStore.loadActiveSession(
+      activeResumeToken,
+      "find_paths_by_name",
+      "find_paths_by_name",
+    );
+
+    expect(Object.keys(persistedSession?.resumeState.rootTraversalStates ?? {})).toEqual([
+      sandboxRootPath,
+      secondaryRootPath,
+    ]);
+  });
+
+  it("falls back to canonical narrowing guidance when the admission decision carries no guidance text", async () => {
+    mockedResolveTraversalWorkloadAdmissionDecision.mockReturnValueOnce({
+      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED,
+      guidanceText: null,
+    });
+
+    await expect(
+      getFindPathsByNameResult(
+        undefined,
+        undefined,
+        [sandboxRootPath],
+        "schema",
+        [],
+        [],
+        false,
+        store,
+        [sandboxRootPath],
+        100,
+      ),
+    ).rejects.toThrow(`Narrow the requested root '${sandboxRootPath}'`);
+  });
 });

@@ -1,8 +1,8 @@
-import { lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import fs, { lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handleCopyPaths } from "@domain/mutation/copy-paths/handler";
 import {
@@ -11,12 +11,48 @@ import {
 } from "@domain/mutation/copy-paths/helpers";
 import { CopyPathsArgsSchema } from "@domain/mutation/copy-paths/schema";
 
+/**
+ * Hoisted guardrail mock state used to drive the non-Error defensive branch of the batch guard.
+ * The real implementation is captured at mock-registration time so the delegation can be
+ * re-applied after `vi.restoreAllMocks()` strips mock implementations between tests.
+ */
+const mutationGuardrailsMockState: {
+  mockedAssertPathMutationBatchBudget: ReturnType<typeof vi.fn>;
+  realAssertPathMutationBatchBudget?: (toolName: string, operationCount: number) => void;
+} = vi.hoisted(() => ({
+  mockedAssertPathMutationBatchBudget: vi.fn(),
+}));
+
+vi.mock("@domain/mutation/shared/mutation-guardrails", async (importOriginal) => {
+  const originalModule = await importOriginal<typeof import("@domain/mutation/shared/mutation-guardrails")>();
+
+  mutationGuardrailsMockState.realAssertPathMutationBatchBudget = originalModule.assertPathMutationBatchBudget;
+  mutationGuardrailsMockState.mockedAssertPathMutationBatchBudget.mockImplementation(
+    originalModule.assertPathMutationBatchBudget,
+  );
+
+  return {
+    ...originalModule,
+    assertPathMutationBatchBudget: mutationGuardrailsMockState.mockedAssertPathMutationBatchBudget,
+  };
+});
+
 describe("copy_paths", () => {
   let sandboxRootPath = "";
   let allowedDirectories: string[] = [];
   let sourceFilePath = "";
   let secondSourceFilePath = "";
   let sourceDirectoryPath = "";
+
+  beforeEach(() => {
+    const realAssertPathMutationBatchBudget = mutationGuardrailsMockState.realAssertPathMutationBatchBudget;
+
+    if (realAssertPathMutationBatchBudget !== undefined) {
+      mutationGuardrailsMockState.mockedAssertPathMutationBatchBudget.mockImplementation(
+        realAssertPathMutationBatchBudget,
+      );
+    }
+  });
 
   beforeEach(async () => {
     sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-copy-paths-"));
@@ -36,6 +72,8 @@ describe("copy_paths", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+
     if (sandboxRootPath !== "") {
       await rm(sandboxRootPath, { recursive: true, force: true });
     }
@@ -363,5 +401,115 @@ describe("copy_paths", () => {
         overwrite: true,
       },
     ]);
+  });
+
+  it("refuses to overwrite an existing destination without the overwrite flag", async () => {
+    const destinationFilePath = join(sandboxRootPath, "existing.txt");
+    await writeFile(destinationFilePath, "existing payload", "utf8");
+
+    const output = await handleCopyPaths(
+      [
+        {
+          source: sourceFilePath,
+          destination: destinationFilePath,
+          recursive: false,
+          overwrite: false,
+        },
+      ],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("Destination already exists");
+    expect(await readFile(destinationFilePath, "utf8")).toBe("existing payload");
+  });
+
+  it("rethrows destination inspection failures that are not missing-entry signals", async () => {
+    vi.spyOn(fs, "access").mockRejectedValueOnce(
+      Object.assign(new Error("permission denied"), { code: "EACCES" }),
+    );
+    const destinationFilePath = join(sandboxRootPath, "target.txt");
+
+    const output = await handleCopyPaths(
+      [
+        {
+          source: sourceFilePath,
+          destination: destinationFilePath,
+          recursive: false,
+          overwrite: false,
+        },
+      ],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("Error copying");
+    expect(output).toContain("permission denied");
+  });
+
+  it("rethrows non-Error destination inspection failures", async () => {
+    vi.spyOn(fs, "access").mockRejectedValueOnce("raw access failure");
+    const destinationFilePath = join(sandboxRootPath, "target.txt");
+
+    const output = await handleCopyPaths(
+      [
+        {
+          source: sourceFilePath,
+          destination: destinationFilePath,
+          recursive: false,
+          overwrite: false,
+        },
+      ],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("raw access failure");
+  });
+
+  it("refuses directory copies without the recursive flag", async () => {
+    const output = await handleCopyPaths(
+      [
+        {
+          source: sourceDirectoryPath,
+          destination: join(sandboxRootPath, "dir-copy"),
+          recursive: false,
+          overwrite: false,
+        },
+      ],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("Source is a directory");
+  });
+
+  it("returns the guardrail message when the batch exceeds the path-mutation ceiling", async () => {
+    const operations = Array.from({ length: 201 }, (_, index) => ({
+      destination: join(sandboxRootPath, `copy-${index}.txt`),
+      overwrite: false,
+      recursive: false,
+      source: sourceFilePath,
+    }));
+
+    const output = await handleCopyPaths(operations, allowedDirectories);
+
+    expect(output).toContain("copy_paths");
+  });
+
+  it("returns the stringified refusal when the batch guard throws a non-Error value", async () => {
+    mutationGuardrailsMockState.mockedAssertPathMutationBatchBudget.mockImplementationOnce(() => {
+      throw "raw guardrail refusal";
+    });
+
+    const output = await handleCopyPaths(
+      [
+        {
+          source: sourceFilePath,
+          destination: join(sandboxRootPath, "target.txt"),
+          recursive: false,
+          overwrite: false,
+        },
+      ],
+      allowedDirectories,
+    );
+
+    expect(output).toBe("raw guardrail refusal");
   });
 });

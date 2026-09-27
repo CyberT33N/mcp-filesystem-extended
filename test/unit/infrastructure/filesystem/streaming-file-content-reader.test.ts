@@ -253,4 +253,104 @@ describe("streaming_file_content_reader", () => {
       ),
     ).resolves.toBe(false);
   });
+
+  it("rejects chunk cursors whose encoded offset is not numeric", async () => {
+    await writeFile(utf8FilePath, "alpha", "utf8");
+
+    await expect(
+      readFileContentChunkCursor({
+        byteCount: 1,
+        cursor: "cursor:abc",
+        textEncoding: "utf8",
+        totalFileBytes: 5,
+        validPath: utf8FilePath,
+      }),
+    ).rejects.toThrow("not numeric");
+  });
+
+  it("rejects line windows on files without addressable lines", async () => {
+    await writeFile(utf8FilePath, "", "utf8");
+
+    await expect(
+      readFileContentLineRange({
+        lineCount: 1,
+        startLine: 1,
+        textEncoding: "utf8",
+        validPath: utf8FilePath,
+      }),
+    ).rejects.toThrow("file has 0 addressable lines");
+  });
+
+  it("rejects byte windows on empty files and reports no newline terminator", async () => {
+    await writeFile(utf8FilePath, "", "utf8");
+
+    await expect(
+      readFileContentByteRange({
+        byteCount: 1,
+        startByte: 0,
+        textEncoding: "utf8",
+        totalFileBytes: 0,
+        validPath: utf8FilePath,
+      }),
+    ).rejects.toThrow("0 bytes and no addressable byte positions");
+
+    await expect(
+      readFileEndsWithNewline(utf8FilePath, 0, "utf8"),
+    ).resolves.toBe(false);
+  });
+
+  it("detects newline terminators on utf16le surfaces with code-unit alignment", async () => {
+    await writeFile(utf16FilePath, Buffer.from("a\n", "utf16le"));
+    await expect(
+      readFileEndsWithNewline(
+        utf16FilePath,
+        Buffer.byteLength("a\n", "utf16le"),
+        "utf16le",
+      ),
+    ).resolves.toBe(true);
+
+    await writeFile(utf16FilePath, Buffer.from("a", "utf16le"));
+    await expect(
+      readFileEndsWithNewline(
+        utf16FilePath,
+        Buffer.byteLength("a", "utf16le"),
+        "utf16le",
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it("reports no newline terminator for sub-code-unit utf16le surfaces", async () => {
+    await writeFile(utf16FilePath, Buffer.from([0x61]));
+
+    await expect(readFileEndsWithNewline(utf16FilePath, 1, "utf16le")).resolves.toBe(false);
+  });
+
+  it("rejects utf16le byte windows that decode to an odd byte count", async () => {
+    await writeFile(utf16FilePath, Buffer.from([0x61, 0x00, 0x62]));
+
+    await expect(
+      readFileContentByteRange({
+        byteCount: 4,
+        startByte: 0,
+        textEncoding: "utf16le",
+        totalFileBytes: 3,
+        validPath: utf16FilePath,
+      }),
+    ).rejects.toThrow("odd byte count");
+  });
+
+  it("returns a null next offset when the byte window reaches EOF", async () => {
+    await writeFile(utf8FilePath, "alpha", "utf8");
+
+    const result = await readFileContentByteRange({
+      byteCount: 100,
+      startByte: 0,
+      textEncoding: "utf8",
+      totalFileBytes: 5,
+      validPath: utf8FilePath,
+    });
+
+    expect(result.hasMore).toBe(false);
+    expect(result.nextByteOffset).toBeNull();
+  });
 });

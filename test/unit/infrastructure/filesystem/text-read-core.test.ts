@@ -10,7 +10,10 @@ import {
   INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS,
   INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES,
 } from "@domain/shared/guardrails/tool-guardrail-limits";
-import { INSPECTION_CONTENT_STATE_LITERALS } from "@domain/shared/search/inspection-content-state";
+import {
+  classifyInspectionContentState,
+  INSPECTION_CONTENT_STATE_LITERALS,
+} from "@domain/shared/search/inspection-content-state";
 import {
   assertSupportedTextReadSurface,
   formatLineNumberedTextContent,
@@ -145,5 +148,69 @@ describe("text_read_core", () => {
   it("does not invent a phantom EOF line when the decoded content ends with a newline", () => {
     expect(formatLineNumberedTextContent("alpha\nbeta\n", 1)).toBe("1: alpha\n2: beta");
     expect(formatLineNumberedTextContent("", 1)).toBe("");
+  });
+
+  it("rejects binary-dominant hybrid surfaces with the capability reason", () => {
+    const noisySample = Buffer.alloc(100, 0x61);
+
+    for (let index = 0; index < 10; index += 1) {
+      noisySample[index * 10] = 0xff;
+    }
+
+    const classification = classifyInspectionContentState({
+      candidatePath: join(sandboxRootPath, "noisy.dat"),
+      candidateFileBytes: noisySample.byteLength,
+      contentSample: noisySample,
+    });
+
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.HYBRID_BINARY_DOMINANT,
+    );
+    expect(() =>
+      assertSupportedTextReadSurface(
+        "read_file_content",
+        { requestedPath: join(sandboxRootPath, "noisy.dat") },
+        classification,
+      )
+    ).toThrow("binary-dominant");
+  });
+
+  it("rejects unknown large surfaces when bounded evidence is missing", async () => {
+    const classification = classifyInspectionContentState({
+      candidatePath: join(sandboxRootPath, "huge.dat"),
+      candidateFileBytes: INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES,
+    });
+
+    expect(classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.UNKNOWN_LARGE_SURFACE,
+    );
+
+    const entry = {
+      requestedPath: join(sandboxRootPath, "huge.dat"),
+      validPath: utf8FilePath,
+      totalFileBytes: INSPECTION_CONTENT_STATE_UNKNOWN_LARGE_SURFACE_MIN_BYTES,
+    };
+
+    await expect(
+      readValidatedFullTextFile(entry, "read_file_content", classification),
+    ).rejects.toThrow("cannot confirm a text-compatible surface");
+  });
+
+  it("resolves the inspection state itself when callers omit a pre-resolved state", async () => {
+    const fileContent = "self resolved";
+    await writeFile(utf8FilePath, fileContent, "utf8");
+
+    const entry = {
+      requestedPath: utf8FilePath,
+      validPath: utf8FilePath,
+      totalFileBytes: Buffer.byteLength(fileContent, "utf8"),
+    };
+
+    const result = await readValidatedFullTextFile(entry, "read_file_content");
+
+    expect(result.content).toBe(fileContent);
+    expect(result.classification.resolvedState).toBe(
+      INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT,
+    );
   });
 });

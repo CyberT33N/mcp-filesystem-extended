@@ -623,13 +623,11 @@ async function getFindFilesByGlobRootResult(
     ? createInitialFindFilesByGlobTraversalFrames()
     : cloneFindFilesByGlobTraversalFrames(continuationState.traversalFrames);
 
-  while (traversalFrames.length > 0 && !searchAborted) {
-    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
-
-    if (currentTraversalFrame === undefined) {
-      break;
-    }
-
+  for (
+    let currentTraversalFrame = traversalFrames.at(-1);
+    currentTraversalFrame !== undefined && !searchAborted;
+    currentTraversalFrame = traversalFrames.at(-1)
+  ) {
     const currentPath = currentTraversalFrame.directoryRelativePath === ""
       ? validRootPath
       : path.join(validRootPath, currentTraversalFrame.directoryRelativePath);
@@ -665,7 +663,11 @@ async function getFindFilesByGlobRootResult(
 
     let descendedIntoChildDirectory = false;
 
-    while (currentTraversalFrame.nextEntryIndex < entries.length && !searchAborted) {
+    for (
+      let entry = entries[currentTraversalFrame.nextEntryIndex];
+      entry !== undefined && !searchAborted;
+      entry = entries[currentTraversalFrame.nextEntryIndex]
+    ) {
       try {
         recordTraversalEntryVisit(traversalRuntimeBudgetState);
         assertTraversalRuntimeBudget(
@@ -682,12 +684,6 @@ async function getFindFilesByGlobRootResult(
         }
 
         throw error;
-      }
-
-      const entry = entries[currentTraversalFrame.nextEntryIndex];
-
-      if (entry === undefined) {
-        break;
       }
 
       const fullPath = path.join(currentPath, entry.name);

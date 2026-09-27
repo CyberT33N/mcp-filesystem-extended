@@ -579,13 +579,11 @@ async function collectDirectoryEntriesPreviewChunk(
   let estimatedResponseChars = LIST_DIRECTORY_ENTRIES_PREVIEW_TEXT_RESPONSE_OVERHEAD_CHARS;
   let previewAborted = false;
 
-  while (traversalFrames.length > 0 && !previewAborted) {
-    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
-
-    if (currentTraversalFrame === undefined) {
-      break;
-    }
-
+  for (
+    let currentTraversalFrame = traversalFrames.at(-1);
+    currentTraversalFrame !== undefined && !previewAborted;
+    currentTraversalFrame = traversalFrames.at(-1)
+  ) {
     const currentPath = currentTraversalFrame.directoryRelativePath === ""
       ? rootAbsolutePath
       : path.join(rootAbsolutePath, currentTraversalFrame.directoryRelativePath);
@@ -621,7 +619,11 @@ async function collectDirectoryEntriesPreviewChunk(
 
     let descendedIntoChildDirectory = false;
 
-    while (currentTraversalFrame.nextEntryIndex < entries.length && !previewAborted) {
+    for (
+      let entry = entries[currentTraversalFrame.nextEntryIndex];
+      entry !== undefined && !previewAborted;
+      entry = entries[currentTraversalFrame.nextEntryIndex]
+    ) {
       if (recursive) {
         try {
           recordTraversalEntryVisit(traversalRuntimeBudgetState);
@@ -640,12 +642,6 @@ async function collectDirectoryEntriesPreviewChunk(
 
           throw error;
         }
-      }
-
-      const entry = entries[currentTraversalFrame.nextEntryIndex];
-
-      if (entry === undefined) {
-        break;
       }
 
       const entryAbsolutePath = path.join(currentPath, entry.name);

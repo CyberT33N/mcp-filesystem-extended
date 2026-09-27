@@ -161,4 +161,130 @@ describe("tool guardrail contracts", () => {
       "Recommended action: Request a smaller result set or tighten the operation scope before retrying.",
     ]);
   });
+
+  it("infers canonical units for schema limit names across the full keyword matrix", () => {
+    const cases = [
+      ["MAX_RESULTS_PER_REQUEST", "results"],
+      ["MAX_FILES_PER_REQUEST", "files"],
+      ["MAX_CHARS_PER_REQUEST", "characters"],
+      ["MAX_BYTES_PER_REQUEST", "bytes"],
+      ["MAX_PATHS_PER_REQUEST", "paths"],
+      ["MAX_ROOTS_PER_REQUEST", "roots"],
+      ["MAX_GLOBS_PER_REQUEST", "glob patterns"],
+      ["MAX_OPERATIONS_PER_REQUEST", "operations"],
+      ["MAX_PAIRS_PER_REQUEST", "pairs"],
+      ["MAX_REPLACEMENTS_PER_REQUEST", "replacements"],
+    ] as const;
+
+    for (const [limitName, unit] of cases) {
+      const failure = createSchemaLimitExceededFailure({
+        actualValue: 6,
+        limitName,
+        limitValue: 5,
+        requestSurface: "example.surface",
+        toolName: "example_tool",
+      });
+
+      expect(failure.details[1]).toBe(`Configured limit (${limitName}): 5 ${unit}.`);
+      expect(failure.details[2]).toBe(`Received value: 6 ${unit}.`);
+    }
+  });
+
+  it("renders schema limit values unitless or verbatim when no keyword matches", () => {
+    const unitlessFailure = createSchemaLimitExceededFailure({
+      actualValue: 6,
+      limitName: "MAX_DEPTH",
+      limitValue: 5,
+      requestSurface: "example.surface",
+      toolName: "example_tool",
+    });
+
+    expect(unitlessFailure.details[1]).toBe("Configured limit (MAX_DEPTH): 5.");
+
+    const verbatimFailure = createSchemaLimitExceededFailure({
+      actualValue: "deep",
+      limitName: "MAX_DEPTH",
+      limitValue: "unbounded",
+      requestSurface: "example.surface",
+      toolName: "example_tool",
+    });
+
+    expect(verbatimFailure.details[1]).toBe("Configured limit (MAX_DEPTH): unbounded.");
+    expect(verbatimFailure.details[2]).toBe("Received value: deep.");
+  });
+
+  it("infers canonical units for metadata preflight surfaces across the keyword matrix", () => {
+    const cases = [
+      ["Candidate byte budget", "bytes"],
+      ["Projected text budget", "characters"],
+      ["Path length budget", "characters"],
+      ["Raw text request content", "characters"],
+      ["Match location budget", "match locations"],
+      ["Operation batch budget", "operations"],
+      ["Root count budget", "roots"],
+      ["Glob pattern budget", "glob patterns"],
+      ["Path count budget", "paths"],
+    ] as const;
+
+    for (const [preflightTarget, unit] of cases) {
+      const failure = createMetadataPreflightRejectedFailure({
+        limitValue: 5,
+        measuredValue: 6,
+        preflightTarget,
+        reason: "budget exceeded",
+        toolName: "example_tool",
+      });
+
+      expect(failure.details[1]).toBe(`Measured or projected value: 6 ${unit}.`);
+    }
+
+    const unitlessFailure = createMetadataPreflightRejectedFailure({
+      limitValue: 5,
+      measuredValue: 6,
+      preflightTarget: "Unknown surface",
+      reason: "limit crossed",
+      toolName: "example_tool",
+    });
+
+    expect(unitlessFailure.details[1]).toBe("Measured or projected value: 6.");
+  });
+
+  it("infers canonical units for runtime budget surfaces across the keyword matrix", () => {
+    const cases = [
+      ["Cumulative replacementText request budget", "characters"],
+      ["Projected text budget", "characters"],
+      ["Candidate byte budget", "bytes"],
+      ["Response output budget", "characters"],
+      ["Match locations collected", "match locations"],
+      ["Directory entries emitted", "entries"],
+      ["Directories created", "directories"],
+      ["Traversal runtime budget", "milliseconds"],
+      ["Results delivered", "results"],
+      ["Files processed", "files"],
+      ["Operation count", "operations"],
+      ["Root breadth", "roots"],
+      ["Glob breadth", "glob patterns"],
+      ["Path depth", "paths"],
+    ] as const;
+
+    for (const [budgetSurface, unit] of cases) {
+      const failure = createRuntimeBudgetExceededFailure({
+        budgetSurface,
+        limitValue: 5,
+        measuredValue: 6,
+        toolName: "example_tool",
+      });
+
+      expect(failure.details[1]).toBe(`Measured or projected value: 6 ${unit}.`);
+    }
+
+    const unitlessFailure = createRuntimeBudgetExceededFailure({
+      budgetSurface: "Unknown surface",
+      limitValue: 5,
+      measuredValue: 6,
+      toolName: "example_tool",
+    });
+
+    expect(unitlessFailure.details[1]).toBe("Measured or projected value: 6.");
+  });
 });

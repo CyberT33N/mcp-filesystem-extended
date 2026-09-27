@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
+import fs, { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { Stats } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION } from "@domain/inspection/shared/filesystem-entry-metadata-contract";
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
@@ -22,6 +23,8 @@ describe("getFileSystemEntryMetadata", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+
     if (sandboxRootPath !== "") {
       await rm(sandboxRootPath, { recursive: true, force: true });
     }
@@ -112,5 +115,16 @@ describe("getFileSystemEntryMetadata", () => {
     expect(metadata.modified).toEqual(expect.any(String));
     expect(metadata.accessed).toEqual(expect.any(String));
     expect(metadata.permissions).toEqual(expect.any(String));
+  });
+
+  it("reports entries that are neither file nor directory as other", async () => {
+    vi.spyOn(fs, "lstat").mockResolvedValueOnce(new Stats());
+
+    const metadata = await getFileSystemEntryMetadata(
+      sampleFilePath,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+    );
+
+    expect(metadata).toEqual({ type: "other", size: undefined });
   });
 });

@@ -99,7 +99,7 @@ export async function collectTraversalCandidateWorkloadEvidence(
   const responseSurfaceEstimator = input.responseSurfaceEstimator ?? null;
   let estimatedCandidateBytes = 0;
   let matchedCandidateFiles = 0;
-  let estimatedResponseChars = responseSurfaceEstimator === null ? null : 0;
+  let estimatedResponseCharsTotal = 0;
   let probeTruncated = false;
 
   function rankCandidateEntry(
@@ -117,10 +117,6 @@ export async function collectTraversalCandidateWorkloadEvidence(
     directoryPath: string,
     currentRelativePath: string,
   ): Promise<void> {
-    if (probeTruncated) {
-      return;
-    }
-
     recordTraversalDirectoryVisit(traversalRuntimeBudgetState);
 
     try {
@@ -214,9 +210,8 @@ export async function collectTraversalCandidateWorkloadEvidence(
         responseSurfaceEstimator !== null
         && responseSurfaceEstimator.shouldCountEntry(candidateRelativePath, entry)
       ) {
-        estimatedResponseChars =
-          (estimatedResponseChars ?? 0)
-          + responseSurfaceEstimator.estimateEntryResponseChars(candidateRelativePath, entry);
+        estimatedResponseCharsTotal +=
+          responseSurfaceEstimator.estimateEntryResponseChars(candidateRelativePath, entry);
       }
 
       const candidateAbsolutePath = path.posix.join(
@@ -264,7 +259,8 @@ export async function collectTraversalCandidateWorkloadEvidence(
   return {
     estimatedCandidateBytes,
     matchedCandidateFiles,
-    estimatedResponseChars,
+    estimatedResponseChars:
+      responseSurfaceEstimator === null ? null : estimatedResponseCharsTotal,
     probeElapsedMs: Date.now() - startedAtMs,
     probeTruncated,
   };

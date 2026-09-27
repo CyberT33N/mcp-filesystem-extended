@@ -70,4 +70,21 @@ describe("read_files_with_line_numbers", () => {
 
     expect(parsed.paths).toEqual([firstFilePath, secondFilePath]);
   });
+
+  it("keeps per-file read failures inline after preflight succeeds", async () => {
+    const binaryFilePath = join(sandboxRootPath, "image.png");
+    await writeFile(
+      binaryFilePath,
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+
+    const output = await handleReadFiles(
+      [firstFilePath, binaryFilePath],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("1: alpha");
+    expect(output).toContain(`${binaryFilePath}: Error -`);
+    expect(output).toContain("supports only text-compatible reads");
+  });
 });

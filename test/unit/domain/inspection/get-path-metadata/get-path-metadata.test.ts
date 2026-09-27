@@ -96,4 +96,39 @@ describe("get_path_metadata", () => {
     expect(parsed.metadata.permissions).toBe(false);
     expect(parsed.metadata.timestamps).toBe(false);
   });
+
+  it("formats single-path output with grouped timestamps and permissions when requested", async () => {
+    const output = await handleGetPathMetadata(
+      [sampleFilePath],
+      { permissions: true, timestamps: true },
+      allowedDirectories,
+    );
+
+    expect(output).toContain("created: ");
+    expect(output).toContain("modified: ");
+    expect(output).toContain("accessed: ");
+    expect(output).toContain("permissions: ");
+  });
+
+  it("formats batched metadata output with per-path errors", async () => {
+    const missingFilePath = join(sandboxRootPath, "missing.txt");
+
+    const output = await handleGetPathMetadata(
+      [sampleFilePath, missingFilePath],
+      undefined,
+      allowedDirectories,
+    );
+
+    expect(output).toContain("Processed 2 path metadata operations:");
+    expect(output).toContain("- 1 operation completed successfully");
+    expect(output).toContain("- 1 operation failed");
+    expect(output).toContain(`path: ${sampleFilePath}`);
+    expect(output).toContain(`- ${missingFilePath}:`);
+  });
+
+  it("rejects a sparse single-path batch before metadata lookup", async () => {
+    await expect(
+      handleGetPathMetadata(new Array<string>(1), undefined, allowedDirectories),
+    ).rejects.toThrow("Expected one path for file metadata lookup.");
+  });
 });

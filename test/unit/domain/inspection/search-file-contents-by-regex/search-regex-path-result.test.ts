@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import fs, { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -100,6 +100,30 @@ function queueNativeStreamingBatchResult(stdout: string): void {
       };
     },
   );
+}
+
+/**
+ * Builds a NUL-heavy binary payload that the shared content-state classifier rejects for text
+ * execution.
+ */
+function createBinaryPayload(): Uint8Array {
+  return Uint8Array.from({ length: 256 }, (_, index) => (index % 3 === 0 ? 0x00 : 0x01));
+}
+
+/**
+ * Builds the execution-policy override that forces preview-first admission for small sandbox
+ * trees while keeping the preview-execution budgets wide enough for the asserted traversal.
+ */
+function createPreviewFirstExecutionPolicy() {
+  return {
+    ...resolveSearchExecutionPolicy(DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE),
+    traversalInlineEntryBudget: 0,
+    traversalInlineDirectoryBudget: 0,
+    traversalPreviewFirstEntryBudget: 100,
+    traversalPreviewFirstDirectoryBudget: 100,
+    traversalPreviewExecutionEntryBudget: 100,
+    traversalPreviewExecutionDirectoryBudget: 100,
+  };
 }
 
 describe("getSearchRegexPathResult", () => {
@@ -1233,6 +1257,1769 @@ describe("getSearchRegexPathResult", () => {
         }),
       ).rejects.toThrow("Native search backend exited with code 2.");
     } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("matches include patterns without a directory segment against the candidate file name", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-basename-pattern-"));
+
+    try {
+      const textFilePath = join(sandboxRootPath, "match.txt");
+      await writeFile(textFilePath, "needle here\n", "utf8");
+      await writeFile(join(sandboxRootPath, "other.md"), "needle elsewhere\n", "utf8");
+
+      queueNativeStreamingBatchResult(`${textFilePath}:1:needle here`);
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: ["*.txt"],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.totalMatches).toBe(1);
+      expect(result.matches.map((match) => match.file)).toEqual([textFilePath]);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips native output lines whose line number is not a positive integer", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-zero-line-"));
+
+    try {
+      const candidatePath = join(sandboxRootPath, "candidate.txt");
+      await writeFile(candidatePath, "needle here\n", "utf8");
+
+      queueNativeStreamingBatchResult(`${candidatePath}:0:needle here\n${candidatePath}:1:needle here`);
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.totalMatches).toBe(1);
+      expect(result.matches.map((match) => match.line)).toEqual([1]);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects the pattern when the native backend reports a regex syntax failure without known tokens", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-backend-syntax-"));
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      mockedRunUgrepSearchStreaming.mockImplementationOnce(async () => ({
+        args: [],
+        durationMs: 1,
+        executable: "C:/tools/ugrep.exe",
+        exitCode: 2,
+        fixedStringMode: false,
+        requiresPcre2: true,
+        signal: null,
+        spawnErrorMessage: null,
+        stderr: "ugrep regex engine reported a syntax failure",
+        syncCandidateBytesCap: 0,
+        terminatedEarly: false,
+        timedOut: false,
+      }));
+
+      await expect(
+        getSearchRegexPathResult({
+          toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+          searchPath: sandboxRootPath,
+          pattern: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 10,
+          caseSensitive: true,
+          allowedDirectories: [sandboxRootPath],
+        }),
+      ).rejects.toThrow("Native regex backend rejected the pattern for the selected execution lane");
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("returns the narrowing guidance without traversal when the workload exceeds the preview-first band", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-narrowing-"));
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      const executionPolicy = {
+        ...resolveSearchExecutionPolicy(DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE),
+        traversalInlineEntryBudget: 0,
+        traversalInlineDirectoryBudget: 0,
+        traversalPreviewFirstEntryBudget: 0,
+        traversalPreviewFirstDirectoryBudget: 0,
+      };
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy,
+      });
+
+      expect(result.admissionOutcome).toBe("narrowing-required");
+      expect(result.error).toContain("Narrow the requested root");
+      expect(result.matches).toEqual([]);
+      expect(result.nextContinuationState).toBeNull();
+      expect(mockedRunUgrepSearch).not.toHaveBeenCalled();
+      expect(mockedRunUgrepSearchStreaming).not.toHaveBeenCalled();
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("terminates a directory root immediately when the effective result limit is zero", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-zero-limit-"));
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 0,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.truncated).toBe(true);
+      expect(result.totalMatches).toBe(0);
+      expect(result.stopReason).toBe("max_results_limit_reached");
+      expect(mockedRunUgrepSearchStreaming).not.toHaveBeenCalled();
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("stops the preview lane when the next candidate would exhaust the candidate-byte budget", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-preview-byte-stop-"));
+
+    try {
+      await writeFile(join(sandboxRootPath, "alpha.txt"), "needle one\n", "utf8");
+      await writeFile(join(sandboxRootPath, "beta.txt"), "needle two\n", "utf8");
+
+      const executionPolicy = {
+        ...createPreviewFirstExecutionPolicy(),
+        regexSyncCandidateBytesCap: 5,
+      };
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy,
+      });
+
+      expect(result.admissionOutcome).toBe("preview-first");
+      expect(result.stopReason).toBe("preview_lane_budget_exhausted");
+      expect(result.truncated).toBe(true);
+      expect(result.nextContinuationState).not.toBeNull();
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("stops materialization early and persists the frontier when the traversal runtime budget is exhausted at a directory visit", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-budget-dir-"));
+
+    const actualAssertTraversalRuntimeBudget = traversalRuntimeBudget.assertTraversalRuntimeBudget;
+    const assertSpy = vi.spyOn(traversalRuntimeBudget, "assertTraversalRuntimeBudget");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      assertSpy.mockImplementation((toolName, state, nowMs, narrowingGuidance, limits) => {
+        if (limits === traversalRuntimeBudget.COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS) {
+          throw new traversalRuntimeBudget.TraversalRuntimeBudgetExceededError(
+            "Traversal runtime budget exceeded for the materialization probe.",
+            toolName,
+            "traversal entries visited",
+            1,
+            0,
+            "entries",
+          );
+        }
+
+        actualAssertTraversalRuntimeBudget(toolName, state, nowMs, narrowingGuidance, limits);
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.stopReason).toBe("completion_continuation_available");
+      expect(result.truncated).toBe(true);
+      expect(result.nextContinuationState).not.toBeNull();
+      expect(result.matches).toEqual([]);
+    } finally {
+      assertSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("stops materialization early and persists the frontier when the traversal runtime budget is exhausted at an entry visit", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-budget-entry-"));
+
+    const actualAssertTraversalRuntimeBudget = traversalRuntimeBudget.assertTraversalRuntimeBudget;
+    const assertSpy = vi.spyOn(traversalRuntimeBudget, "assertTraversalRuntimeBudget");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      let completeResultLimitCalls = 0;
+      assertSpy.mockImplementation((toolName, state, nowMs, narrowingGuidance, limits) => {
+        if (limits === traversalRuntimeBudget.COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS) {
+          completeResultLimitCalls += 1;
+
+          if (completeResultLimitCalls === 2) {
+            throw new traversalRuntimeBudget.TraversalRuntimeBudgetExceededError(
+              "Traversal runtime budget exceeded for the materialization entry visit.",
+              toolName,
+              "traversal entries visited",
+              2,
+              1,
+              "entries",
+            );
+          }
+        }
+
+        actualAssertTraversalRuntimeBudget(toolName, state, nowMs, narrowingGuidance, limits);
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.stopReason).toBe("completion_continuation_available");
+      expect(result.truncated).toBe(true);
+      expect(result.nextContinuationState).not.toBeNull();
+    } finally {
+      assertSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("converts a traversal runtime budget exhaustion into a bounded stop inside the inline traversal loop", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-budget-stop-"));
+
+    const actualAssertTraversalRuntimeBudget = traversalRuntimeBudget.assertTraversalRuntimeBudget;
+    const assertSpy = vi.spyOn(traversalRuntimeBudget, "assertTraversalRuntimeBudget");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      assertSpy.mockImplementation((toolName, state, nowMs, narrowingGuidance, limits) => {
+        if (limits === undefined) {
+          throw new traversalRuntimeBudget.TraversalRuntimeBudgetExceededError(
+            "Traversal runtime budget exceeded for the inline traversal loop.",
+            toolName,
+            "traversal directories visited",
+            1,
+            0,
+            "directories",
+          );
+        }
+
+        actualAssertTraversalRuntimeBudget(toolName, state, nowMs, narrowingGuidance, limits);
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.stopReason).toBe("execution_runtime_budget_exhausted");
+      expect(result.matches).toEqual([]);
+    } finally {
+      assertSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("converts a traversal runtime budget exhaustion at an entry visit into a bounded stop", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-budget-entry-"));
+
+    const actualAssertTraversalRuntimeBudget = traversalRuntimeBudget.assertTraversalRuntimeBudget;
+    const assertSpy = vi.spyOn(traversalRuntimeBudget, "assertTraversalRuntimeBudget");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      let defaultLimitCalls = 0;
+      assertSpy.mockImplementation((toolName, state, nowMs, narrowingGuidance, limits) => {
+        if (limits === undefined) {
+          defaultLimitCalls += 1;
+
+          if (defaultLimitCalls === 2) {
+            throw new traversalRuntimeBudget.TraversalRuntimeBudgetExceededError(
+              "Traversal runtime budget exceeded for the inline entry visit.",
+              toolName,
+              "traversal entries visited",
+              2,
+              1,
+              "entries",
+            );
+          }
+        }
+
+        actualAssertTraversalRuntimeBudget(toolName, state, nowMs, narrowingGuidance, limits);
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.stopReason).toBe("execution_runtime_budget_exhausted");
+    } finally {
+      assertSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rethrows non-budget failures from the traversal runtime safeguard inside the inline loop", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-budget-rethrow-"));
+
+    const actualAssertTraversalRuntimeBudget = traversalRuntimeBudget.assertTraversalRuntimeBudget;
+    const assertSpy = vi.spyOn(traversalRuntimeBudget, "assertTraversalRuntimeBudget");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      assertSpy.mockImplementation((toolName, state, nowMs, narrowingGuidance, limits) => {
+        if (limits === undefined) {
+          throw new Error("unexpected safeguard internals failure");
+        }
+
+        actualAssertTraversalRuntimeBudget(toolName, state, nowMs, narrowingGuidance, limits);
+      });
+
+      await expect(
+        getSearchRegexPathResult({
+          toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+          searchPath: sandboxRootPath,
+          pattern: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 10,
+          caseSensitive: true,
+          allowedDirectories: [sandboxRootPath],
+        }),
+      ).rejects.toThrow("unexpected safeguard internals failure");
+    } finally {
+      assertSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips a completion-plan directory whose entries can no longer be read", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-readdir-"));
+
+    const readdirSpy = vi.spyOn(fs, "readdir");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      readdirSpy.mockRejectedValueOnce(new Error("EACCES: permission denied"));
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: {
+          traversalFrames: [{ directoryRelativePath: "", nextEntryIndex: 0 }],
+          activeFileRelativePath: null,
+          activeFileMatchOffset: 0,
+        },
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.totalMatches).toBe(0);
+      expect(result.matches).toEqual([]);
+    } finally {
+      readdirSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips an inline traversal directory whose entries can no longer be read", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-readdir-"));
+
+    const readdirSpy = vi.spyOn(fs, "readdir");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      readdirSpy.mockRejectedValueOnce(new Error("EACCES: permission denied"));
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: {
+          traversalFrames: [{ directoryRelativePath: "", nextEntryIndex: 0 }],
+          activeFileRelativePath: null,
+          activeFileMatchOffset: 0,
+        },
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      });
+
+      expect(result.totalMatches).toBe(0);
+      expect(result.matches).toEqual([]);
+    } finally {
+      readdirSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips completion-plan candidates whose metadata preflight rejects them", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-preflight-denied-"));
+
+    const actualCollect = filesystemPreflight.collectValidatedFilesystemPreflightEntries;
+    const collectSpy = vi.spyOn(filesystemPreflight, "collectValidatedFilesystemPreflightEntries");
+
+    try {
+      await writeFile(join(sandboxRootPath, "denied.txt"), "needle denied\n", "utf8");
+      await writeFile(join(sandboxRootPath, "ok.txt"), "needle ok\n", "utf8");
+
+      collectSpy.mockImplementation(async (toolName, requestedPaths, allowedDirectories) => {
+        const [requestedPath] = requestedPaths;
+
+        if (requestedPath !== undefined && requestedPath.endsWith("denied.txt")) {
+          throw new Error("Metadata preflight rejected for the denied candidate.");
+        }
+
+        return actualCollect(toolName, requestedPaths, allowedDirectories);
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.totalMatches).toBe(0);
+    } finally {
+      collectSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips inline traversal candidates whose metadata preflight rejects them", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-preflight-denied-"));
+
+    const actualCollect = filesystemPreflight.collectValidatedFilesystemPreflightEntries;
+    const collectSpy = vi.spyOn(filesystemPreflight, "collectValidatedFilesystemPreflightEntries");
+
+    try {
+      await writeFile(join(sandboxRootPath, "denied.txt"), "needle denied\n", "utf8");
+      await writeFile(join(sandboxRootPath, "ok.txt"), "needle ok\n", "utf8");
+
+      collectSpy.mockImplementation(async (toolName, requestedPaths, allowedDirectories) => {
+        const [requestedPath] = requestedPaths;
+
+        if (requestedPath !== undefined && requestedPath.endsWith("denied.txt")) {
+          throw new Error("Metadata preflight rejected for the denied candidate.");
+        }
+
+        return actualCollect(toolName, requestedPaths, allowedDirectories);
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.totalMatches).toBe(0);
+    } finally {
+      collectSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips completion-plan candidates whose resolved entry type is neither file nor directory", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-other-entry-"));
+
+    const actualCollect = filesystemPreflight.collectValidatedFilesystemPreflightEntries;
+    const collectSpy = vi.spyOn(filesystemPreflight, "collectValidatedFilesystemPreflightEntries");
+
+    try {
+      await writeFile(join(sandboxRootPath, "pipe.txt"), "needle here\n", "utf8");
+
+      collectSpy.mockImplementation(async (toolName, requestedPaths, allowedDirectories) => {
+        const [requestedPath] = requestedPaths;
+
+        if (requestedPath !== undefined && requestedPath.endsWith("pipe.txt")) {
+          return [{ requestedPath, validPath: requestedPath, type: "other", size: 5 }];
+        }
+
+        return actualCollect(toolName, requestedPaths, allowedDirectories);
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.totalMatches).toBe(0);
+      expect(result.filesSearched).toBe(0);
+    } finally {
+      collectSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips inline traversal candidates whose resolved entry type is neither file nor directory", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-other-entry-"));
+
+    const actualCollect = filesystemPreflight.collectValidatedFilesystemPreflightEntries;
+    const collectSpy = vi.spyOn(filesystemPreflight, "collectValidatedFilesystemPreflightEntries");
+
+    try {
+      await writeFile(join(sandboxRootPath, "pipe.txt"), "needle here\n", "utf8");
+
+      collectSpy.mockImplementation(async (toolName, requestedPaths, allowedDirectories) => {
+        const [requestedPath] = requestedPaths;
+
+        if (requestedPath !== undefined && requestedPath.endsWith("pipe.txt")) {
+          return [{ requestedPath, validPath: requestedPath, type: "other", size: 5 }];
+        }
+
+        return actualCollect(toolName, requestedPaths, allowedDirectories);
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.totalMatches).toBe(0);
+      expect(result.filesSearched).toBe(0);
+    } finally {
+      collectSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("surfaces the unsupported content state as the root error when completion materialization rejects every candidate", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-binary-"));
+
+    try {
+      await writeFile(join(sandboxRootPath, "binary.dat"), createBinaryPayload());
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.totalMatches).toBe(0);
+      expect(result.error).toContain("binary");
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects binary candidates inside the batched inline traversal path", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-binary-"));
+
+    try {
+      await writeFile(join(sandboxRootPath, "binary.dat"), createBinaryPayload());
+      await writeFile(join(sandboxRootPath, "text.txt"), "needle here\n", "utf8");
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.filesSearched).toBe(1);
+      expect(result.totalMatches).toBe(0);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("propagates the unsupported content state through the non-batched preview traversal path", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-preview-binary-"));
+
+    try {
+      await writeFile(join(sandboxRootPath, "binary.dat"), createBinaryPayload());
+      await writeFile(join(sandboxRootPath, "text.txt"), "needle here\n", "utf8");
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+      });
+
+      expect(result.error).toContain("binary");
+      expect(result.filesSearched).toBe(1);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("re-reads a decoded-fallback candidate that turned binary while the pending native batch flushed", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-flush-mutation-"));
+
+    try {
+      for (let index = 1; index <= 15; index += 1) {
+        await writeFile(
+          join(sandboxRootPath, `f${String(index).padStart(2, "0")}.txt`),
+          "needle here\n",
+          "utf8",
+        );
+      }
+
+      const legacyFilePath = join(sandboxRootPath, "zz-legacy.md");
+      await writeFile(legacyFilePath, "\uFEFFneedle legacy\n", "utf16le");
+
+      mockedRunUgrepSearchStreaming.mockImplementationOnce(async () => {
+        await writeFile(legacyFilePath, createBinaryPayload());
+
+        return {
+          args: [],
+          durationMs: 1,
+          executable: "C:/tools/ugrep.exe",
+          exitCode: 1,
+          fixedStringMode: true,
+          requiresPcre2: false,
+          signal: null,
+          spawnErrorMessage: null,
+          stderr: "",
+          syncCandidateBytesCap: 0,
+          terminatedEarly: false,
+          timedOut: false,
+        };
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.error).toContain("binary");
+      expect(result.filesSearched).toBe(15);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("truncates an inline decoded-fallback candidate at the effective result limit", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-decoded-truncated-"));
+
+    try {
+      const legacyFilePath = join(sandboxRootPath, "legacy.md");
+      await writeFile(legacyFilePath, "\uFEFFneedle one\nneedle two\n", "utf16le");
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.truncated).toBe(true);
+      expect(result.stopReason).toBe("max_results_limit_reached");
+      expect(result.totalMatches).toBe(1);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("flushes a full native batch and stops the inline traversal when the batch truncates", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-batch-flush-"));
+
+    try {
+      const filePaths: string[] = [];
+
+      for (let index = 1; index <= 17; index += 1) {
+        const filePath = join(sandboxRootPath, `f${String(index).padStart(2, "0")}.txt`);
+        await writeFile(filePath, "needle one\nneedle two\n", "utf8");
+        filePaths.push(filePath);
+      }
+
+      queueNativeStreamingBatchResult(
+        filePaths
+          .slice(0, 16)
+          .map((filePath) => `${filePath}:1:needle one\n${filePath}:2:needle two`)
+          .join("\n"),
+      );
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.truncated).toBe(true);
+      expect(result.stopReason).toBe("max_results_limit_reached");
+      expect(result.totalMatches).toBe(1);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the plan frontier at the scanned position when a completion batch truncates on an unmapped file", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-unmapped-truncation-"));
+
+    try {
+      await writeFile(join(sandboxRootPath, "alpha.ts"), "export const needle = true;\n", "utf8");
+      await writeFile(join(sandboxRootPath, "beta.ts"), "export const needle = true;\n", "utf8");
+      const unmappedBackendPath = join(sandboxRootPath, "ghost.ts");
+
+      queueNativeStreamingBatchResult(`${unmappedBackendPath}:1:export const needle = true;`);
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: ["**/*.ts"],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.truncated).toBe(true);
+      expect(result.stopReason).toBe("max_results_limit_reached");
+      expect(result.totalMatches).toBe(1);
+      expect(result.matches.map((match) => match.file)).toEqual([unmappedBackendPath]);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("ends the native batch scan before a decoded-fallback unit inside the completion plan", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-mixed-units-"));
+
+    try {
+      const nativeFilePath = join(sandboxRootPath, "a-native.txt");
+      await writeFile(nativeFilePath, "needle native\n", "utf8");
+      const legacyFilePath = join(sandboxRootPath, "z-legacy.md");
+      await writeFile(legacyFilePath, "\uFEFFneedle legacy\n", "utf16le");
+
+      queueNativeStreamingBatchResult(`${nativeFilePath}:1:needle native`);
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.totalMatches).toBe(2);
+      expect(result.filesSearched).toBe(2);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("persists the active decoded-fallback unit when the completion plan truncates inside it", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-decoded-truncation-"));
+
+    try {
+      const legacyFilePath = join(sandboxRootPath, "legacy.md");
+      await writeFile(legacyFilePath, "\uFEFFneedle one\nneedle two\n", "utf16le");
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.truncated).toBe(true);
+      expect(result.totalMatches).toBe(1);
+      expect(result.nextContinuationState?.activeFileRelativePath).toBe("legacy.md");
+      expect(result.nextContinuationState?.activeFileMatchOffset).toBe(1);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips the resumed active file when the caller narrowed the include patterns between passes", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-resume-pattern-change-"));
+    const executionPolicy = createPreviewFirstExecutionPolicy();
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle one\nneedle two\n", "utf8");
+
+      const candidatePath = join(sandboxRootPath, "candidate.txt");
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 0,
+        spawnErrorMessage: null,
+        stderr: "",
+        stdout: `${candidatePath}:1:needle one\n${candidatePath}:2:needle two`,
+        timedOut: false,
+      });
+
+      const firstPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy,
+      });
+
+      expect(firstPassResult.nextContinuationState?.activeFileRelativePath).toBe("candidate.txt");
+
+      const secondPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: ["*.nomatch"],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: firstPassResult.nextContinuationState,
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      });
+
+      expect(secondPassResult.totalMatches).toBe(0);
+      expect(secondPassResult.filesSearched).toBe(0);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the unsupported state when the resumed active file turned binary between passes", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-resume-binary-swap-"));
+    const executionPolicy = createPreviewFirstExecutionPolicy();
+
+    try {
+      const candidatePath = join(sandboxRootPath, "candidate.txt");
+      await writeFile(candidatePath, "needle one\nneedle two\n", "utf8");
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 0,
+        spawnErrorMessage: null,
+        stderr: "",
+        stdout: `${candidatePath}:1:needle one\n${candidatePath}:2:needle two`,
+        timedOut: false,
+      });
+
+      const firstPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy,
+      });
+
+      expect(firstPassResult.nextContinuationState?.activeFileRelativePath).toBe("candidate.txt");
+
+      await writeFile(candidatePath, createBinaryPayload());
+
+      const secondPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: firstPassResult.nextContinuationState,
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      });
+
+      expect(secondPassResult.totalMatches).toBe(0);
+      expect(secondPassResult.filesSearched).toBe(0);
+      expect(secondPassResult.error).toContain("binary");
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the active file pinned across passes until its matches are fully delivered", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-resume-multi-pass-"));
+    const executionPolicy = createPreviewFirstExecutionPolicy();
+
+    try {
+      const candidatePath = join(sandboxRootPath, "candidate.txt");
+      await writeFile(candidatePath, "needle one\nneedle two\nneedle three\n", "utf8");
+
+      const queuedStdout = `${candidatePath}:1:needle one\n${candidatePath}:2:needle two\n${candidatePath}:3:needle three`;
+
+      for (let passIndex = 0; passIndex < 4; passIndex += 1) {
+        mockedRunUgrepSearch.mockResolvedValueOnce({
+          exitCode: 0,
+          spawnErrorMessage: null,
+          stderr: "",
+          stdout: queuedStdout,
+          timedOut: false,
+        });
+      }
+
+      const firstPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy,
+      });
+
+      expect(firstPassResult.totalMatches).toBe(1);
+      expect(firstPassResult.nextContinuationState?.activeFileMatchOffset).toBe(1);
+
+      const secondPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: firstPassResult.nextContinuationState,
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      });
+
+      expect(secondPassResult.totalMatches).toBe(1);
+      expect(secondPassResult.truncated).toBe(true);
+      expect(secondPassResult.nextContinuationState?.activeFileMatchOffset).toBe(2);
+
+      const thirdPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: secondPassResult.nextContinuationState,
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      });
+
+      expect(thirdPassResult.totalMatches).toBe(1);
+      expect(thirdPassResult.truncated).toBe(true);
+      expect(thirdPassResult.nextContinuationState?.activeFileMatchOffset).toBe(3);
+
+      const fourthPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 1,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: thirdPassResult.nextContinuationState,
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      });
+
+      expect(fourthPassResult.totalMatches).toBe(0);
+      expect(fourthPassResult.truncated).toBe(false);
+      expect(fourthPassResult.nextContinuationState).toBeNull();
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("caps a file-scope preview-first response and resumes it through the persisted offset", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-file-preview-cap-"));
+    const executionPolicy = {
+      ...resolveSearchExecutionPolicy(DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE),
+      regexSyncCandidateBytesCap: 1,
+      previewFirstResponseCapFraction: 0.005,
+    };
+
+    try {
+      const candidatePath = join(sandboxRootPath, "candidate.txt");
+      await writeFile(candidatePath, "needle one\nneedle two\nneedle three\n", "utf8");
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 0,
+        spawnErrorMessage: null,
+        stderr: "",
+        stdout: `${candidatePath}:1:needle one\n${candidatePath}:2:needle two\n${candidatePath}:3:needle three`,
+        timedOut: false,
+      });
+
+      const firstPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: candidatePath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 400,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy,
+      });
+
+      expect(firstPassResult.admissionOutcome).toBe("preview-first");
+      expect(firstPassResult.truncated).toBe(true);
+      expect(firstPassResult.stopReason).toBe("preview_continuation_available");
+      expect(firstPassResult.nextContinuationState?.activeFileRelativePath).toBe("");
+      expect(firstPassResult.nextContinuationState?.activeFileMatchOffset).toBe(2);
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 0,
+        spawnErrorMessage: null,
+        stderr: "",
+        stdout: `${candidatePath}:1:needle one\n${candidatePath}:2:needle two\n${candidatePath}:3:needle three`,
+        timedOut: false,
+      });
+
+      const secondPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: candidatePath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 400,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: firstPassResult.nextContinuationState,
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      });
+
+      expect(secondPassResult.totalMatches).toBe(1);
+      expect(secondPassResult.matches.map((match) => match.line)).toEqual([3]);
+      expect(secondPassResult.nextContinuationState).toBeNull();
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("caps a decoded file-scope preview-first response and resumes it through the persisted offset", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-file-preview-decoded-"));
+    const executionPolicy = {
+      ...resolveSearchExecutionPolicy(DEFAULT_CONSERVATIVE_IO_CAPABILITY_PROFILE),
+      regexSyncCandidateBytesCap: 1,
+      previewFirstResponseCapFraction: 0.005,
+    };
+
+    try {
+      const candidatePath = join(sandboxRootPath, "legacy.md");
+      await writeFile(candidatePath, "\uFEFFneedle one\nneedle two\nneedle three\n", "utf16le");
+
+      const firstPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: candidatePath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 400,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy,
+      });
+
+      expect(firstPassResult.admissionOutcome).toBe("preview-first");
+      expect(firstPassResult.truncated).toBe(true);
+      expect(firstPassResult.totalMatches).toBe(2);
+      expect(firstPassResult.nextContinuationState?.activeFileMatchOffset).toBe(2);
+
+      const secondPassResult = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: candidatePath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 400,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: firstPassResult.nextContinuationState,
+        executionPolicy,
+        requestedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      });
+
+      expect(secondPassResult.totalMatches).toBe(1);
+      expect(secondPassResult.matches.map((match) => match.line)).toEqual([3]);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a binary file scope instead of searching it", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-file-binary-"));
+
+    try {
+      const candidatePath = join(sandboxRootPath, "binary.dat");
+      await writeFile(candidatePath, createBinaryPayload());
+
+      await expect(
+        getSearchRegexPathResult({
+          toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+          searchPath: candidatePath,
+          pattern: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 10,
+          caseSensitive: true,
+          allowedDirectories: [sandboxRootPath],
+        }),
+      ).rejects.toThrow("binary");
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("returns the result-limit stop state for a file scope whose effective limit is zero", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-file-zero-limit-"));
+
+    try {
+      const candidatePath = join(sandboxRootPath, "candidate.txt");
+      await writeFile(candidatePath, "needle here\n", "utf8");
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: candidatePath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 0,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.truncated).toBe(true);
+      expect(result.totalMatches).toBe(0);
+      expect(result.stopReason).toBe("max_results_limit_reached");
+      expect(mockedRunUgrepSearch).not.toHaveBeenCalled();
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips malformed lines inside the single-file native result", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-file-malformed-line-"));
+
+    try {
+      const candidatePath = join(sandboxRootPath, "candidate.txt");
+      await writeFile(candidatePath, "needle here\n", "utf8");
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 0,
+        spawnErrorMessage: null,
+        stderr: "",
+        stdout: `ugrep emitted a non-match diagnostic line\n${candidatePath}:1:needle here`,
+        timedOut: false,
+      });
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: candidatePath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.totalMatches).toBe(1);
+      expect(result.matches.map((match) => match.line)).toEqual([1]);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("propagates single-file native lane failures without converting them into truncation", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-file-lane-failures-"));
+
+    try {
+      const candidatePath = join(sandboxRootPath, "candidate.txt");
+      await writeFile(candidatePath, "needle here\n", "utf8");
+
+      const baseCall = {
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: candidatePath,
+        pattern: "needle",
+        filePatterns: [] as string[],
+        excludePatterns: [] as string[],
+        includeExcludedGlobs: [] as string[],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      };
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: null,
+        spawnErrorMessage: "spawn ENOENT",
+        stderr: "",
+        stdout: "",
+        timedOut: false,
+      });
+
+      await expect(getSearchRegexPathResult(baseCall)).rejects.toThrow(
+        "Native search runner failed to start",
+      );
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: null,
+        spawnErrorMessage: null,
+        stderr: "",
+        stdout: "",
+        timedOut: true,
+      });
+
+      await expect(getSearchRegexPathResult(baseCall)).rejects.toThrow(
+        "Native search runner timed out before completion.",
+      );
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 2,
+        spawnErrorMessage: null,
+        stderr: "backend exploded",
+        stdout: "",
+        timedOut: false,
+      });
+
+      await expect(getSearchRegexPathResult(baseCall)).rejects.toThrow("backend exploded");
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 2,
+        spawnErrorMessage: null,
+        stderr: "",
+        stdout: "",
+        timedOut: false,
+      });
+
+      await expect(getSearchRegexPathResult(baseCall)).rejects.toThrow(
+        "Native search backend exited with code 2.",
+      );
+
+      mockedRunUgrepSearch.mockResolvedValueOnce({
+        exitCode: 2,
+        spawnErrorMessage: null,
+        stderr: "ugrep: invalid syntax in pattern",
+        stdout: "",
+        timedOut: false,
+      });
+
+      await expect(getSearchRegexPathResult(baseCall)).rejects.toThrow(
+        "Native regex backend rejected the pattern for the selected execution lane",
+      );
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips excluded directories and files while materializing the completion plan", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-excluded-"));
+
+    try {
+      await mkdir(join(sandboxRootPath, "excluded-dir"), { recursive: true });
+      await writeFile(join(sandboxRootPath, "excluded-dir", "inner.txt"), "needle inside\n", "utf8");
+      await writeFile(join(sandboxRootPath, "excluded.txt"), "needle excluded\n", "utf8");
+      const keptFilePath = join(sandboxRootPath, "ok.txt");
+      await writeFile(keptFilePath, "needle kept\n", "utf8");
+
+      queueNativeStreamingBatchResult(`${keptFilePath}:1:needle kept`);
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: ["**/excluded-dir", "**/excluded-dir/**", "**/excluded.txt"],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.totalMatches).toBe(1);
+      expect(result.matches.map((match) => match.file)).toEqual([keptFilePath]);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips excluded directories and files inside the inline traversal loop", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-excluded-"));
+
+    try {
+      await mkdir(join(sandboxRootPath, "excluded-dir"), { recursive: true });
+      await writeFile(join(sandboxRootPath, "excluded-dir", "inner.txt"), "needle inside\n", "utf8");
+      await writeFile(join(sandboxRootPath, "excluded.txt"), "needle excluded\n", "utf8");
+      const keptFilePath = join(sandboxRootPath, "ok.txt");
+      await writeFile(keptFilePath, "needle kept\n", "utf8");
+
+      queueNativeStreamingBatchResult(`${keptFilePath}:1:needle kept`);
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: ["**/excluded-dir", "**/excluded-dir/**", "**/excluded.txt"],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 10,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+      });
+
+      expect(result.totalMatches).toBe(1);
+      expect(result.matches.map((match) => match.file)).toEqual([keptFilePath]);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rethrows non-budget failures from the traversal runtime safeguard during plan materialization", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-rethrow-dir-"));
+
+    const actualAssertTraversalRuntimeBudget = traversalRuntimeBudget.assertTraversalRuntimeBudget;
+    const assertSpy = vi.spyOn(traversalRuntimeBudget, "assertTraversalRuntimeBudget");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      assertSpy.mockImplementation((toolName, state, nowMs, narrowingGuidance, limits) => {
+        if (limits === traversalRuntimeBudget.COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS) {
+          throw new Error("unexpected safeguard internals failure");
+        }
+
+        actualAssertTraversalRuntimeBudget(toolName, state, nowMs, narrowingGuidance, limits);
+      });
+
+      await expect(
+        getSearchRegexPathResult({
+          toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+          searchPath: sandboxRootPath,
+          pattern: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 10,
+          caseSensitive: true,
+          allowedDirectories: [sandboxRootPath],
+          executionPolicy: createPreviewFirstExecutionPolicy(),
+          requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+        }),
+      ).rejects.toThrow("unexpected safeguard internals failure");
+    } finally {
+      assertSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rethrows non-budget failures from the traversal runtime safeguard at a materialization entry visit", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-rethrow-entry-"));
+
+    const actualAssertTraversalRuntimeBudget = traversalRuntimeBudget.assertTraversalRuntimeBudget;
+    const assertSpy = vi.spyOn(traversalRuntimeBudget, "assertTraversalRuntimeBudget");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      let completeResultLimitCalls = 0;
+      assertSpy.mockImplementation((toolName, state, nowMs, narrowingGuidance, limits) => {
+        if (limits === traversalRuntimeBudget.COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS) {
+          completeResultLimitCalls += 1;
+
+          if (completeResultLimitCalls === 2) {
+            throw new Error("unexpected safeguard internals failure");
+          }
+        }
+
+        actualAssertTraversalRuntimeBudget(toolName, state, nowMs, narrowingGuidance, limits);
+      });
+
+      await expect(
+        getSearchRegexPathResult({
+          toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+          searchPath: sandboxRootPath,
+          pattern: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 10,
+          caseSensitive: true,
+          allowedDirectories: [sandboxRootPath],
+          executionPolicy: createPreviewFirstExecutionPolicy(),
+          requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+        }),
+      ).rejects.toThrow("unexpected safeguard internals failure");
+    } finally {
+      assertSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rethrows non-budget failures from the traversal runtime safeguard at an inline entry visit", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-inline-rethrow-entry-"));
+
+    const actualAssertTraversalRuntimeBudget = traversalRuntimeBudget.assertTraversalRuntimeBudget;
+    const assertSpy = vi.spyOn(traversalRuntimeBudget, "assertTraversalRuntimeBudget");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      let defaultLimitCalls = 0;
+      assertSpy.mockImplementation((toolName, state, nowMs, narrowingGuidance, limits) => {
+        if (limits === undefined) {
+          defaultLimitCalls += 1;
+
+          if (defaultLimitCalls === 2) {
+            throw new Error("unexpected safeguard internals failure");
+          }
+        }
+
+        actualAssertTraversalRuntimeBudget(toolName, state, nowMs, narrowingGuidance, limits);
+      });
+
+      await expect(
+        getSearchRegexPathResult({
+          toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+          searchPath: sandboxRootPath,
+          pattern: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 10,
+          caseSensitive: true,
+          allowedDirectories: [sandboxRootPath],
+        }),
+      ).rejects.toThrow("unexpected safeguard internals failure");
+    } finally {
+      assertSpy.mockRestore();
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("aborts the materialized execution plan when the root result budget is already exhausted", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-plan-abort-"));
+
+    try {
+      const filePath = join(sandboxRootPath, "candidate.txt");
+      await writeFile(filePath, "needle here\n", "utf8");
+
+      const result = await getSearchRegexPathResult({
+        toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+        searchPath: sandboxRootPath,
+        pattern: "needle",
+        filePatterns: [],
+        excludePatterns: [],
+        includeExcludedGlobs: [],
+        respectGitIgnore: false,
+        maxResults: 0,
+        caseSensitive: true,
+        allowedDirectories: [sandboxRootPath],
+        continuationState: {
+          activeFileMatchOffset: 0,
+          activeFileRelativePath: null,
+          materializedExecutionPlan: {
+            nextUnitIndex: 0,
+            units: [
+              {
+                candidateAbsolutePath: filePath,
+                candidateRelativePath: "candidate.txt",
+                kind: "native",
+                size: 12,
+              },
+            ],
+          },
+          traversalFrames: [],
+        },
+        executionPolicy: createPreviewFirstExecutionPolicy(),
+        requestedResumeMode: INSPECTION_RESUME_MODES.COMPLETE_RESULT,
+      });
+
+      expect(result.truncated).toBe(true);
+      expect(result.stopReason).toBe("completion_continuation_available");
+      expect(result.matches).toEqual([]);
+    } finally {
+      await rm(sandboxRootPath, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when the metadata preflight returns no entry for the resumed active file", async () => {
+    const sandboxRootPath = await mkdtemp(join(tmpdir(), "mcp-fs-regex-preflight-empty-"));
+
+    const collectSpy = vi.spyOn(filesystemPreflight, "collectValidatedFilesystemPreflightEntries");
+
+    try {
+      await writeFile(join(sandboxRootPath, "candidate.txt"), "needle here\n", "utf8");
+
+      collectSpy.mockResolvedValueOnce([]);
+
+      await expect(
+        getSearchRegexPathResult({
+          toolName: SEARCH_FILE_CONTENTS_BY_REGEX_TOOL_NAME,
+          searchPath: sandboxRootPath,
+          pattern: "needle",
+          filePatterns: [],
+          excludePatterns: [],
+          includeExcludedGlobs: [],
+          respectGitIgnore: false,
+          maxResults: 10,
+          caseSensitive: true,
+          allowedDirectories: [sandboxRootPath],
+          continuationState: {
+            traversalFrames: [],
+            activeFileRelativePath: "candidate.txt",
+            activeFileMatchOffset: 1,
+          },
+          requestedResumeMode: INSPECTION_RESUME_MODES.NEXT_CHUNK,
+        }),
+      ).rejects.toThrow("Expected one validated preflight entry for path:");
+    } finally {
+      collectSpy.mockRestore();
       await rm(sandboxRootPath, { recursive: true, force: true });
     }
   });

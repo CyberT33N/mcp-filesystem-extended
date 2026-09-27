@@ -157,6 +157,14 @@ describe("inspection_continuation_sqlite_store", () => {
     expect(store.cleanupExpiredSessions(new Date("2026-02-15T00:00:00.000Z"))).toBe(3);
   });
 
+  it("returns null for unknown continuation tokens", () => {
+    const store = createStore();
+
+    expect(
+      store.loadActiveSession("inscont_missing", "count_lines", "count-lines"),
+    ).toBeNull();
+  });
+
   it("reclaims database file space when vacuum runs after expired-session cleanup", () => {
     const store = createStore();
     const largeContinuationState = { payload: "x".repeat(200_000) };

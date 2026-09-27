@@ -54,4 +54,27 @@ describe("batch_result_formatter", () => {
       ].join("\n"),
     );
   });
+
+  it("formats plural failure lines and tolerates missing success output", () => {
+    const output = formatBatchTextOperationResults("filesystem", [
+      { label: "alpha.txt" },
+      { label: "beta.txt", error: "Permission denied" },
+      { label: "gamma.txt", error: "Already exists" },
+    ]);
+
+    expect(output).toBe(
+      [
+        "Processed 3 filesystem operations:",
+        "- 1 operation completed successfully",
+        "- 2 operations failed",
+        "",
+        "Results:",
+        "[1] alpha.txt",
+        "",
+        "Errors:",
+        "- beta.txt: Permission denied",
+        "- gamma.txt: Already exists",
+      ].join("\n"),
+    );
+  });
 });

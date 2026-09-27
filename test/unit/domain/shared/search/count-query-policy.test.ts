@@ -224,4 +224,19 @@ describe("count query policy", () => {
       searchExecutionPolicy.regexSyncCandidateBytesCap,
     );
   });
+
+  it("emits fixed-string reroute guidance for pattern-aware counting on non-text surfaces", () => {
+    const policy = resolveCountQueryPolicy({
+      ioCapabilityProfile: PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+      inspectionContentClassification: {
+        resolvedState: INSPECTION_CONTENT_STATE_LITERALS.HYBRID_BINARY_DOMINANT,
+        resolvedTextEncoding: INSPECTION_CONTENT_TEXT_ENCODING_LITERALS.UTF8,
+      },
+      pattern: "preview-first",
+    });
+
+    expect(policy.executionLane).toBe(CountQueryExecutionLane.UNSUPPORTED_STATE);
+    expect(policy.rerouteGuidance).toContain("search_file_contents_by_fixed_string");
+    expect(policy.unsupportedStateReason).toContain("Pattern-aware line counting is unsupported");
+  });
 });

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import fs, { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -34,6 +34,8 @@ describe("path_guard", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+
     if (allowedRootPath !== "") {
       await rm(allowedRootPath, { recursive: true, force: true });
     }
@@ -86,6 +88,89 @@ describe("path_guard", () => {
     );
     expect(resolveRequestedPath("~/home-file.txt")).toBe(
       join(os.homedir(), "home-file.txt"),
+    );
+  });
+
+  it("fails closed when the nearest existing ancestor resolves outside the allowed set", async () => {
+    const aliasDirectoryPath = join(allowedRootPath, "alias-outside");
+    await symlink(outsideRootPath, aliasDirectoryPath, "junction");
+    const candidatePath = join(aliasDirectoryPath, "child.txt");
+
+    await expect(validatePath(candidatePath, [allowedRootPath])).rejects.toThrow(
+      `Parent directory does not exist: ${aliasDirectoryPath}`,
+    );
+  });
+
+  it("rethrows ancestor stat failures that are not missing-entry signals", async () => {
+    vi.spyOn(fs, "stat").mockRejectedValueOnce(
+      Object.assign(new Error("permission denied"), { code: "EACCES" }),
+    );
+
+    await expect(
+      validatePathForCreation(join(allowedRootPath, "candidate.txt"), [allowedRootPath]),
+    ).rejects.toThrow("permission denied");
+  });
+
+  it("fails closed when no existing ancestor can be found", async () => {
+    vi.spyOn(fs, "stat").mockRejectedValue(
+      Object.assign(new Error("no such file or directory"), { code: "ENOENT" }),
+    );
+
+    await expect(
+      validatePathForCreation(join(allowedRootPath, "deep", "candidate.txt"), [
+        allowedRootPath,
+      ]),
+    ).rejects.toThrow("no existing ancestor found");
+  });
+
+  it("resolves relative candidate paths against the process working directory", async () => {
+    await expect(validatePathForCreation("rel-candidate.txt", ["."])).resolves.toBe(
+      join(process.cwd(), "rel-candidate.txt"),
+    );
+  });
+
+  it("rejects creation paths outside the allowed directory set at the prefix gate", async () => {
+    const foreignPath = join(outsideRootPath, "foreign.txt");
+
+    await expect(validatePathForCreation(foreignPath, [allowedRootPath])).rejects.toThrow(
+      "Access denied - path outside allowed directories",
+    );
+  });
+
+  it("resolves relative existing paths against the process working directory", async () => {
+    await expect(validatePath("rel-guard.txt", [process.cwd()])).resolves.toBe(
+      join(process.cwd(), "rel-guard.txt"),
+    );
+  });
+
+  it("resolves through the parent fallback when an existing alias target escapes the allowed set", async () => {
+    const outsideFilePath = join(outsideRootPath, "secret.txt");
+    await writeFile(outsideFilePath, "secret", "utf8");
+    const aliasFilePath = join(allowedRootPath, "alias-secret.txt");
+    await symlink(outsideFilePath, aliasFilePath, "file");
+
+    await expect(validatePath(aliasFilePath, [allowedRootPath])).resolves.toBe(aliasFilePath);
+  });
+
+  it("returns the absolute candidate for new files whose parent exists inside the allowed set", async () => {
+    const newFilePath = join(allowedRootPath, "new-file.txt");
+
+    await expect(validatePath(newFilePath, [allowedRootPath])).resolves.toBe(newFilePath);
+  });
+
+  it("validates creation candidates that already exist as files through their parent directory", async () => {
+    await expect(validatePathForCreation(existingFilePath, [allowedRootPath])).resolves.toBe(
+      existingFilePath,
+    );
+  });
+
+  it("ascends past a junction-escaped ancestor under the current self-swallowing walk", async () => {
+    const aliasDirectoryPath = join(allowedRootPath, "alias-outside");
+    await symlink(outsideRootPath, aliasDirectoryPath, "junction");
+    const candidatePath = join(aliasDirectoryPath, "deep", "child.txt");
+
+    await expect(validatePathForCreation(candidatePath, [allowedRootPath])).resolves.toBe(
+      candidatePath,
     );
   });
 });

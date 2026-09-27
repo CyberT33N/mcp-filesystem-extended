@@ -16,6 +16,8 @@ import {
 } from "@domain/shared/guardrails/traversal-scope-policy";
 import {
   TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES,
+  buildTraversalPreviewFirstTruncationGuidance,
+  resolveResumePassAdmissionDecision,
   resolveTraversalWorkloadAdmissionDecision,
 } from "@domain/shared/guardrails/traversal-workload-admission";
 import { PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE } from "@domain/shared/runtime/io-capability-profile";
@@ -329,5 +331,254 @@ describe("traversal scope and admission", () => {
     expect(decision.outcome).toBe(TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED);
     expect(decision.guidanceText).toContain("Narrow the requested root 'src/domain/shared'");
     expect(decision.guidanceText).toContain("no task-backed execution lane");
+  });
+
+  it("normalizes empty and root-like traversal paths to the canonical root marker", () => {
+    expect(normalizeTraversalScopePath("")).toBe(".");
+    expect(isPathInsideDefaultTraversalScopeExclusion("")).toBe(false);
+
+    const resolution = resolveTraversalScopePolicy(".");
+    expect(shouldExcludeTraversalScopePath(".", resolution)).toBe(false);
+  });
+
+  it("normalizes caller exclude globs across empty, slash-bearing, and bare-name forms", () => {
+    const resolution = resolveTraversalScopePolicy(".", ["", "docs/internal", "logs"]);
+
+    expect(shouldExcludeTraversalScopePath("docs/internal/spec.md", resolution)).toBe(true);
+    expect(shouldExcludeTraversalScopePath("logs/app.txt", resolution)).toBe(true);
+    expect(shouldExcludeTraversalScopePath("src/app.ts", resolution)).toBe(false);
+  });
+
+  it("applies includeExcluded glob normalization for empty and wildcard forms", () => {
+    const resolution = resolveTraversalScopePolicy(".", ["dist/**"], {
+      includeExcludedGlobs: ["", "dist/keep-*.ts"],
+    });
+
+    expect(shouldExcludeTraversalScopePath("dist/drop.ts", resolution)).toBe(true);
+    expect(shouldExcludeTraversalScopePath("dist/keep-a.ts", resolution)).toBe(false);
+  });
+
+  it("keeps the gitignore hierarchy inert unless respectGitIgnore is enabled", () => {
+    const withHierarchy = resolveTraversalScopePolicy(".", [], {
+      respectGitIgnore: true,
+    });
+    expect(withHierarchy.gitIgnoreTraversalHierarchy).toBeNull();
+    expect(withHierarchy.gitIgnoreEnrichmentApplied).toBe(false);
+
+    const hierarchy = createGitIgnoreTraversalHierarchy("C:/workspace/root");
+    const withoutRespect = resolveTraversalScopePolicy(".", [], {
+      gitIgnoreTraversalHierarchy: hierarchy,
+    });
+    expect(withoutRespect.gitIgnoreTraversalHierarchy).toBeNull();
+    expect(withoutRespect.gitIgnoreEnrichmentApplied).toBe(false);
+  });
+
+  it("keeps non-directory roots inline when no response budget is exceeded", () => {
+    const executionPolicy = resolveSearchExecutionPolicy(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+    );
+
+    const decision = resolveTraversalWorkloadAdmissionDecision({
+      admissionEvidence: null,
+      consumerCapabilities: {
+        previewFirstSupported: true,
+        taskBackedExecutionSupported: false,
+        toolName: "read_file_content",
+      },
+      executionPolicy,
+      requestedRoot: "src/readme.md",
+      rootEntry: {
+        requestedPath: "src/readme.md",
+        size: 10,
+        type: "file",
+        validPath: "C:/workspace/src/readme.md",
+      },
+    });
+
+    expect(decision).toEqual({
+      guidanceText: null,
+      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE,
+    });
+  });
+
+  it("admits non-directory roots into preview-first when the projected inline response exceeds the cap", () => {
+    const executionPolicy = resolveSearchExecutionPolicy(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+    );
+
+    const decision = resolveTraversalWorkloadAdmissionDecision({
+      admissionEvidence: null,
+      consumerCapabilities: {
+        inlineTextResponseCapChars: 1_000,
+        previewFirstSupported: true,
+        taskBackedExecutionSupported: false,
+        toolName: "read_file_content",
+      },
+      executionPolicy,
+      projectedInlineTextChars: 2_000,
+      requestedRoot: "src/readme.md",
+      rootEntry: {
+        requestedPath: "src/readme.md",
+        size: 10,
+        type: "file",
+        validPath: "C:/workspace/src/readme.md",
+      },
+    });
+
+    expect(decision.outcome).toBe(TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST);
+    expect(decision.guidanceText).toContain("exceeds the bounded inline response surface");
+  });
+
+  it("requires a completion-backed lane for non-directory roots when preview-first is unavailable", () => {
+    const executionPolicy = resolveSearchExecutionPolicy(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+    );
+
+    const decision = resolveTraversalWorkloadAdmissionDecision({
+      admissionEvidence: null,
+      consumerCapabilities: {
+        inlineTextResponseCapChars: 1_000,
+        previewFirstSupported: false,
+        taskBackedExecutionSupported: true,
+        toolName: "read_file_content",
+      },
+      executionPolicy,
+      projectedInlineTextChars: 2_000,
+      requestedRoot: "src/readme.md",
+      rootEntry: {
+        requestedPath: "src/readme.md",
+        size: 10,
+        type: "file",
+        validPath: "C:/workspace/src/readme.md",
+      },
+    });
+
+    expect(decision.outcome).toBe(
+      TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
+    );
+    expect(decision.guidanceText).toContain("completion-backed execution lane");
+  });
+
+  it("defaults the per-candidate-file cost when the consumer omits it", () => {
+    const executionPolicy = resolveSearchExecutionPolicy(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+    );
+
+    const decision = resolveTraversalWorkloadAdmissionDecision({
+      admissionEvidence: {
+        elapsedMs: 25,
+        requestedRoot: "src/domain/shared",
+        visitedDirectories: 10,
+        visitedEntries: 100,
+      },
+      candidateWorkloadEvidence: {
+        estimatedCandidateBytes: 1_024,
+        estimatedResponseChars: 120,
+        matchedCandidateFiles: 2,
+        probeElapsedMs: 25,
+        probeTruncated: false,
+      },
+      consumerCapabilities: {
+        executionTimeCostMultiplier: 1,
+        inlineCandidateByteBudget: 10_000,
+        inlineCandidateFileBudget: 50,
+        inlineTextResponseCapChars: 1_000,
+        previewFirstSupported: true,
+        taskBackedExecutionSupported: false,
+        toolName: "search_file_contents_by_regex",
+      },
+      executionPolicy,
+      projectedInlineTextChars: 200,
+      requestedRoot: "src/domain/shared",
+      rootEntry: {
+        requestedPath: "src/domain/shared",
+        size: 0,
+        type: "directory",
+        validPath: "C:/workspace/src/domain/shared",
+      },
+    });
+
+    expect(decision).toEqual({
+      guidanceText: null,
+      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE,
+    });
+  });
+
+  it("keeps directory roots inline when no candidate workload evidence exists", () => {
+    const executionPolicy = resolveSearchExecutionPolicy(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+    );
+
+    const decision = resolveTraversalWorkloadAdmissionDecision({
+      admissionEvidence: {
+        elapsedMs: 25,
+        requestedRoot: "src/domain/shared",
+        visitedDirectories: 10,
+        visitedEntries: 100,
+      },
+      consumerCapabilities: {
+        previewFirstSupported: true,
+        taskBackedExecutionSupported: false,
+        toolName: "list_directory_entries",
+      },
+      executionPolicy,
+      requestedRoot: "src/domain/shared",
+      rootEntry: {
+        requestedPath: "src/domain/shared",
+        size: 0,
+        type: "directory",
+        validPath: "C:/workspace/src/domain/shared",
+      },
+    });
+
+    expect(decision).toEqual({
+      guidanceText: null,
+      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE,
+    });
+  });
+
+  it("admits directory roots into preview-first when breadth exceeds the inline band but stays within the preview band", () => {
+    const executionPolicy = resolveSearchExecutionPolicy(
+      PROVEN_LOCAL_STATIC_DISCOVERY_IO_CAPABILITY_PROFILE,
+    );
+
+    const decision = resolveTraversalWorkloadAdmissionDecision({
+      admissionEvidence: {
+        elapsedMs: 25,
+        requestedRoot: "src/domain/shared",
+        visitedDirectories: 10,
+        visitedEntries: executionPolicy.traversalInlineEntryBudget + 1,
+      },
+      consumerCapabilities: {
+        previewFirstSupported: true,
+        taskBackedExecutionSupported: false,
+        toolName: "list_directory_entries",
+      },
+      executionPolicy,
+      requestedRoot: "src/domain/shared",
+      rootEntry: {
+        requestedPath: "src/domain/shared",
+        size: 0,
+        type: "directory",
+        validPath: "C:/workspace/src/domain/shared",
+      },
+    });
+
+    expect(decision.outcome).toBe(TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST);
+    expect(decision.guidanceText).toContain("admitted in preview-first mode");
+  });
+
+  it("reconstructs the preview-first admission decision for resume passes", () => {
+    const decision = resolveResumePassAdmissionDecision("src/domain", "count_lines");
+
+    expect(decision.outcome).toBe(TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST);
+    expect(decision.guidanceText).toContain("admitted in preview-first mode");
+  });
+
+  it("builds canonical truncation guidance for exhausted preview lanes", () => {
+    const guidance = buildTraversalPreviewFirstTruncationGuidance("src/domain", "count_lines");
+
+    expect(guidance).toContain("stopped after the bounded preview lane");
+    expect(guidance).toContain("Narrow the requested root 'src/domain'");
   });
 });

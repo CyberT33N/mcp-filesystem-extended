@@ -8,24 +8,59 @@ import {
 import type { TraversalRuntimeBudgetLimits } from "./traversal-runtime-budget";
 
 /**
- * Shared execution plan for the bounded preview-first traversal lane.
+ * Inactive shared execution plan for the bounded preview-first traversal lane.
+ *
+ * @remarks
+ * Non-preview admissions carry no preview-lane budgets; the null-valued variant keeps that
+ * inactivity explicit at the type level so consumers never defend against absent budgets.
  */
-export interface TraversalPreviewLanePlan {
+export interface InactiveTraversalPreviewLanePlan {
+  /**
+   * Always `null`: the inactive lane carries no candidate-byte ceiling.
+   */
+  candidateByteBudget: null;
+
+  /**
+   * Always `null`: the inactive lane carries no caller guidance.
+   */
+  guidanceText: null;
+
+  /**
+   * Always `null`: the inactive lane carries no traversal-runtime ceilings.
+   */
+  runtimeBudgetLimits: null;
+}
+
+/**
+ * Active shared execution plan for the bounded preview-first traversal lane.
+ *
+ * @remarks
+ * Preview-first admissions always carry a concrete byte ceiling, caller guidance, and runtime
+ * ceilings by construction, so consumers can narrow on any one of them.
+ */
+export interface ActiveTraversalPreviewLanePlan {
   /**
    * Candidate-byte ceiling that keeps the preview lane below the broader search hard gap.
    */
-  candidateByteBudget: number | null;
+  candidateByteBudget: number;
 
   /**
    * Canonical caller guidance emitted when the preview lane stops before a full traversal completes.
    */
-  guidanceText: string | null;
+  guidanceText: string;
 
   /**
    * Traversal-runtime ceilings that keep preview-first execution below the deeper emergency safeguard.
    */
-  runtimeBudgetLimits: TraversalRuntimeBudgetLimits | null;
+  runtimeBudgetLimits: TraversalRuntimeBudgetLimits;
 }
+
+/**
+ * Shared execution plan for the bounded preview-first traversal lane.
+ */
+export type TraversalPreviewLanePlan =
+  | InactiveTraversalPreviewLanePlan
+  | ActiveTraversalPreviewLanePlan;
 
 /**
  * Resolves the bounded preview-first execution plan for one traversal admission decision.
@@ -68,17 +103,13 @@ export function resolveTraversalPreviewLanePlan(
  *
  * @param currentAggregateCandidateBytes - Candidate bytes already consumed by the current request.
  * @param nextCandidateBytes - Candidate bytes required for the next file.
- * @param previewLanePlan - Shared preview-lane execution plan for the current root.
+ * @param previewLanePlan - Active preview-lane execution plan for the current root.
  * @returns `true` when the next file would exceed the preview-lane byte budget.
  */
 export function shouldStopTraversalPreviewLane(
   currentAggregateCandidateBytes: number,
   nextCandidateBytes: number,
-  previewLanePlan: TraversalPreviewLanePlan,
+  previewLanePlan: ActiveTraversalPreviewLanePlan,
 ): boolean {
-  if (previewLanePlan.candidateByteBudget === null) {
-    return false;
-  }
-
   return currentAggregateCandidateBytes + nextCandidateBytes > previewLanePlan.candidateByteBudget;
 }

@@ -312,4 +312,280 @@ describe("read_file_content", () => {
       "Actual content-read response exceeds the direct-read family cap.",
     );
   });
+
+  it("normalizes full-mode requests into the canonical contract", () => {
+    expect(
+      normalizeReadFileContentArgs(
+        ReadFileContentArgsSchema.parse({
+          mode: "full",
+          path: "docs/notes.txt",
+        }),
+      ),
+    ).toEqual({
+      mode: "full",
+      path: "docs/notes.txt",
+    });
+  });
+
+  it("normalizes an explicit line-range window into a derived line count", () => {
+    expect(
+      normalizeReadFileContentArgs(
+        ReadFileContentArgsSchema.parse({
+          line_range: { end: 7, start: 3 },
+          mode: "line-range",
+          path: "docs/notes.txt",
+        }),
+      ),
+    ).toEqual({
+      lineCount: 5,
+      mode: "line_range",
+      path: "docs/notes.txt",
+      startLine: 3,
+    });
+  });
+
+  it("normalizes byte-range requests that carry only an explicit byte count", () => {
+    expect(
+      normalizeReadFileContentArgs(
+        ReadFileContentArgsSchema.parse({
+          byte_range: { byteCount: 4, start: 6 },
+          mode: "byte-range",
+          path: "docs/notes.txt",
+        }),
+      ),
+    ).toEqual({
+      byteCount: 4,
+      mode: "byte_range",
+      path: "docs/notes.txt",
+      startByte: 6,
+    });
+  });
+
+  it("normalizes explicit chunk-cursor windows into the canonical contract", () => {
+    expect(
+      normalizeReadFileContentArgs(
+        ReadFileContentArgsSchema.parse({
+          chunk_cursor: { byteCount: 64, cursor: "cursor-9" },
+          mode: "chunk-cursor",
+          path: "docs/notes.txt",
+        }),
+      ),
+    ).toEqual({
+      byteCount: 64,
+      cursor: "cursor-9",
+      mode: "chunk_cursor",
+      path: "docs/notes.txt",
+    });
+  });
+
+  it("rejects line-range windows whose end precedes the start", () => {
+    expect(() =>
+      ReadFileContentArgsSchema.parse({
+        line_range: { end: 2, start: 5 },
+        mode: "line-range",
+        path: "docs/notes.txt",
+      })
+    ).toThrow("must be greater than or equal to");
+  });
+
+  it("rejects line-range windows beyond the hard maximum line window", () => {
+    expect(() =>
+      ReadFileContentArgsSchema.parse({
+        line_range: { end: 2001, start: 1 },
+        mode: "line-range",
+        path: "docs/notes.txt",
+      })
+    ).toThrow("exceeds the hard maximum line window");
+  });
+
+  it("rejects byte-range requests that mix an exclusive end with a byte count", () => {
+    expect(() =>
+      ReadFileContentArgsSchema.parse({
+        byte_range: { byteCount: 5, endExclusive: 10, start: 0 },
+        mode: "byte-range",
+        path: "docs/notes.txt",
+      })
+    ).toThrow("not both");
+  });
+
+  it("rejects byte-range windows whose end does not exceed the start", () => {
+    expect(() =>
+      ReadFileContentArgsSchema.parse({
+        byte_range: { endExclusive: 10, start: 10 },
+        mode: "byte-range",
+        path: "docs/notes.txt",
+      })
+    ).toThrow("must be greater than");
+  });
+
+  it("rejects byte-range windows beyond the hard maximum byte window", () => {
+    expect(() =>
+      ReadFileContentArgsSchema.parse({
+        byte_range: { endExclusive: 1024 * 1024 + 1, start: 0 },
+        mode: "byte-range",
+        path: "docs/notes.txt",
+      })
+    ).toThrow("exceeds the hard maximum byte window");
+  });
+
+  it("accepts an explicit line-range start without an end line", () => {
+    expect(
+      normalizeReadFileContentArgs(
+        ReadFileContentArgsSchema.parse({
+          line_range: { start: 3 },
+          mode: "line-range",
+          path: "docs/notes.txt",
+        }),
+      ),
+    ).toEqual({
+      lineCount: READ_FILE_CONTENT_LINE_RANGE_DEFAULT_LINES,
+      mode: "line_range",
+      path: "docs/notes.txt",
+      startLine: 3,
+    });
+  });
+
+  it("applies the canonical window defaults for flat requests without option blocks", () => {
+    expect(
+      normalizeReadFileContentArgs({ mode: "chunk-cursor", path: "docs/notes.txt" }),
+    ).toEqual({
+      byteCount: READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES,
+      cursor: null,
+      mode: "chunk_cursor",
+      path: "docs/notes.txt",
+    });
+
+    expect(
+      normalizeReadFileContentArgs({ mode: "line-range", path: "docs/notes.txt" }),
+    ).toEqual({
+      lineCount: READ_FILE_CONTENT_LINE_RANGE_DEFAULT_LINES,
+      mode: "line_range",
+      path: "docs/notes.txt",
+      startLine: 1,
+    });
+
+    expect(
+      normalizeReadFileContentArgs({ mode: "byte-range", path: "docs/notes.txt" }),
+    ).toEqual({
+      byteCount: READ_FILE_CONTENT_BYTE_RANGE_DEFAULT_BYTES,
+      mode: "byte_range",
+      path: "docs/notes.txt",
+      startByte: 0,
+    });
+  });
+
+  it("formats full-mode reads with the line-numbered content surface", async () => {
+    const output = await handleReadFileContent(
+      { mode: "full", path: "docs/notes.txt" },
+      ["C:/allowed"],
+    );
+
+    expect(output).toContain("mode: full");
+    expect(output).toContain("encoding: utf8");
+    expect(output).toContain("totalFileBytes: 13");
+    expect(output).toContain("1: hello world!");
+  });
+
+  it("formats byte-range reads with explicit byte offsets", async () => {
+    const output = await handleReadFileContent(
+      { byteCount: 12, mode: "byte_range", path: "docs/notes.txt", startByte: 0 },
+      ["C:/allowed"],
+    );
+
+    expect(output).toContain("mode: byte_range");
+    expect(output).toContain("startByte: 0");
+    expect(output).toContain("endByteExclusive: 12");
+    expect(output).toContain("nextByteOffset: 12");
+    expect(output).toContain("hello world!");
+  });
+
+  it("formats null continuation markers for terminal ranged reads", async () => {
+    mockedReadFileContentLineRange.mockResolvedValueOnce({
+      content: "line one\n",
+      endLine: 1,
+      hasMore: false,
+      nextLine: null,
+      returnedByteCount: 9,
+      returnedLineCount: 1,
+      startLine: 1,
+    });
+    const lineOutput = await handleReadFileContent(
+      { lineCount: 1, mode: "line_range", path: "docs/notes.txt", startLine: 1 },
+      ["C:/allowed"],
+    );
+    expect(lineOutput).toContain("nextLine: null");
+
+    mockedReadFileContentByteRange.mockResolvedValueOnce({
+      content: "hello",
+      endByteExclusive: 5,
+      hasMore: false,
+      nextByteOffset: null,
+      returnedByteCount: 5,
+      startByte: 0,
+    });
+    const byteOutput = await handleReadFileContent(
+      { byteCount: 5, mode: "byte_range", path: "docs/notes.txt", startByte: 0 },
+      ["C:/allowed"],
+    );
+    expect(byteOutput).toContain("nextByteOffset: null");
+
+    mockedReadFileContentChunkCursor.mockResolvedValueOnce({
+      content: "chunk",
+      cursor: null,
+      endByteExclusive: 5,
+      hasMore: false,
+      nextCursor: null,
+      returnedByteCount: 5,
+      startByte: 0,
+    });
+    const cursorOutput = await handleReadFileContent(
+      { byteCount: 5, cursor: null, mode: "chunk_cursor", path: "docs/notes.txt" },
+      ["C:/allowed"],
+    );
+    expect(cursorOutput).toContain("cursor: null");
+    expect(cursorOutput).toContain("nextCursor: null");
+  });
+
+  it("rejects inline full reads when the projected read window exceeds the runtime comfort budget", async () => {
+    mockedDetectIoCapabilityProfile.mockReturnValue({
+      ...TEST_IO_CAPABILITY_PROFILE,
+      estimatedSourceReadBytesPerSecond: 0.1,
+    });
+
+    await expect(
+      getReadFileContentResult({ mode: "full", path: "docs/notes.txt" }, ["C:/allowed"]),
+    ).rejects.toThrow("exceeds the shared runtime comfort budget");
+  });
+
+  it("skips the comfort-window guard when the runtime read rate is unknown or zero", async () => {
+    mockedDetectIoCapabilityProfile.mockReturnValue({
+      ...TEST_IO_CAPABILITY_PROFILE,
+      estimatedSourceReadBytesPerSecond: null,
+    });
+
+    const unknownRateResult = await getReadFileContentResult(
+      { mode: "full", path: "docs/notes.txt" },
+      ["C:/allowed"],
+    );
+    expect(unknownRateResult.mode).toBe("full");
+
+    mockedDetectIoCapabilityProfile.mockReturnValue({
+      ...TEST_IO_CAPABILITY_PROFILE,
+      estimatedSourceReadBytesPerSecond: 0,
+    });
+
+    const zeroRateResult = await getReadFileContentResult(
+      { mode: "full", path: "docs/notes.txt" },
+      ["C:/allowed"],
+    );
+    expect(zeroRateResult.mode).toBe("full");
+  });
+
+  it("fails closed when preflight returns no validated entry", async () => {
+    mockedCollectValidatedFilesystemPreflightEntries.mockResolvedValue([]);
+
+    await expect(
+      getReadFileContentResult({ mode: "full", path: "docs/notes.txt" }, ["C:/allowed"]),
+    ).rejects.toThrow("Expected one validated file entry");
+  });
 });

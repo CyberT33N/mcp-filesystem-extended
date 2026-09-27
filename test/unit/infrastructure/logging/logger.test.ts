@@ -113,4 +113,30 @@ describe("logger", () => {
     );
     expect(loggerTestState.destination).toHaveBeenNthCalledWith(2, 1);
   });
+
+  it("keeps the module loadable when the diagnostics directory cannot be created", async () => {
+    loggerTestState.existsSync.mockReturnValue(false);
+    loggerTestState.mkdirSync.mockImplementation(() => {
+      throw new Error("read-only filesystem");
+    });
+
+    const loggerModule = await import("@infrastructure/logging/logger");
+
+    expect(loggerModule.DIAGNOSTIC_LOG_DIRECTORY_PATH).toBe(
+      path.join("C:/diagnostics-temp", "mcp-filesystem-extended", "diagnostics"),
+    );
+    expect(loggerTestState.pinoFactory).toHaveBeenCalledOnce();
+  });
+
+  it("swallows log-file truncation failures during explicit initialization", async () => {
+    loggerTestState.writeFileSync.mockImplementation(() => {
+      throw new Error("disk full");
+    });
+
+    const loggerModule = await import("@infrastructure/logging/logger");
+
+    expect(() => {
+      loggerModule.initializeLogger();
+    }).not.toThrow();
+  });
 });

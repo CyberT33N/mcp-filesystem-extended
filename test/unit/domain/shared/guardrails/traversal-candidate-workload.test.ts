@@ -17,6 +17,27 @@ vi.mock("fs/promises", () => ({
   stat: mockedStat,
 }));
 
+/**
+ * Hoisted traversal runtime-budget mock used to drive the non-budget rethrow path
+ * of the entry-visit checkpoint.
+ */
+const { mockedAssertTraversalRuntimeBudget } = vi.hoisted(() => ({
+  mockedAssertTraversalRuntimeBudget: vi.fn(),
+}));
+
+vi.mock("@domain/shared/guardrails/traversal-runtime-budget", async (importOriginal) => {
+  const originalModule = await importOriginal<typeof import("@domain/shared/guardrails/traversal-runtime-budget")>();
+
+  mockedAssertTraversalRuntimeBudget.mockImplementation(
+    originalModule.assertTraversalRuntimeBudget,
+  );
+
+  return {
+    ...originalModule,
+    assertTraversalRuntimeBudget: mockedAssertTraversalRuntimeBudget,
+  };
+});
+
 import { createGitIgnoreTraversalHierarchy } from "@domain/shared/guardrails/gitignore-traversal-enrichment";
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import { resolveTraversalScopePolicy } from "@domain/shared/guardrails/traversal-scope-policy";
@@ -382,5 +403,160 @@ describe("traversal candidate workload", () => {
     expect(result.estimatedCandidateBytes).toBe(5);
     expect(result.matchedCandidateFiles).toBe(1);
     expect(result.probeTruncated).toBe(true);
+  });
+
+  it("marks the probe as truncated when the runtime budget is exhausted at a directory boundary", async () => {
+    const createDirent = (name: string, kind: "file" | "directory") => ({
+      name,
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isDirectory: () => kind === "directory",
+      isFIFO: () => false,
+      isFile: () => kind === "file",
+      isSocket: () => false,
+      isSymbolicLink: () => false,
+    });
+
+    mockedReaddir.mockImplementation(async (directoryPath: string) => {
+      if (directoryPath === "C:/workspace/root") {
+        return [
+          createDirent("nested", "directory"),
+          createDirent("other.ts", "file"),
+        ];
+      }
+
+      return [];
+    });
+
+    const result = await collectTraversalCandidateWorkloadEvidence({
+      validRootPath: "C:/workspace/root",
+      traversalScopePolicyResolution: resolveTraversalScopePolicy("."),
+      runtimeBudgetLimits: {
+        maxVisitedEntries: 20,
+        maxVisitedDirectories: 1,
+        softTimeBudgetMs: 10_000,
+      },
+      inlineCandidateByteBudget: 100,
+      fileMatcher: () => true,
+    });
+
+    expect(result.probeTruncated).toBe(true);
+    expect(result.matchedCandidateFiles).toBe(0);
+  });
+
+  it("marks the probe as truncated when the root directory cannot be read", async () => {
+    mockedReaddir.mockRejectedValue(new Error("permission denied"));
+
+    const result = await collectTraversalCandidateWorkloadEvidence({
+      validRootPath: "C:/workspace/root",
+      traversalScopePolicyResolution: resolveTraversalScopePolicy("."),
+      runtimeBudgetLimits: {
+        maxVisitedEntries: 20,
+        maxVisitedDirectories: 20,
+        softTimeBudgetMs: 10_000,
+      },
+      inlineCandidateByteBudget: 100,
+      fileMatcher: () => true,
+    });
+
+    expect(result.probeTruncated).toBe(true);
+    expect(result.estimatedCandidateBytes).toBe(0);
+  });
+
+  it("marks the probe as truncated when a candidate stat call fails", async () => {
+    const createDirent = (name: string) => ({
+      name,
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isDirectory: () => false,
+      isFIFO: () => false,
+      isFile: () => true,
+      isSocket: () => false,
+      isSymbolicLink: () => false,
+    });
+
+    mockedReaddir.mockResolvedValue([createDirent("alpha.ts")]);
+    mockedStat.mockRejectedValueOnce(new Error("permission denied"));
+
+    const result = await collectTraversalCandidateWorkloadEvidence({
+      validRootPath: "C:/workspace/root",
+      traversalScopePolicyResolution: resolveTraversalScopePolicy("."),
+      runtimeBudgetLimits: {
+        maxVisitedEntries: 20,
+        maxVisitedDirectories: 20,
+        softTimeBudgetMs: 10_000,
+      },
+      inlineCandidateByteBudget: 100,
+      fileMatcher: () => true,
+    });
+
+    expect(result.probeTruncated).toBe(true);
+    expect(result.matchedCandidateFiles).toBe(0);
+  });
+
+  it("collects candidates without truncation when no inline byte budget is configured", async () => {
+    const createDirent = (name: string) => ({
+      name,
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isDirectory: () => false,
+      isFIFO: () => false,
+      isFile: () => true,
+      isSocket: () => false,
+      isSymbolicLink: () => false,
+    });
+
+    mockedReaddir.mockResolvedValue([createDirent("alpha.ts")]);
+    mockedStat.mockResolvedValue({ size: 5 });
+
+    const result = await collectTraversalCandidateWorkloadEvidence({
+      validRootPath: "C:/workspace/root",
+      traversalScopePolicyResolution: resolveTraversalScopePolicy("."),
+      runtimeBudgetLimits: {
+        maxVisitedEntries: 20,
+        maxVisitedDirectories: 20,
+        softTimeBudgetMs: 10_000,
+      },
+      fileMatcher: () => true,
+    });
+
+    expect(result.probeTruncated).toBe(false);
+    expect(result.estimatedCandidateBytes).toBe(5);
+  });
+
+  it("rethrows non-budget failures raised at the entry-visit checkpoint", async () => {
+    const createDirent = (name: string) => ({
+      name,
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isDirectory: () => false,
+      isFIFO: () => false,
+      isFile: () => true,
+      isSocket: () => false,
+      isSymbolicLink: () => false,
+    });
+
+    mockedReaddir.mockResolvedValue([createDirent("alpha.ts")]);
+    mockedStat.mockResolvedValue({ size: 5 });
+
+    mockedAssertTraversalRuntimeBudget
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => {
+        throw new TypeError("entry checkpoint exploded");
+      });
+
+    await expect(
+      collectTraversalCandidateWorkloadEvidence({
+        validRootPath: "C:/workspace/root",
+        traversalScopePolicyResolution: resolveTraversalScopePolicy("."),
+        runtimeBudgetLimits: {
+          maxVisitedEntries: 20,
+          maxVisitedDirectories: 20,
+          softTimeBudgetMs: 10_000,
+        },
+        inlineCandidateByteBudget: 100,
+        fileMatcher: () => true,
+      }),
+    ).rejects.toThrow("entry checkpoint exploded");
   });
 });

@@ -417,4 +417,222 @@ describe("list_directory_entries resume lifecycle", () => {
       sessionTotalCount: 2,
     });
   });
+
+  it("merges continuation states from multiple truncating roots into one persisted session", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    throwMode = "always";
+
+    const secondaryRootPath = join(sandboxRootPath, "secondary");
+    await mkdir(secondaryRootPath, { recursive: true });
+
+    const result = await getListDirectoryEntriesResult(
+      undefined,
+      undefined,
+      [sandboxRootPath, secondaryRootPath],
+      true,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      [sandboxRootPath, secondaryRootPath],
+      activeStore,
+    );
+
+    expect(result.roots).toHaveLength(2);
+    expect(result.resume.resumable).toBe(true);
+  });
+
+  it("rethrows non-budget failures from the traversal runtime safeguard at a directory visit", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    mockedAssertTraversalRuntimeBudget.mockImplementation((toolName: string) => {
+      if (toolName === "list_directory_entries") {
+        throw new Error("unexpected safeguard internals failure");
+      }
+    });
+
+    await expect(
+      getListDirectoryEntriesResult(
+        undefined,
+        undefined,
+        [sandboxRootPath],
+        true,
+        DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+        [],
+        [],
+        false,
+        [sandboxRootPath],
+        activeStore,
+      ),
+    ).rejects.toThrow("unexpected safeguard internals failure");
+  });
+
+  it("aborts the preview pass when the traversal runtime budget is exhausted at an entry visit", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    let handlerScopedCalls = 0;
+    mockedAssertTraversalRuntimeBudget.mockImplementation((toolName: string, state: { visitedEntries: number }) => {
+      if (toolName !== "list_directory_entries") {
+        return;
+      }
+
+      handlerScopedCalls += 1;
+
+      if (handlerScopedCalls === 2) {
+        throw new TraversalRuntimeBudgetExceededError(
+          "Traversal runtime budget exhausted for the current listing pass.",
+          "list_directory_entries",
+          "traversal entries visited",
+          state.visitedEntries,
+          1,
+          "entries",
+        );
+      }
+    });
+
+    const result = await getListDirectoryEntriesResult(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      true,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      [sandboxRootPath],
+      activeStore,
+    );
+
+    expect(result.resume.resumable).toBe(true);
+  });
+
+  it("rethrows non-budget failures from the traversal runtime safeguard at an entry visit", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    let handlerScopedCalls = 0;
+    mockedAssertTraversalRuntimeBudget.mockImplementation((toolName: string) => {
+      if (toolName !== "list_directory_entries") {
+        return;
+      }
+
+      handlerScopedCalls += 1;
+
+      if (handlerScopedCalls === 2) {
+        throw new Error("unexpected safeguard internals failure");
+      }
+    });
+
+    await expect(
+      getListDirectoryEntriesResult(
+        undefined,
+        undefined,
+        [sandboxRootPath],
+        true,
+        DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+        [],
+        [],
+        false,
+        [sandboxRootPath],
+        activeStore,
+      ),
+    ).rejects.toThrow("unexpected safeguard internals failure");
+  });
+
+  it("applies the family response cap for inline base requests through the formatted handler", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    mockedResolveTraversalWorkloadAdmissionDecision.mockReturnValueOnce({
+      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE,
+      guidanceText: null,
+    });
+
+    const output = await handleListDirectoryEntries(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      false,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      [sandboxRootPath],
+      activeStore,
+    );
+
+    expect(output).toContain("nested");
+  });
+
+  it("skips default-excluded entries while estimating the non-recursive inline response surface", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    await mkdir(join(sandboxRootPath, "node_modules"));
+    await writeFile(join(sandboxRootPath, "node_modules", "vendored.js"), "ignored");
+
+    mockedResolveTraversalWorkloadAdmissionDecision.mockReturnValueOnce({
+      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE,
+      guidanceText: null,
+    });
+
+    const result = await getListDirectoryEntriesResult(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      false,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      [sandboxRootPath],
+      activeStore,
+    );
+
+    expect(result.roots[0]?.entries.map((entry) => entry.name)).not.toContain("node_modules");
+  });
+
+  it("falls back to canonical narrowing guidance when the admission decision carries no guidance text", async () => {
+    mockedResolveTraversalWorkloadAdmissionDecision.mockReturnValueOnce({
+      outcome: TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED,
+      guidanceText: null,
+    });
+
+    await expect(
+      getListDirectoryEntriesResult(
+        undefined,
+        undefined,
+        [sandboxRootPath],
+        true,
+        DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+        [],
+        [],
+        false,
+        [sandboxRootPath],
+        store,
+      ),
+    ).rejects.toThrow(`Narrow the requested root '${sandboxRootPath}'`);
+  });
 });

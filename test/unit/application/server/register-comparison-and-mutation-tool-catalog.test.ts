@@ -345,4 +345,106 @@ describe("register-comparison-and-mutation-tool-catalog", () => {
       "create_symbolic_links",
     ]);
   });
+
+  it("maps non-empty request payloads through the registered callback contracts", async () => {
+    const registerTool = vi.fn();
+    const executeTool = vi.fn(
+      (_toolName: string, operation: () => unknown) => operation(),
+    );
+    const context = {
+      server: {
+        registerTool,
+      },
+      allowedDirectories: ["C:/allowed"],
+      inspectionResumeSessionStore: {
+        cleanupExpiredSessions: vi.fn(),
+      },
+      executeTool,
+    };
+
+    Reflect.apply(registerComparisonAndMutationToolCatalog, undefined, [context]);
+
+    const registeredCallbackByToolName = new Map(
+      registerTool.mock.calls.map(([toolName, , callback]) => [
+        toolName,
+        callback,
+      ]),
+    );
+
+    registerComparisonAndMutationToolCatalogTestState.handleFileDiff.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleContentDiff.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleCreateFiles.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleAppendFiles.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleReplaceFileLineRanges.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleCreateDirectories.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleCopyPaths.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleMovePaths.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleDeletePaths.mockResolvedValue("text");
+    registerComparisonAndMutationToolCatalogTestState.handleCreateSymbolicLinks.mockResolvedValue("text");
+
+    for (const toolName of registeredCallbackByToolName.keys()) {
+      const callback = registeredCallbackByToolName.get(toolName);
+
+      if (callback === undefined) {
+        throw new Error(`Expected ${toolName} to be registered.`);
+      }
+
+      await Reflect.apply(callback, undefined, [{
+        dryRun: true,
+        files: [
+          {
+            path: "a.txt",
+            content: "x",
+            replacements: [{ endLine: 1, replacementText: "x", startLine: 1 }],
+          },
+        ],
+        links: [{ linkPath: "a", target: "b" }],
+        operations: [{ destinationPath: "b", overwrite: true, recursive: true, sourcePath: "a" }],
+        overwrite: true,
+        pairs: [
+          {
+            leftContent: "x",
+            leftLabel: "l",
+            leftPath: "a",
+            rightContent: "y",
+            rightLabel: "r",
+            rightPath: "b",
+          },
+        ],
+        paths: ["a"],
+      }]);
+    }
+
+    expect(executeTool).toHaveBeenCalledTimes(10);
+    expect(
+      registerComparisonAndMutationToolCatalogTestState.handleCopyPaths,
+    ).toHaveBeenCalledWith(
+      [{ destination: "b", overwrite: true, recursive: true, source: "a" }],
+      ["C:/allowed"],
+    );
+    expect(
+      registerComparisonAndMutationToolCatalogTestState.handleFileDiff,
+    ).toHaveBeenCalledWith([{ file1: "a", file2: "b" }], ["C:/allowed"]);
+    expect(
+      registerComparisonAndMutationToolCatalogTestState.handleContentDiff,
+    ).toHaveBeenCalledWith([
+      { content1: "x", content2: "y", label1: "l", label2: "r" },
+    ]);
+    expect(
+      registerComparisonAndMutationToolCatalogTestState.handleReplaceFileLineRanges,
+    ).toHaveBeenCalledWith(
+      [
+        {
+          path: "a.txt",
+          replacements: [{ endLine: 1, replacementText: "x", startLine: 1 }],
+        },
+      ],
+      true,
+      { preserveIndentation: true },
+      ["C:/allowed"],
+    );
+    expect(
+      registerComparisonAndMutationToolCatalogTestState.handleMovePaths,
+    ).toHaveBeenCalledWith([{ destination: "b", source: "a" }], true, ["C:/allowed"]);
+  });
 });

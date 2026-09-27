@@ -68,4 +68,20 @@ describe("append_files", () => {
 
     expect(parsed.files).toEqual([{ path: "notes.txt", content: "x" }]);
   });
+
+  it("keeps file-level failures in the batch summary", async () => {
+    const outsidePath = join(tmpdir(), "outside-append-target.txt");
+
+    const output = await handleAppendFiles(
+      [
+        { path: existingFilePath, content: " world" },
+        { path: outsidePath, content: "nope" },
+      ],
+      allowedDirectories,
+    );
+
+    expect(output).toContain("1 files processed successfully");
+    expect(output).toContain("1 files failed");
+    expect(output).toContain("Failed to append to file");
+  });
 });

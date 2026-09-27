@@ -224,4 +224,185 @@ describe("filesystem-server", () => {
       },
     });
   });
+
+  it("applies the set-level request handler and filters logs below the root level", async () => {
+    new FilesystemServer(["C:/allowed"]);
+
+    const registrationCall = filesystemServerTestState.registerToolCatalog.mock.calls[0];
+    if (registrationCall === undefined) {
+      throw new Error("Expected registerToolCatalog to receive an execution context.");
+    }
+    const [catalogContext] = registrationCall;
+
+    const setLevelCall = filesystemServerTestState.setRequestHandler.mock.calls[0];
+    if (setLevelCall === undefined) {
+      throw new Error("Expected a set-level request handler registration.");
+    }
+    const setLevelHandler = setLevelCall[1];
+
+    await setLevelHandler({ params: { level: "warning" } });
+
+    const result = await catalogContext.executeTool(
+      "list_allowed_directories",
+      async () => "ok",
+    );
+
+    expect(result).toEqual({ content: [{ text: "ok", type: "text" }] });
+    expect(
+      filesystemServerTestState.sendLoggingMessage.mock.calls.filter(
+        ([message]) => message.logger === "tools",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("never throws from the logging path when the transport rejects", async () => {
+    filesystemServerTestState.sendLoggingMessage.mockRejectedValueOnce(
+      new Error("transport down"),
+    );
+    new FilesystemServer(["C:/allowed"]);
+
+    const registrationCall = filesystemServerTestState.registerToolCatalog.mock.calls[0];
+    if (registrationCall === undefined) {
+      throw new Error("Expected registerToolCatalog to receive an execution context.");
+    }
+    const [catalogContext] = registrationCall;
+
+    const result = await catalogContext.executeTool(
+      "list_allowed_directories",
+      async () => "ok",
+    );
+
+    expect(result).toEqual({ content: [{ text: "ok", type: "text" }] });
+  });
+
+  it("measures structured tool results against the global fuse and returns them unchanged", async () => {
+    new FilesystemServer(["C:/allowed"]);
+
+    const registrationCall = filesystemServerTestState.registerToolCatalog.mock.calls[0];
+    if (registrationCall === undefined) {
+      throw new Error("Expected registerToolCatalog to receive an execution context.");
+    }
+    const [catalogContext] = registrationCall;
+
+    const toolResult = {
+      content: [{ text: "structured ok", type: "text" as const }],
+      structuredContent: { ok: true },
+    };
+    const result = await catalogContext.executeTool(
+      "list_allowed_directories",
+      async () => toolResult,
+    );
+    expect(result).toBe(toolResult);
+
+    const textOnlyResult = {
+      content: [{ text: "plain ok", type: "text" as const }],
+    };
+    const secondResult = await catalogContext.executeTool(
+      "list_allowed_directories",
+      async () => textOnlyResult,
+    );
+    expect(secondResult).toBe(textOnlyResult);
+
+    const nonTextResult = {
+      content: [{ data: "aGk=", mimeType: "image/png", type: "image" as const }],
+    };
+    const thirdResult = await catalogContext.executeTool(
+      "list_allowed_directories",
+      async () => nonTextResult,
+    );
+    expect(thirdResult).toBe(nonTextResult);
+  });
+
+  it("passes error results through without touching the global fuse", async () => {
+    new FilesystemServer(["C:/allowed"]);
+
+    const registrationCall = filesystemServerTestState.registerToolCatalog.mock.calls[0];
+    if (registrationCall === undefined) {
+      throw new Error("Expected registerToolCatalog to receive an execution context.");
+    }
+    const [catalogContext] = registrationCall;
+
+    const errorResult = {
+      content: [{ text: "broken", type: "text" as const }],
+      isError: true,
+    };
+    const result = await catalogContext.executeTool(
+      "list_allowed_directories",
+      async () => errorResult,
+    );
+
+    expect(result).toBe(errorResult);
+  });
+
+  it("converts oversized successful results into the canonical global-fuse refusal", async () => {
+    new FilesystemServer(["C:/allowed"]);
+
+    const registrationCall = filesystemServerTestState.registerToolCatalog.mock.calls[0];
+    if (registrationCall === undefined) {
+      throw new Error("Expected registerToolCatalog to receive an execution context.");
+    }
+    const [catalogContext] = registrationCall;
+
+    const oversized = "x".repeat(600_001);
+    const result = await catalogContext.executeTool(
+      "list_allowed_directories",
+      async () => oversized,
+    );
+
+    expect(result.isError).toBe(true);
+    const block = result.content[0];
+    if (block?.type === "text") {
+      expect(block.text).toContain("global response fuse");
+      expect(block.text).toContain("600,000");
+    }
+    expect(filesystemServerTestState.sendLoggingMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ level: "warning", logger: "tools" }),
+    );
+  });
+
+  it("converts thrown tool errors into canonical error results", async () => {
+    new FilesystemServer(["C:/allowed"]);
+
+    const registrationCall = filesystemServerTestState.registerToolCatalog.mock.calls[0];
+    if (registrationCall === undefined) {
+      throw new Error("Expected registerToolCatalog to receive an execution context.");
+    }
+    const [catalogContext] = registrationCall;
+
+    const result = await catalogContext.executeTool(
+      "list_allowed_directories",
+      async () => {
+        throw new Error("handler exploded");
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    const block = result.content[0];
+    if (block?.type === "text") {
+      expect(block.text).toBe("Error: handler exploded");
+    }
+  });
+
+  it("stringifies non-Error tool failures", async () => {
+    new FilesystemServer(["C:/allowed"]);
+
+    const registrationCall = filesystemServerTestState.registerToolCatalog.mock.calls[0];
+    if (registrationCall === undefined) {
+      throw new Error("Expected registerToolCatalog to receive an execution context.");
+    }
+    const [catalogContext] = registrationCall;
+
+    const result = await catalogContext.executeTool(
+      "list_allowed_directories",
+      async () => {
+        throw "raw failure";
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    const block = result.content[0];
+    if (block?.type === "text") {
+      expect(block.text).toBe("Error: raw failure");
+    }
+  });
 });

@@ -29,7 +29,7 @@ import {
   resolveTraversalScopeContext,
   sumPreflightBytes,
 } from "@domain/shared/guardrails/filesystem-preflight";
-import { MAX_GENERIC_PATHS_PER_REQUEST } from "@domain/shared/guardrails/tool-guardrail-limits";
+import { MAX_GENERIC_PATHS_PER_REQUEST, PATH_MAX_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 
 describe("filesystem preflight", () => {
   beforeEach(() => {
@@ -276,5 +276,42 @@ describe("filesystem preflight", () => {
     } finally {
       await rm(sandboxRootPath, { recursive: true, force: true });
     }
+  });
+
+  it("rejects requested paths whose length exceeds the shared path ceiling", async () => {
+    const oversizedPath = "a".repeat(PATH_MAX_CHARS + 1);
+
+    await expect(
+      collectValidatedFilesystemPreflightEntries(
+        "read_files_with_line_numbers",
+        [oversizedPath],
+        ["C:/allowed"],
+      ),
+    ).rejects.toThrow(
+      "Requested path length exceeds the shared metadata preflight ceiling.",
+    );
+  });
+
+  it("rejects requested paths that fail path-guard validation as unresolved", async () => {
+    mockedValidatePath.mockRejectedValueOnce(new Error("outside allowed directories"));
+
+    await expect(
+      collectValidatedFilesystemPreflightEntries(
+        "read_files_with_line_numbers",
+        ["outside.txt"],
+        ["C:/allowed"],
+      ),
+    ).rejects.toThrow("outside allowed directories");
+  });
+
+  it("allows candidate byte budgets inside the configured hard preflight cap", () => {
+    expect(() =>
+      assertCandidateByteBudget(
+        "read_files_with_line_numbers",
+        100,
+        100,
+        "line-numbered read response",
+      ),
+    ).not.toThrow();
   });
 });

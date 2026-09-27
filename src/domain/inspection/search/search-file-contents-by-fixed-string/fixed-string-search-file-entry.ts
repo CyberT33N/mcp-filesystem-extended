@@ -44,9 +44,7 @@ export function collectFixedStringMatchesFromDecodedText(
   let remainingMatchesToSkip = matchesToSkipBeforeCollecting;
   const lines = content.split(/\r?\n/u);
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const lineContent = lines[index] ?? "";
-
+  for (const [index, lineContent] of lines.entries()) {
     for (const matchedText of collectFixedStringLineMatches(
       lineContent,
       fixedString,

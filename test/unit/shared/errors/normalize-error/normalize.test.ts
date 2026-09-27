@@ -19,4 +19,14 @@ describe("normalize_error", () => {
     expect(normalizeError(null).message).toBe("Unknown error");
     expect(normalizeError(["unexpected"]).message).toBe("Unknown error");
   });
+
+  it("falls back to the unserializable marker when a plain object cannot be serialized", () => {
+    expect(normalizeError({ toJSON: () => undefined }).message).toBe(
+      "[Unserializable error object]",
+    );
+  });
+
+  it("falls back to the unknown marker for symbols without a description", () => {
+    expect(normalizeError(Symbol()).message).toBe("Unknown error");
+  });
 });

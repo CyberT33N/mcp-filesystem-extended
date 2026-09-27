@@ -134,10 +134,6 @@ function canTraversalScopePathContainReincludedDescendant(
 ): boolean {
   const normalizedPath = normalizeTraversalScopePath(pathValue);
 
-  if (normalizedPath === ".") {
-    return false;
-  }
-
   return includePatterns.some((pattern) =>
     createTraversalScopeIncludeMatcherPatterns(pattern).some((matcherPattern) =>
       minimatch(

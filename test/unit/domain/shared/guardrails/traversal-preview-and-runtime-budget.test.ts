@@ -47,7 +47,8 @@ describe("traversal preview and runtime budget", () => {
       guidanceText: null,
       runtimeBudgetLimits: null,
     });
-    expect(shouldStopTraversalPreviewLane(0, 1, plan)).toBe(false);
+
+    expect(plan.candidateByteBudget).toBeNull();
   });
 
   it("builds the preview-first lane from the shared execution policy and stops when the next file exhausts the byte budget", () => {
@@ -74,6 +75,10 @@ describe("traversal preview and runtime budget", () => {
       maxVisitedDirectories: executionPolicy.traversalPreviewExecutionDirectoryBudget,
       softTimeBudgetMs: executionPolicy.traversalPreviewExecutionTimeBudgetMs,
     });
+    if (plan.candidateByteBudget === null) {
+      throw new Error("Expected an active preview-lane plan for the preview-first admission.");
+    }
+
     expect(shouldStopTraversalPreviewLane(1_500, 400, plan)).toBe(false);
     expect(shouldStopTraversalPreviewLane(1_500, 600, plan)).toBe(true);
   });

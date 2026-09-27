@@ -50,24 +50,15 @@ export async function applyFileLineRangeReplacements(
   // Apply replacements sequentially
   let modifiedContentLines = [...contentLines];
   const replacementResults: Array<{
-    replacement: {startLine: number, endLine: number, replacementText: string},
-    applied: boolean,
-    message?: string
+    replacement: {startLine: number, endLine: number, replacementText: string}
   }> = [];
   
   for (const replacement of sortedReplacements) {
     const { startLine, endLine, replacementText } = replacement;
-    const replacementResult: {
-      replacement: {startLine: number, endLine: number, replacementText: string},
-      applied: boolean,
-      message?: string
-    } = { replacement, applied: false };
     
     // Validate line numbers
     if (startLine < 1 || endLine < startLine || endLine > contentLines.length) {
-      replacementResult.message = `Invalid line range: ${startLine}-${endLine} (file has ${contentLines.length} lines)`;
-      replacementResults.push(replacementResult);
-      throw new Error(replacementResult.message);
+      throw new Error(`Invalid line range: ${startLine}-${endLine} (file has ${contentLines.length} lines)`);
     }
     
     // Convert to 0-based indices for array
@@ -96,8 +87,7 @@ export async function applyFileLineRangeReplacements(
       modifiedContentLines.splice(startIndex, linesToReplace, ...newLines);
     }
     
-    replacementResult.applied = true;
-    replacementResults.push(replacementResult);
+    replacementResults.push({ replacement });
   }
   
   const modifiedContent = modifiedContentLines.join('\n') + (contentEndsWithNewline ? '\n' : '');
@@ -112,10 +102,7 @@ export async function applyFileLineRangeReplacements(
   resultText += "Replacement details:\n";
   replacementResults.forEach((result, i) => {
     const { startLine, endLine } = result.replacement;
-    resultText += `Replacement ${i + 1}: ${result.applied ? 'APPLIED' : 'FAILED'} (lines ${startLine}-${endLine})\n`;
-    if (result.message) {
-      resultText += `  Message: ${result.message}\n`;
-    }
+    resultText += `Replacement ${i + 1}: APPLIED (lines ${startLine}-${endLine})\n`;
   });
 
   assertActualTextBudget(

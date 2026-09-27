@@ -99,4 +99,56 @@ describe("resolveSearchExecutionPolicy", () => {
 
     expect(policy.traversalInlineExecutionBudgetMs).toBe(4_000);
   });
+
+  it("downgrades medium-confidence B tiers to their conservative C successors", () => {
+    const policy = resolveSearchExecutionPolicy(
+      createIoCapabilityProfile({
+        cpuRegexTier: CpuRegexTier.B,
+        runtimeConfidenceTier: RuntimeConfidenceTier.MEDIUM,
+        sourceReadTier: SourceReadTier.B,
+      }),
+    );
+
+    expect(policy.effectiveSourceReadTier).toBe(SourceReadTier.C);
+    expect(policy.effectiveCpuRegexTier).toBe(CpuRegexTier.C);
+  });
+
+  it("keeps medium-confidence D tiers at the conservative floor", () => {
+    const policy = resolveSearchExecutionPolicy(
+      createIoCapabilityProfile({
+        cpuRegexTier: CpuRegexTier.D,
+        runtimeConfidenceTier: RuntimeConfidenceTier.MEDIUM,
+        sourceReadTier: SourceReadTier.D,
+      }),
+    );
+
+    expect(policy.effectiveSourceReadTier).toBe(SourceReadTier.D);
+    expect(policy.effectiveCpuRegexTier).toBe(CpuRegexTier.D);
+  });
+
+  it("maps S-tier cpu regex strength onto the S source-read tier for conservative resolution", () => {
+    const policy = resolveSearchExecutionPolicy(
+      createIoCapabilityProfile({
+        cpuRegexTier: CpuRegexTier.S,
+        sourceReadTier: SourceReadTier.S,
+      }),
+    );
+
+    expect(policy.effectiveSourceReadTier).toBe(SourceReadTier.S);
+    expect(policy.regexSyncCandidateBytesCap).toBe(32 * 1_024 * 1_024);
+  });
+
+  it("downgrades medium-confidence A and S tiers through the conservative chain", () => {
+    const policy = resolveSearchExecutionPolicy(
+      createIoCapabilityProfile({
+        cpuRegexTier: CpuRegexTier.S,
+        runtimeConfidenceTier: RuntimeConfidenceTier.MEDIUM,
+        sourceReadTier: SourceReadTier.A,
+      }),
+    );
+
+    expect(policy.effectiveSourceReadTier).toBe(SourceReadTier.B);
+    expect(policy.effectiveCpuRegexTier).toBe(CpuRegexTier.A);
+    expect(policy.regexSyncCandidateBytesCap).toBe(16 * 1_024 * 1_024);
+  });
 });

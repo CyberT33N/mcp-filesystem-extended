@@ -469,7 +469,7 @@ async function getFindPathsByNameRootResult(
     ...(result.symlinkMatches !== undefined && result.symlinkMatches.length > 0
       ? { symlinkMatches: result.symlinkMatches }
       : {}),
-    admissionOutcome: result.admissionOutcome ?? INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
+    admissionOutcome: result.admissionOutcome,
     nextContinuationState: result.nextContinuationState ?? null,
   };
 }

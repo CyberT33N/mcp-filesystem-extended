@@ -23,6 +23,7 @@ import {
   createRuntimeBudgetExceededFailure,
   formatToolGuardrailFailureAsText,
 } from "./tool-guardrail-error-contract";
+import { normalizeError } from "@shared/errors";
 
 const CASE_SENSITIVE_REGEX_FLAGS = "mg";
 const CASE_INSENSITIVE_REGEX_FLAGS = "img";
@@ -179,7 +180,7 @@ export function createGuardrailedSearchRegexExecutionPlan(
   try {
     regex = new RegExp(pattern, flags);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : "Invalid regular expression syntax.";
+    const reason = normalizeError(error).message;
 
     throwRegexRuntimeRejected(
       toolName,

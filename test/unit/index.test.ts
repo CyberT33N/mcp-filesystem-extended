@@ -70,4 +70,44 @@ describe("public_root_entrypoint", () => {
     expect(rootEntrypointTestState.connect).toHaveBeenCalledOnce();
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
+
+  it("fails startup with a clear error when no allowed directory is provided", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(vi.fn());
+    process.argv = ["node", "src/index.ts"];
+
+    await import(
+      pathToFileURL(
+        resolve(dirname(fileURLToPath(import.meta.url)), "../../src/index.ts"),
+      ).href
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "At least one allowed directory must be provided.",
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it("logs the startup failure and exits when runtime-dependency preflight rejects", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(vi.fn());
+    const startupFailure = new Error("ugrep bootstrap failed");
+    rootEntrypointTestState.initializeUgrepRuntimeDependency.mockRejectedValueOnce(
+      startupFailure,
+    );
+
+    await import(
+      pathToFileURL(
+        resolve(dirname(fileURLToPath(import.meta.url)), "../../src/index.ts"),
+      ).href
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(startupFailure);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
 });

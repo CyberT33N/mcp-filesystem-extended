@@ -54,4 +54,14 @@ describe("classifyPattern", () => {
     expect(result.requiresPcre2).toBe(true);
     expect(result.supportsLiteralFastPath).toBe(false);
   });
+
+  it("classifies patterns with escaped characters as automaton-safe regex", () => {
+    const result = classifyPattern("docs\\.md");
+
+    expect(result.classification).toBe(
+      PATTERN_CLASSIFICATION_LITERALS.automatonSafeRegex,
+    );
+    expect(result.requiresPcre2).toBe(false);
+    expect(result.supportsLiteralFastPath).toBe(false);
+  });
 });

@@ -323,13 +323,11 @@ async function assertTraversalScopePreflightAdmission(
     relativePath: "",
   }];
 
-  while (pendingDirectories.length > 0) {
-    const currentDirectory = pendingDirectories.shift();
-
-    if (currentDirectory === undefined) {
-      break;
-    }
-
+  for (
+    let currentDirectory = pendingDirectories.shift();
+    currentDirectory !== undefined;
+    currentDirectory = pendingDirectories.shift()
+  ) {
     state.visitedDirectories += 1;
 
     const directoryBudgetStop = getTraversalScopePreflightBudgetStop(state);

@@ -382,10 +382,7 @@ function isLikelyUtf16LeSample(sample: Uint8Array): boolean {
   }
 
   const evenLength = sample.byteLength - sample.byteLength % 2;
-
-  if (evenLength < 4) {
-    return false;
-  }
+  const sampleView = new DataView(sample.buffer, sample.byteOffset, evenLength);
 
   let evenByteCount = 0;
   let oddByteCount = 0;
@@ -394,8 +391,8 @@ function isLikelyUtf16LeSample(sample: Uint8Array): boolean {
   let evenAsciiLikeByteCount = 0;
 
   for (let index = 0; index < evenLength; index += 2) {
-    const evenByte = sample[index] ?? 0;
-    const oddByte = sample[index + 1] ?? 0;
+    const evenByte = sampleView.getUint8(index);
+    const oddByte = sampleView.getUint8(index + 1);
 
     evenByteCount += 1;
     oddByteCount += 1;
@@ -411,10 +408,6 @@ function isLikelyUtf16LeSample(sample: Uint8Array): boolean {
     if (isLikelyAsciiLikeByte(evenByte)) {
       evenAsciiLikeByteCount += 1;
     }
-  }
-
-  if (evenByteCount === 0 || oddByteCount === 0) {
-    return false;
   }
 
   const oddZeroRatio = oddZeroByteCount / oddByteCount;
@@ -481,7 +474,7 @@ function resolveSampledWindowPositions(
 
   const [defaultWindowPosition] = INSPECTION_CONTENT_STATE_SAMPLE_WINDOW_POSITIONS;
 
-  return defaultWindowPosition === undefined ? [] : [defaultWindowPosition];
+  return [defaultWindowPosition];
 }
 
 function createEvidence(
@@ -546,12 +539,9 @@ function assessSampleTextCompatibility(
   const replacementCharacterCount = Array.from(decodedSample).filter(
     (character) => character === "�",
   ).length;
-  const replacementCharacterRatio =
-    decodedLength === 0 ? 0 : replacementCharacterCount / decodedLength;
-  const decodedControlCharacterRatio =
-    decodedLength === 0 ? 0 : countDecodedControlCharacters(decodedSample) / decodedLength;
-  const textCompatibleCharacterRatio =
-    decodedLength === 0 ? 1 : countTextCompatibleCharacters(decodedSample) / decodedLength;
+  const replacementCharacterRatio = replacementCharacterCount / decodedLength;
+  const decodedControlCharacterRatio = countDecodedControlCharacters(decodedSample) / decodedLength;
+  const textCompatibleCharacterRatio = countTextCompatibleCharacters(decodedSample) / decodedLength;
   const rawNulByteRatio = countOccurrences(sample, 0) / sample.byteLength;
   const rawControlByteRatio = countControlBytes(sample) / sample.byteLength;
 
@@ -559,7 +549,6 @@ function assessSampleTextCompatibility(
     if (
       replacementCharacterRatio > 0.2
       || decodedControlCharacterRatio > 0.2
-      || (rawNulByteRatio > 0.2 && textCompatibleCharacterRatio < 0.6)
     ) {
       return {
         classificationReason:
@@ -752,9 +741,7 @@ export function classifyInspectionContentState(
       INSPECTION_CONTENT_STATE_LITERALS.TEXT_CONFIDENT,
       INSPECTION_CONTENT_CONFIDENCE_LITERALS.HIGH,
       resolvedTextEncoding,
-      usedTextExtensionHint
-        ? "Text-oriented extension hints and bounded sampled evidence agree on a text-confident surface."
-        : probeAssessment.classificationReason,
+      "Text-oriented extension hints and bounded sampled evidence agree on a text-confident surface.",
       usedTextExtensionHint,
       usedBinaryExtensionHint,
       true,
@@ -782,9 +769,7 @@ export function classifyInspectionContentState(
     INSPECTION_CONTENT_CONFIDENCE_LITERALS.MEDIUM,
     resolvedTextEncoding,
     probeAssessment.probeOutcome === "TEXT_STRONG"
-      ? usedTextExtensionHint
-        ? "Text-oriented extension hints and bounded sampled evidence agree on a text-compatible surface, but the result remains hybrid text-dominant because the evidence is not yet strong enough for a text-confident upgrade."
-        : "Bounded sampled evidence stayed strongly text-compatible, but the current surface remains hybrid text-dominant without a canonical text extension hint."
+      ? "Bounded sampled evidence stayed strongly text-compatible, but the current surface remains hybrid text-dominant without a canonical text extension hint."
       : probeAssessment.classificationReason,
     usedTextExtensionHint,
     usedBinaryExtensionHint,

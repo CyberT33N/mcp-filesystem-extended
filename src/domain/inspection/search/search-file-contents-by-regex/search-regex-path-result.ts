@@ -143,7 +143,6 @@ interface RegexBatchCandidateEntry {
 interface RegexNativeBatchEntry {
   candidateEntry: RegexBatchCandidateEntry;
   candidateRelativePath: string;
-  entryIndexAfter?: number;
   nextUnitIndexAfter?: number;
 }
 
@@ -263,8 +262,7 @@ function collectRegexMatchesFromDecodedText(
   let remainingMatchesToSkip = matchesToSkipBeforeCollecting;
   const lines = content.split(/\r?\n/u);
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const lineContent = lines[index] ?? "";
+  for (const [index, lineContent] of lines.entries()) {
     let lineMatch: RegExpExecArray | null;
 
     resetRegexLastIndex(regex);
@@ -330,13 +328,6 @@ function parseUgrepMatchLine(outputLine: string): {
 
 function normalizeBatchCandidatePath(candidatePath: string): string {
   return candidatePath.replaceAll("\\", "/").toLowerCase();
-}
-
-function sumRegexNativeBatchBytes(batchEntries: RegexNativeBatchEntry[]): number {
-  return batchEntries.reduce(
-    (totalBytes, batchEntry) => totalBytes + batchEntry.candidateEntry.size,
-    0,
-  );
 }
 
 function createRegexBatchCandidateEntry(
@@ -498,16 +489,14 @@ async function collectRegexMatchesFromNativeBatch(
   maxAdditionalResults: number,
   collectedLocationsBeforeRead: number,
 ): Promise<RegexNativeBatchSearchResult> {
-  if (batchEntries.length === 0 || maxAdditionalResults <= 0) {
+  if (maxAdditionalResults <= 0) {
     return {
       matches: [],
       totalMatches: 0,
-      truncated: maxAdditionalResults <= 0,
+      truncated: true,
       activeBatchEntryIndex: null,
       activeBatchEntryMatchOffset: 0,
-      stopState: maxAdditionalResults <= 0
-        ? createSearchMaxResultsLimitReachedState(maxAdditionalResults)
-        : createUnstoppedSearchState(),
+      stopState: createSearchMaxResultsLimitReachedState(maxAdditionalResults),
     };
   }
 
@@ -937,16 +926,6 @@ async function collectRegexMatchesFromDecodedFallbackExecutionUnit(
   truncated: boolean;
   stopState: SearchStopState;
 }> {
-  if (maxAdditionalResults <= 0) {
-    return {
-      matches: [],
-      fileSearched: true,
-      totalMatches: 0,
-      truncated: true,
-      stopState: createSearchMaxResultsLimitReachedState(maxAdditionalResults),
-    };
-  }
-
   const decodedTextFile = await readDecodedInspectionTextFile(
     executionUnit.candidateAbsolutePath,
     executionUnit.resolvedTextEncoding,
@@ -995,7 +974,6 @@ async function materializeRegexExecutionPlanFromTraversal(options: {
   totalBytesScanned: number;
   traversalDecisionDiagnostics: {
     directoriesExcludedByEntryPolicy: number;
-    directoriesNotTraversedByEntryPolicy: number;
     directoriesTraversedByEntryPolicy: number;
     filesExcludedByEntryPolicy: number;
     includePatternEligibleFiles: number;
@@ -1030,13 +1008,11 @@ async function materializeRegexExecutionPlanFromTraversal(options: {
   let materializationStopState = createUnstoppedSearchState();
   let materializationStopped = false;
 
-  while (traversalFrames.length > 0 && !materializationStopped) {
-    const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
-
-    if (currentTraversalFrame === undefined) {
-      break;
-    }
-
+  for (
+    let currentTraversalFrame = traversalFrames.at(-1);
+    currentTraversalFrame !== undefined && !materializationStopped;
+    currentTraversalFrame = traversalFrames.at(-1)
+  ) {
     const currentPath = currentTraversalFrame.directoryRelativePath === ""
       ? validRootPath
       : path.join(validRootPath, currentTraversalFrame.directoryRelativePath);
@@ -1074,7 +1050,11 @@ async function materializeRegexExecutionPlanFromTraversal(options: {
 
     let descendedIntoChildDirectory = false;
 
-    while (currentTraversalFrame.nextEntryIndex < entries.length && !materializationStopped) {
+    for (
+      let entry = entries[currentTraversalFrame.nextEntryIndex];
+      entry !== undefined && !materializationStopped;
+      entry = entries[currentTraversalFrame.nextEntryIndex]
+    ) {
       recordTraversalEntryVisit(traversalRuntimeBudgetState);
 
       try {
@@ -1093,12 +1073,6 @@ async function materializeRegexExecutionPlanFromTraversal(options: {
         }
 
         throw error;
-      }
-
-      const entry = entries[currentTraversalFrame.nextEntryIndex];
-
-      if (entry === undefined) {
-        break;
       }
 
       const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
@@ -1162,19 +1136,13 @@ async function materializeRegexExecutionPlanFromTraversal(options: {
 
       if (candidateEntry.type === "directory") {
         commitInspectionResumeTraversalEntry(currentTraversalFrame);
-
-        if (entryPolicy.shouldTraverse) {
-          traversalDecisionDiagnostics.directoriesTraversedByEntryPolicy += 1;
-          traversalFrames.push({
-            directoryRelativePath: rawRelativePath,
-            nextEntryIndex: 0,
-          });
-          descendedIntoChildDirectory = true;
-          break;
-        }
-
-        traversalDecisionDiagnostics.directoriesNotTraversedByEntryPolicy += 1;
-        continue;
+        traversalDecisionDiagnostics.directoriesTraversedByEntryPolicy += 1;
+        traversalFrames.push({
+          directoryRelativePath: rawRelativePath,
+          nextEntryIndex: 0,
+        });
+        descendedIntoChildDirectory = true;
+        break;
       }
 
       if (candidateEntry.type !== "file") {
@@ -1306,19 +1274,17 @@ async function executeMaterializedRegexExecutionPlan(options: {
   let totalMatches = 0;
   let nextUnitIndex = executionPlan.nextUnitIndex;
 
-  while (nextUnitIndex < executionPlan.units.length && !searchAborted) {
+  for (
+    let currentExecutionUnit = executionPlan.units[nextUnitIndex];
+    currentExecutionUnit !== undefined && !searchAborted;
+    currentExecutionUnit = executionPlan.units[nextUnitIndex]
+  ) {
     const remainingLocationBudget =
       rootResultLimit - (resultsAlreadyCollected + matches.length);
 
     if (remainingLocationBudget <= 0) {
       searchAborted = true;
       searchStopState = createSearchMaxResultsLimitReachedState(remainingLocationBudget);
-      break;
-    }
-
-    const currentExecutionUnit = executionPlan.units[nextUnitIndex];
-
-    if (currentExecutionUnit === undefined) {
       break;
     }
 
@@ -1333,7 +1299,7 @@ async function executeMaterializedRegexExecutionPlan(options: {
           resultsAlreadyCollected + matches.length,
         );
 
-      filesSearched += decodedFallbackSearchResult.fileSearched ? 1 : 0;
+      filesSearched += 1;
       totalMatches += decodedFallbackSearchResult.totalMatches;
       matches.push(
         ...attachRegexAliasAttributions(
@@ -1354,16 +1320,14 @@ async function executeMaterializedRegexExecutionPlan(options: {
       continue;
     }
 
-    const batchEntries: RegexNativeBatchEntry[] = [];
+    const batchEntries: Array<RegexNativeBatchEntry & { nextUnitIndexAfter: number }> = [];
     let scanUnitIndex = nextUnitIndex;
 
-    while (scanUnitIndex < executionPlan.units.length) {
-      const batchUnit = executionPlan.units[scanUnitIndex];
-
-      if (batchUnit === undefined || batchUnit.kind !== "native") {
-        break;
-      }
-
+    for (
+      let batchUnit = executionPlan.units[scanUnitIndex];
+      batchUnit !== undefined && batchUnit.kind === "native";
+      batchUnit = executionPlan.units[scanUnitIndex]
+    ) {
       batchEntries.push({
         candidateEntry: createRegexBatchCandidateEntry(
           batchUnit.candidateAbsolutePath,
@@ -1411,7 +1375,7 @@ async function executeMaterializedRegexExecutionPlan(options: {
       if (activeBatchEntry !== undefined) {
         activeFileRelativePath = activeBatchEntry.candidateRelativePath;
         activeFileMatchOffset = batchSearchResult.activeBatchEntryMatchOffset;
-        nextUnitIndex = activeBatchEntry.nextUnitIndexAfter ?? scanUnitIndex;
+        nextUnitIndex = activeBatchEntry.nextUnitIndexAfter;
       } else {
         nextUnitIndex = scanUnitIndex;
       }
@@ -1658,10 +1622,8 @@ export async function getSearchRegexPathResult(
   );
 
   if (
-    traversalAdmissionDecision.outcome
-    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.NARROWING_REQUIRED
-    || traversalAdmissionDecision.outcome
-    === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
+    traversalAdmissionDecision.outcome !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.INLINE
+    && traversalAdmissionDecision.outcome !== TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
   ) {
     return {
       root: searchPath,
@@ -1718,7 +1680,7 @@ export async function getSearchRegexPathResult(
     return {
       root: searchPath,
       matches: fileSearchResult.matches,
-      filesSearched: fileSearchResult.fileSearched ? 1 : 0,
+      filesSearched: 1,
       totalMatches: fileSearchResult.totalMatches,
       truncated: fileSearchResult.truncated || nextContinuationState !== null,
       error: null,
@@ -1751,7 +1713,6 @@ export async function getSearchRegexPathResult(
   const traversalDecisionDiagnostics = {
     directoriesExcludedByEntryPolicy: 0,
     directoriesTraversedByEntryPolicy: 0,
-    directoriesNotTraversedByEntryPolicy: 0,
     filesExcludedByEntryPolicy: 0,
     includePatternEligibleFiles: 0,
     includePatternRejectedFiles: 0,
@@ -1773,9 +1734,7 @@ export async function getSearchRegexPathResult(
     return true;
   }
 
-  async function flushPendingNativeBatch(
-    currentTraversalFrame?: SearchRegexTraversalFrame,
-  ): Promise<void> {
+  async function flushPendingNativeBatch(): Promise<void> {
     if (pendingNativeBatch.length === 0 || searchAborted) {
       return;
     }
@@ -1810,47 +1769,24 @@ export async function getSearchRegexPathResult(
     );
 
     if (batchSearchResult.truncated) {
-      if (
-        completeResultRequested
-        && currentTraversalFrame !== undefined
-        && batchSearchResult.activeBatchEntryIndex !== null
-      ) {
-        const activeBatchEntry = batchEntries[batchSearchResult.activeBatchEntryIndex];
-
-        if (activeBatchEntry !== undefined) {
-          const unprocessedBatchEntries = batchEntries.slice(processedBatchEntryCount);
-          const unprocessedBatchBytes = sumRegexNativeBatchBytes(unprocessedBatchEntries);
-
-          totalBytesScanned -= unprocessedBatchBytes;
-          aggregateBudgetState.totalCandidateBytesScanned -= unprocessedBatchBytes;
-          currentTraversalFrame.nextEntryIndex =
-            activeBatchEntry.entryIndexAfter ?? currentTraversalFrame.nextEntryIndex;
-          activeFileRelativePath = activeBatchEntry.candidateRelativePath;
-          activeFileMatchOffset = batchSearchResult.activeBatchEntryMatchOffset;
-        }
-      }
-
       searchStopState = batchSearchResult.stopState;
       searchAborted = true;
     }
   }
 
   if (activeFileRelativePath !== null) {
-    const activeFileAbsolutePath = activeFileRelativePath === ""
-      ? validRootPath
-      : path.join(validRootPath, activeFileRelativePath);
+    const activeFileAbsolutePath = path.join(validRootPath, activeFileRelativePath);
     const activeFileCandidateEntry = await getValidatedPreflightEntry(
       toolName,
       activeFileAbsolutePath,
       allowedDirectories,
     );
-    const resumedFilePatterns = activeFileRelativePath === "" ? [] : filePatterns;
 
     const resumedFileSearchResult = await collectRegexMatchesFromFileEntry(
       toolName,
       activeFileCandidateEntry,
-      activeFileRelativePath === "" ? searchPath : activeFileRelativePath,
-      resumedFilePatterns,
+      activeFileRelativePath,
+      filePatterns,
       regex,
       regexExecutionPlan.patternClassification,
       pattern,
@@ -1872,18 +1808,12 @@ export async function getSearchRegexPathResult(
 
     totalBytesScanned = resumedFileSearchResult.totalBytesScanned;
     matchesFound += resumedFileSearchResult.totalMatches;
-    // Deliberate guard (documented, not test-covered): the root-file identity "" is produced
-    // only by the single-file branch, which returns before this shared directory-resume block.
-    // The check keeps this block total over the continuation-state type and is unreachable
-    // through directory sessions by construction.
     results.push(
-      ...(activeFileRelativePath === ""
-        ? resumedFileSearchResult.matches
-        : attachRegexAliasAttributions(
-            resumedFileSearchResult.matches,
-            activeFileRelativePath,
-            aliasAttributionState,
-          )),
+      ...attachRegexAliasAttributions(
+        resumedFileSearchResult.matches,
+        activeFileRelativePath,
+        aliasAttributionState,
+      ),
     );
 
     if (
@@ -1967,13 +1897,11 @@ export async function getSearchRegexPathResult(
       }
     }
   } else {
-    while (traversalFrames.length > 0 && !searchAborted) {
-      const currentTraversalFrame = traversalFrames[traversalFrames.length - 1];
-
-      if (currentTraversalFrame === undefined) {
-        break;
-      }
-
+    for (
+      let currentTraversalFrame = traversalFrames.at(-1);
+      currentTraversalFrame !== undefined && !searchAborted;
+      currentTraversalFrame = traversalFrames.at(-1)
+    ) {
       const currentPath = currentTraversalFrame.directoryRelativePath === ""
         ? validRootPath
         : path.join(validRootPath, currentTraversalFrame.directoryRelativePath);
@@ -2008,7 +1936,11 @@ export async function getSearchRegexPathResult(
 
       let descendedIntoChildDirectory = false;
 
-      while (currentTraversalFrame.nextEntryIndex < entries.length && !searchAborted) {
+      for (
+        let entry = entries[currentTraversalFrame.nextEntryIndex];
+        entry !== undefined && !searchAborted;
+        entry = entries[currentTraversalFrame.nextEntryIndex]
+      ) {
         recordTraversalEntryVisit(traversalRuntimeBudgetState);
         try {
           assertTraversalRuntimeBudget(
@@ -2024,12 +1956,6 @@ export async function getSearchRegexPathResult(
           }
 
           throw error;
-        }
-
-        const entry = entries[currentTraversalFrame.nextEntryIndex];
-
-        if (entry === undefined) {
-          break;
         }
 
         const rawRelativePath = currentTraversalFrame.directoryRelativePath === ""
@@ -2092,17 +2018,13 @@ export async function getSearchRegexPathResult(
 
         if (candidateEntry.type === "directory") {
           commitInspectionResumeTraversalEntry(currentTraversalFrame);
-          if (entryPolicy.shouldTraverse) {
-            traversalDecisionDiagnostics.directoriesTraversedByEntryPolicy += 1;
-            traversalFrames.push({
-              directoryRelativePath: rawRelativePath,
-              nextEntryIndex: 0,
-            });
-            descendedIntoChildDirectory = true;
-            break;
-          }
-          traversalDecisionDiagnostics.directoriesNotTraversedByEntryPolicy += 1;
-          continue;
+          traversalDecisionDiagnostics.directoriesTraversedByEntryPolicy += 1;
+          traversalFrames.push({
+            directoryRelativePath: rawRelativePath,
+            nextEntryIndex: 0,
+          });
+          descendedIntoChildDirectory = true;
+          break;
         }
 
         if (candidateEntry.type !== "file") {
@@ -2111,7 +2033,8 @@ export async function getSearchRegexPathResult(
         }
 
         if (
-          shouldStopTraversalPreviewLane(
+          previewLanePlan.candidateByteBudget !== null
+          && shouldStopTraversalPreviewLane(
             aggregateBudgetState.totalCandidateBytesScanned,
             candidateEntry.size,
             previewLanePlan,
@@ -2124,10 +2047,7 @@ export async function getSearchRegexPathResult(
             unsupportedStateReason = previewLanePlan.guidanceText;
           }
 
-          searchStopState = createSearchPreviewLaneBudgetState(
-            previewLanePlan.guidanceText
-              ?? `Preview-lane candidate byte budget was exhausted for root '${searchPath}'.`,
-          );
+          searchStopState = createSearchPreviewLaneBudgetState(previewLanePlan.guidanceText);
 
           break;
         }
@@ -2168,7 +2088,7 @@ export async function getSearchRegexPathResult(
 
           if (searchCapability.requiresDecodedTextFallback) {
             diagnostics.filesUsingDecodedTextFallback += 1;
-            await flushPendingNativeBatch(currentTraversalFrame);
+            await flushPendingNativeBatch();
 
             const fileSearchResult = await collectRegexMatchesFromFileEntry(
               toolName,
@@ -2227,12 +2147,11 @@ export async function getSearchRegexPathResult(
           pendingNativeBatch.push({
             candidateEntry,
             candidateRelativePath: relativePath,
-            entryIndexAfter: currentTraversalFrame.nextEntryIndex + 1,
           });
           commitInspectionResumeTraversalEntry(currentTraversalFrame);
 
           if (pendingNativeBatch.length >= SEARCH_REGEX_NATIVE_INLINE_BATCH_SIZE) {
-            await flushPendingNativeBatch(currentTraversalFrame);
+            await flushPendingNativeBatch();
 
             if (searchAborted) {
               break;
