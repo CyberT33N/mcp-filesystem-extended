@@ -13,10 +13,12 @@ vi.mock("node:fs", () => ({
 }));
 
 vi.mock("node:sqlite", () => ({
-  DatabaseSync: vi.fn(() => ({
-    close: vi.fn(),
-    exec: mockedDatabaseExec,
-  })),
+  DatabaseSync: vi.fn(function () {
+    return {
+      close: vi.fn(),
+      exec: mockedDatabaseExec,
+    };
+  }),
 }));
 
 vi.mock("@infrastructure/logging/logger", () => ({

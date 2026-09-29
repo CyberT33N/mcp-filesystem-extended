@@ -1,264 +1,642 @@
-/*
- *███████████████████████████████████████████████████████████████████████████████
- *██******************** PRESENTED BY t33n Software ***************************██
- *██                                                                           ██
- *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
- *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
- *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
- *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
- *██                     ╚═╝   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                      ██
- *██                                                                           ██
- *███████████████████████████████████████████████████████████████████████████████
- *███████████████████████████████████████████████████████████████████████████████
- */
-
 {
   /**
-   * $schema: Better IDE support (completion/validation).
+   * Description:
+   * Enables schema-aware editor validation for this canonical TSConfig surface.
+   *
+   * Architectural decision:
+   * Keep the official schema on the only code-owning source so generated
+   * materializations remain structurally verifiable.
+   *
+   * Example:
+   * "$schema": "https://json.schemastore.org/tsconfig"
    */
   "$schema": "https://json.schemastore.org/tsconfig",
 
   /**
-   * CompilerOptions: Canonical universal strict root policy.
-   * Sole code owner: CONFIG_TSCONFIG_UNIVERSAL_STRICT_POLICY_REFERENCE_001.
-   * This surface is non-emitting; terminal roles own output.
+   * Description:
+   * Groups all compiler-behavior properties governed by this canonical source.
+   *
+   * Architectural decision:
+   * Every topology-neutral compiler option is declared exactly once here; role
+   * and leaf documents may only apply narrower, explicitly owned overrides.
+   *
+   * Example:
+   * "compilerOptions": { "strict": true }
    */
   "compilerOptions": {
     /**
-     * Fixed ECMAScript edition (Node 26.2.0 support matrix proves ES2025).
+     * Description:
+     * Defines the fixed JavaScript language edition used by the complete
+     * support matrix.
+     *
+     * Architectural decision:
+     * A fixed edition prevents compiler-upgrade drift. Select a lower fixed
+     * edition whenever any supported runtime cannot prove ES2025 support.
+     *
+     * Example:
+     * "target": "ES2025"
      */
     "target": "ES2025",
 
     /**
-     * Matching fixed standard-library edition; no browser libs in the universal core.
+     * Description:
+     * Defines the non-browser standard-library declarations available by
+     * default.
+     *
+     * Architectural decision:
+     * Keep browser APIs absent from the universal core; web roles reopen DOM
+     * libraries only where the browser is the actual host.
+     *
+     * Example:
+     * "lib": ["ES2025"]
      */
     "lib": ["ES2025"],
 
     /**
-     * Bundler-owned runtime: preserve authored module syntax (tsdown owns emit).
+     * Description:
+     * Preserves authored module syntax for the generic non-emitting and
+     * bundler-owned contract.
+     *
+     * Architectural decision:
+     * Preserve is the stable universal default. It is not direct Node runtime
+     * truth; a Node role must override the coupled module/resolver pair.
+     *
+     * Example:
+     * "module": "Preserve"
      */
     "module": "Preserve",
 
     /**
-     * Bundler-aware module lookup paired with Preserve.
+     * Description:
+     * Applies bundler-aware module lookup to the generic root contract.
+     *
+     * Architectural decision:
+     * This pairs only with Preserve in the generic core. Direct Node roles must
+     * replace it with Node16 when they select the fixed Node20 module mode.
+     *
+     * Example:
+     * "moduleResolution": "Bundler"
      */
     "moduleResolution": "Bundler",
 
     /**
-     * Treat every file as a module (no global scripts).
+     * Description:
+     * Treats every source file as a module.
+     *
+     * Architectural decision:
+     * Force module boundaries so script-mode globals cannot arise accidentally.
+     *
+     * Example:
+     * "moduleDetection": "force"
      */
     "moduleDetection": "force",
 
     /**
-     * Typed JSON module imports; runtime data still requires boundary parsing.
+     * Description:
+     * Enables typed imports of JSON modules.
+     *
+     * Architectural decision:
+     * JSON is an explicit integration capability; imported runtime data still
+     * requires boundary parsing before it enters domain logic.
+     *
+     * Example:
+     * "resolveJsonModule": true
      */
     "resolveJsonModule": true,
 
     /**
-     * Package entry points resolve through package.json exports.
+     * Description:
+     * Resolves package entry points through package.json exports conditions.
+     *
+     * Architectural decision:
+     * Package boundaries must follow their declared public export contract
+     * instead of resolver fallbacks.
+     *
+     * Example:
+     * "resolvePackageJsonExports": true
      */
     "resolvePackageJsonExports": true,
 
     /**
-     * Package-local # specifiers resolve through package.json imports.
+     * Description:
+     * Resolves package-local # specifiers through package.json imports.
+     *
+     * Architectural decision:
+     * Internal package specifiers remain owned by package metadata rather than
+     * unscoped TypeScript path aliases.
+     *
+     * Example:
+     * "resolvePackageJsonImports": true
      */
     "resolvePackageJsonImports": true,
 
     /**
-     * Unknown extension imports are rejected.
+     * Description:
+     * Rejects imports with unknown extensions unless a narrower owner models the
+     * extension deliberately.
+     *
+     * Architectural decision:
+     * Asset and loader semantics must be explicit capability lines, never a
+     * universal permissive default.
+     *
+     * Example:
+     * "allowArbitraryExtensions": false
      */
     "allowArbitraryExtensions": false,
 
     /**
-     * Raw .ts import specifiers are rejected by default.
+     * Description:
+     * Rejects .ts, .tsx, .mts, and .cts import specifiers by default.
+     *
+     * Architectural decision:
+     * Raw TypeScript source paths are not the generic runtime truth for
+     * published, emitted-JavaScript, or bundler-owned surfaces.
+     *
+     * Example:
+     * "allowImportingTsExtensions": false
      */
     "allowImportingTsExtensions": false,
 
     /**
-     * No rewriting of explicit relative TypeScript-extension specifiers.
+     * Description:
+     * Disables rewriting of explicit relative TypeScript-extension specifiers.
+     *
+     * Architectural decision:
+     * Rewriting belongs only to an explicit source-first capability line; it
+     * must not silently alter universal import behavior.
+     *
+     * Example:
+     * "rewriteRelativeImportExtensions": false
      */
     "rewriteRelativeImportExtensions": false,
 
     /**
-     * JavaScript files stay outside the TypeScript program.
+     * Description:
+     * Keeps JavaScript files outside the universal TypeScript program.
+     *
+     * Architectural decision:
+     * A mixed-JavaScript role must explicitly reopen allowJs and simultaneously
+     * enable checkJs so JavaScript cannot become an unchecked escape hatch.
+     *
+     * Example:
+     * "allowJs": false
      */
     "allowJs": false,
 
     /**
-     * No UMD global access from module files.
+     * Description:
+     * Prevents module files from accessing UMD exports as undeclared globals.
+     *
+     * Architectural decision:
+     * Runtime dependencies must remain visible imports, not ambient global
+     * assumptions.
+     *
+     * Example:
+     * "allowUmdGlobalAccess": false
      */
     "allowUmdGlobalAccess": false,
 
     /**
-     * Ergonomic default imports where external declarations support them.
+     * Description:
+     * Permits ergonomic default-import syntax when an external declaration
+     * contract supports it.
+     *
+     * Architectural decision:
+     * This explicit interop capability improves external package compatibility
+     * without weakening internal type rules.
+     *
+     * Example:
+     * "allowSyntheticDefaultImports": true
      */
     "allowSyntheticDefaultImports": true,
 
     /**
-     * Deterministic CJS/ESM interop at package boundaries.
+     * Description:
+     * Enables compatible CommonJS/ES module interop emit and checking behavior.
+     *
+     * Architectural decision:
+     * Keep package-boundary interop deterministic and declared by the universal
+     * policy rather than improvised in consumers.
+     *
+     * Example:
+     * "esModuleInterop": true
      */
     "esModuleInterop": true,
 
     /**
-     * Value/type import intent stays explicit in source.
+     * Description:
+     * Preserves value imports and exports exactly while erasing type-only forms.
+     *
+     * Architectural decision:
+     * Source must state type/value intent explicitly so module behavior cannot
+     * be hidden by compiler import elision.
+     *
+     * Example:
+     * "verbatimModuleSyntax": true
      */
     "verbatimModuleSyntax": true,
 
     /**
-     * Every file must be safe for isolated transpilation.
+     * Description:
+     * Requires every file to be safe for isolated transpilation.
+     *
+     * Architectural decision:
+     * Align the universal program with independent source transformers and
+     * prevent hidden cross-file compiler assumptions.
+     *
+     * Example:
+     * "isolatedModules": true
      */
     "isolatedModules": true,
 
     /**
-     * Exact file-name casing across operating systems.
+     * Description:
+     * Enforces exact file-name casing across all supported operating systems.
+     *
+     * Architectural decision:
+     * Imports that only work on case-insensitive developer machines must fail
+     * before reaching Linux CI or production hosts.
+     *
+     * Example:
+     * "forceConsistentCasingInFileNames": true
      */
     "forceConsistentCasingInFileNames": true,
 
     /**
-     * Standard ECMAScript class-field initialization semantics.
+     * Description:
+     * Uses standard ECMAScript class-field initialization semantics.
+     *
+     * Architectural decision:
+     * Model modern runtime class fields directly instead of preserving legacy
+     * lowering assumptions.
+     *
+     * Example:
+     * "useDefineForClassFields": true
      */
     "useDefineForClassFields": true,
 
     /**
-     * No replacement lookup for @typescript/lib-* packages.
+     * Description:
+     * Disables replacement lookup for @typescript/lib-* packages.
+     *
+     * Architectural decision:
+     * The standard-library contract remains the fixed TypeScript-provided
+     * library unless a narrower, explicitly governed exception exists.
+     *
+     * Example:
+     * "libReplacement": false
      */
     "libReplacement": false,
 
     /**
-     * Strict type-checking family enabled.
+     * Description:
+     * Enables TypeScript's strict type-checking family.
+     *
+     * Architectural decision:
+     * Strict is the baseline; individual strict members are also pinned below
+     * so their intended behavior remains reviewable across compiler upgrades.
+     *
+     * Example:
+     * "strict": true
      */
     "strict": true,
 
     /**
-     * Strict JavaScript semantics in analyzed modules.
+     * Description:
+     * Enforces strict JavaScript semantics in emitted or analyzed modules.
+     *
+     * Architectural decision:
+     * Modern modules must never inherit legacy sloppy-mode behavior.
+     *
+     * Example:
+     * "alwaysStrict": true
      */
     "alwaysStrict": true,
 
     /**
+     * Description:
      * Strictly type-checks bind, call, and apply.
+     *
+     * Architectural decision:
+     * Reflective invocation must remain inside the same safety boundary as
+     * direct calls.
+     *
+     * Example:
+     * "strictBindCallApply": true
      */
     "strictBindCallApply": true,
 
     /**
-     * Built-in iterator completion values are undefined-aware.
+     * Description:
+     * Makes built-in iterator completion values explicitly undefined-aware.
+     *
+     * Architectural decision:
+     * Iterator APIs are part of the runtime contract and must not silently
+     * widen return values.
+     *
+     * Example:
+     * "strictBuiltinIteratorReturn": true
      */
     "strictBuiltinIteratorReturn": true,
 
     /**
-     * Contravariant function-parameter checking.
+     * Description:
+     * Enforces contravariant function-parameter checking where applicable.
+     *
+     * Architectural decision:
+     * Callback substitution must not create unsound public API contracts.
+     *
+     * Example:
+     * "strictFunctionTypes": true
      */
     "strictFunctionTypes": true,
 
     /**
-     * Null and undefined are explicit states.
+     * Description:
+     * Models null and undefined as explicit states.
+     *
+     * Architectural decision:
+     * Absence is a runtime possibility that must be represented, narrowed, or
+     * handled rather than erased by permissive typing.
+     *
+     * Example:
+     * "strictNullChecks": true
      */
     "strictNullChecks": true,
 
     /**
-     * Class fields must be definitely initialized.
+     * Description:
+     * Requires class fields to be definitely initialized.
+     *
+     * Architectural decision:
+     * Objects must not expose partially initialized state through accidental
+     * constructor omissions.
+     *
+     * Example:
+     * "strictPropertyInitialization": true
      */
     "strictPropertyInitialization": true,
 
     /**
-     * Catch variables are unknown (error paths are trust boundaries).
+     * Description:
+     * Types catch variables as unknown.
+     *
+     * Architectural decision:
+     * Error paths are trust boundaries; thrown values require explicit
+     * narrowing before their properties can be used.
+     *
+     * Example:
+     * "useUnknownInCatchVariables": true
      */
     "useUnknownInCatchVariables": true,
 
     /**
-     * Omitted optional property vs. present-undefined are distinguished.
+     * Description:
+     * Distinguishes an omitted optional property from a property present with
+     * an undefined value.
+     *
+     * Architectural decision:
+     * Configuration and domain-object contracts require exact object-shape
+     * semantics rather than a permissive approximation.
+     *
+     * Example:
+     * "exactOptionalPropertyTypes": true
      */
     "exactOptionalPropertyTypes": true,
 
     /**
+     * Description:
      * Rejects implicitly inferred any types.
+     *
+     * Architectural decision:
+     * Modeling gaps must remain explicit and cannot silently downgrade the
+     * compiler's safety guarantees.
+     *
+     * Example:
+     * "noImplicitAny": true
      */
     "noImplicitAny": true,
 
     /**
+     * Description:
      * Rejects an implicitly typed this value.
+     *
+     * Architectural decision:
+     * Context-sensitive APIs and callbacks cannot use this as an untyped
+     * escape hatch.
+     *
+     * Example:
+     * "noImplicitThis": true
      */
     "noImplicitThis": true,
 
     /**
-     * Requires explicit override markers on overridden members.
+     * Description:
+     * Requires explicit override markers on overridden class members.
+     *
+     * Architectural decision:
+     * Inheritance changes must be intentional and visible during API evolution.
+     *
+     * Example:
+     * "noImplicitOverride": true
      */
     "noImplicitOverride": true,
 
     /**
+     * Description:
      * Requires all non-void code paths to return explicitly.
+     *
+     * Architectural decision:
+     * Return-path correctness belongs to the compiler as the single authority,
+     * not to a weaker or duplicate lint rule.
+     *
+     * Example:
+     * "noImplicitReturns": true
      */
     "noImplicitReturns": true,
 
     /**
+     * Description:
      * Reports unintended switch-case fallthrough.
+     *
+     * Architectural decision:
+     * Hidden control-flow coupling is unsafe by default and must be made
+     * explicit through a deliberate implementation shape.
+     *
+     * Example:
+     * "noFallthroughCasesInSwitch": true
      */
     "noFallthroughCasesInSwitch": true,
 
     /**
-     * Bracket access for index-signature-only values.
+     * Description:
+     * Requires bracket access for values provided only by an index signature.
+     *
+     * Architectural decision:
+     * Dynamic dictionary lookup must not be mistaken for stable named-property
+     * ownership.
+     *
+     * Example:
+     * "noPropertyAccessFromIndexSignature": true
      */
     "noPropertyAccessFromIndexSignature": true,
 
     /**
+     * Description:
      * Adds undefined to indexed-access results that may miss a key.
+     *
+     * Architectural decision:
+     * Every lookup boundary must acknowledge missing data rather than assume it
+     * exists.
+     *
+     * Example:
+     * "noUncheckedIndexedAccess": true
      */
     "noUncheckedIndexedAccess": true,
 
     /**
+     * Description:
      * Reports unresolved side-effect-only imports.
+     *
+     * Architectural decision:
+     * Polyfills, registration modules, and bootstrap effects are infrastructure
+     * dependencies and must fail closed when they cannot be resolved.
+     *
+     * Example:
+     * "noUncheckedSideEffectImports": true
      */
     "noUncheckedSideEffectImports": true,
 
     /**
+     * Description:
      * Reports unused local declarations.
+     *
+     * Architectural decision:
+     * Dead local state commonly signals stale refactoring or incomplete logic
+     * and must not silently accumulate.
+     *
+     * Example:
+     * "noUnusedLocals": true
      */
     "noUnusedLocals": true,
 
     /**
+     * Description:
      * Reports unused function parameters.
+     *
+     * Architectural decision:
+     * Public and internal signatures must describe actual behavior rather than
+     * preserve accidental API drift.
+     *
+     * Example:
+     * "noUnusedParameters": true
      */
     "noUnusedParameters": true,
 
     /**
-     * Provably unreachable code is a compiler error.
+     * Description:
+     * Promotes syntactically provable unreachable code to a compiler error.
+     *
+     * Architectural decision:
+     * Dead branches must be removed or intentionally redesigned rather than
+     * remain as editor-only suggestions.
+     *
+     * Example:
+     * "allowUnreachableCode": false
      */
     "allowUnreachableCode": false,
 
     /**
-     * Unused labels are a compiler error.
+     * Description:
+     * Promotes unused labels to a compiler error.
+     *
+     * Architectural decision:
+     * Labels are rare and often indicate an accidental object-like statement;
+     * the core rejects that ambiguity.
+     *
+     * Example:
+     * "allowUnusedLabels": false
      */
     "allowUnusedLabels": false,
 
     /**
-     * Third-party declaration files are checked, never suppressed.
+     * Description:
+     * Checks third-party declaration files instead of suppressing their errors.
+     *
+     * Architectural decision:
+     * Supply-chain contracts are part of the type boundary; declaration defects
+     * must be repaired, upgraded, or isolated at their true owner.
+     *
+     * Example:
+     * "skipLibCheck": false
      */
     "skipLibCheck": false,
 
     /**
-     * Full semantic typechecking stays enabled.
+     * Description:
+     * Keeps full semantic typechecking enabled.
+     *
+     * Architectural decision:
+     * Parse-and-emit-only operation cannot become an implicit fallback for the
+     * canonical strict policy.
+     *
+     * Example:
+     * "noCheck": false
      */
     "noCheck": false,
 
     /**
-     * The universal root policy surface never emits artifacts.
+     * Description:
+     * Prevents the universal root policy surface from emitting artifacts.
+     *
+     * Architectural decision:
+     * Only a selected terminal delivery or validation role may own output.
+     *
+     * Example:
+     * "noEmit": true
      */
     "noEmit": true,
 
     /**
-     * A specialized emitting role never writes artifacts when type errors exist.
+     * Description:
+     * Prevents a specialized emitting role from writing artifacts when type
+     * errors exist.
+     *
+     * Architectural decision:
+     * Invalid partial artifacts are not an acceptable release or validation
+     * outcome.
+     *
+     * Example:
+     * "noEmitOnError": true
      */
     "noEmitOnError": true,
 
     /**
-     * Ambient type packages stay opt-in; host globals belong to the narrowest role.
+     * Description:
+     * Keeps ambient type packages opt-in.
+     *
+     * Architectural decision:
+     * Node, browser, framework, and test globals belong to the narrowest
+     * responsible role rather than the universal root.
+     *
+     * Example:
+     * "types": []
      */
     "types": [],
 
     /**
-     * Domain-scoped repository-owned aliases (physical ./ prefix, no baseUrl —
-     * baseUrl is deprecated in TypeScript 6). Package-owned top-level specifiers
-     * (#pkg, #docs, #scripts) live in package.json imports, never here.
+     * Description:
+     * Maps the repository-owned domain aliases to their physical source roots.
+     *
+     * Architectural decision:
+     * The alias map is restored verbatim from the pre-update baseline: the
+     * updated source configuration dropped it as technical debt while `src/`
+     * and `test/` continue to import through these aliases. Entries use
+     * physical ./ prefixes without baseUrl (baseUrl is deprecated in
+     * TypeScript 6); package-owned # specifiers stay in package.json imports.
+     *
+     * Example:
+     * "paths": { "@domain/*": ["./src/domain/*"] }
      */
     "paths": {
       "@application/*": ["./src/application/*"],
@@ -278,8 +656,22 @@
   },
 
   /**
-   * Exclude: dependency trees, generated output, build state, and caches
-   * never become implicit application source.
+   * Description:
+   * Defines directories excluded from default source discovery.
+   *
+   * Architectural decision:
+   * Dependency trees, generated output, build state, and caches must not become
+   * implicit application source. Leaf-specific source boundaries remain local.
+   *
+   * Example:
+   * "exclude": ["node_modules", "dist", "out", "build", ".tsbuild", ".cache"]
    */
-  "exclude": ["node_modules", "dist", "out", "build", ".tsbuild", ".cache"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "out",
+    "build",
+    ".tsbuild",
+    ".cache"
+  ]
 }

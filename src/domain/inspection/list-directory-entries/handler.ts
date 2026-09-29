@@ -57,6 +57,12 @@ import {
   cloneInspectionResumeTraversalFrames,
   commitInspectionResumeTraversalEntry,
 } from "@domain/shared/resume/inspection-resume-frontier";
+import {
+  INSPECTION_RESUME_FRONTIER_RECONCILIATION_STATUSES,
+  reconcileInspectionResumeFrontierTruthfulness,
+  type InspectionResumeFrontierDiscard,
+  type InspectionResumeFrontierReconciliationVerdict,
+} from "@domain/shared/resume/inspection-resume-reconciliation";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import { getFileSystemEntryMetadata } from "@infrastructure/filesystem/filesystem-entry-metadata";
 import { detectIoCapabilityProfile } from "@infrastructure/runtime/io-capability-detector";
@@ -116,6 +122,16 @@ export interface ListDirectoryEntriesResult {
    * present its delta as the absolute session result.
    */
   sessionDelivery: InspectionSessionDeliverySummary;
+
+  /**
+   * Fail-closed reconciliation verdict for the current delivery pass.
+   *
+   * @remarks
+   * The verdict audits that the traversal frontier and the delivery accounting agree with the
+   * payload this pass actually delivered. A diverged verdict always closes the session with a
+   * truthful divergence framing — never with a false completion claim.
+   */
+  frontierReconciliation: InspectionResumeFrontierReconciliationVerdict;
 
   admission: InspectionResumeAdmission;
 
@@ -192,6 +208,10 @@ interface ListDirectoryEntriesExecutionContext {
 interface ListDirectoryEntriesRootExecutionResult extends ListedDirectoryRoot {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
   nextContinuationState: ListDirectoryEntriesRootContinuationState | null;
+  /**
+   * Directory frames discarded without delivery during this root's current pass.
+   */
+  discardedDirectoryRelativePaths: string[];
 }
 
 const LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER = "list_directory_entries";
@@ -202,6 +222,8 @@ const LIST_DIRECTORY_ENTRIES_COMPLETE_RESULT_GUIDANCE =
   "Resume the same directory-listing request by sending only resumeToken with resumeMode='complete-result' to let the server continue the session toward a complete result without bypassing caps.";
 const LIST_DIRECTORY_ENTRIES_CONTINUATION_ADDITIVE_GUIDANCE =
   "Continuation response. This payload contains directory entries from the persisted frontier position onward. Combine with the prior preview-chunk payload for the complete dataset.";
+const LIST_DIRECTORY_ENTRIES_FRONTIER_DIVERGENCE_GUIDANCE =
+  "Directory-listing session closed without completing: the traversal frontier diverged from the delivered payload, so the session cannot continue truthfully. Start a new request for the affected roots to rebuild a complete listing.";
 const LIST_DIRECTORY_ENTRIES_INLINE_RESPONSE_OVERHEAD_CHARS = 256;
 const LIST_DIRECTORY_ENTRIES_INLINE_ENTRY_BASE_CHARS = 96;
 const LIST_DIRECTORY_ENTRIES_INLINE_TIMESTAMP_METADATA_CHARS = 96;
@@ -235,6 +257,8 @@ function formatListDirectoryEntriesChunkPayload(
  * Exported as an explicit white-box test seam, mirroring the search-family result modules.
  * Continuation passes are frontier-delta-scoped by contract: resumable passes emit the bounded
  * chunk block, and the terminal pass emits the delta payload plus the session-cumulative summary.
+ * A pass whose frontier reconciliation diverged closes with the divergence evidence instead of a
+ * completion claim — the terminal framing is fail-closed.
  *
  * @param result - Structured directory-listing result across all requested roots.
  * @returns Human-readable directory-listing output for the current delivery pass.
@@ -246,6 +270,27 @@ export function formatListDirectoryEntriesTextOutput(
     result.resume.resumable
     && result.resume.resumeToken !== null;
   const continuationPass = result.sessionDelivery.continuationPass;
+
+  // Fail-closed truthfulness gate: a pass whose traversal frontier diverged from the delivered
+  // payload (for example a directory frame discarded without delivery) never frames itself as a
+  // completed listing — the session closes with the divergence evidence instead.
+  if (
+    result.frontierReconciliation.status
+    === INSPECTION_RESUME_FRONTIER_RECONCILIATION_STATUSES.DIVERGED
+  ) {
+    const firstDiscard = result.frontierReconciliation.discardedDirectories[0];
+    const firstDiscardText = firstDiscard === undefined
+      ? ""
+      : ` First discard: '${firstDiscard.directoryRelativePath}' beneath root '${firstDiscard.requestedPath}'.`;
+    const divergenceSummary =
+      `Directory-listing session closed without completing: ${result.frontierReconciliation.divergenceReason ?? "frontier divergence"}.${firstDiscardText} The delivered payload is incomplete. Start a new request for the affected roots to rebuild a complete listing.`;
+
+    return [
+      "Bounded directory-entry payload:",
+      formatListDirectoryEntriesChunkPayload(result),
+      formatInspectionTerminalCompletionTextBlock(result.admission, divergenceSummary),
+    ].join("\n");
+  }
 
   // Pure inline base responses keep the plain encoded result. Every continuation pass is
   // frontier-delta-scoped by contract and must never present its delta as the session result.
@@ -479,6 +524,7 @@ function buildListDirectoryEntriesResumeEnvelope(
   inspectionResumeSessionStore: InspectionResumeSessionSqliteStore | undefined,
   requestPayload: ListDirectoryEntriesRequestPayload,
   rootResults: ListDirectoryEntriesRootExecutionResult[],
+  frontierReconciliation: InspectionResumeFrontierReconciliationVerdict,
   now: Date,
 ): Pick<ListDirectoryEntriesResult, "admission" | "resume"> {
   const previewFirstActive = rootResults.some(
@@ -500,6 +546,20 @@ function buildListDirectoryEntriesResumeEnvelope(
   const admissionOutcome = effectiveResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT
     ? INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED
     : INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST;
+
+  // Fail-closed truthfulness gate: a diverged frontier never persists for continuation and never
+  // frames itself as resumable — the session closes with a truthful divergence statement.
+  if (
+    frontierReconciliation.status
+    === INSPECTION_RESUME_FRONTIER_RECONCILIATION_STATUSES.DIVERGED
+  ) {
+    return createResumeEnvelope(
+      admissionOutcome,
+      LIST_DIRECTORY_ENTRIES_FRONTIER_DIVERGENCE_GUIDANCE,
+      scopeReductionGuidanceText,
+      null,
+    );
+  }
 
   if (nextContinuationState === null) {
     return createResumeEnvelope(
@@ -571,11 +631,13 @@ async function collectDirectoryEntriesPreviewChunk(
 ): Promise<{
   entries: ListedDirectoryEntry[];
   nextContinuationState: ListDirectoryEntriesRootContinuationState | null;
+  discardedDirectoryRelativePaths: string[];
 }> {
   const traversalFrames = continuationState === null
     ? createInitialListDirectoryEntriesTraversalFrames()
     : cloneListDirectoryEntriesTraversalFrames(continuationState.traversalFrames);
   const listedEntries: ListedDirectoryEntry[] = [];
+  const discardedDirectoryRelativePaths: string[] = [];
   let estimatedResponseChars = LIST_DIRECTORY_ENTRIES_PREVIEW_TEXT_RESPONSE_OVERHEAD_CHARS;
   let previewAborted = false;
 
@@ -612,7 +674,21 @@ async function collectDirectoryEntriesPreviewChunk(
 
     try {
       entries = await readSortedDirectoryEntries(currentPath);
-    } catch {
+    } catch (error) {
+      // Fail-closed truthfulness: a directory that cannot be read leaves the traversal frontier
+      // only as recorded discard evidence — never silently. The result assembly closes the
+      // session with a truthful divergence framing instead of a false completion claim.
+      logger.warn(
+        {
+          rootAbsolutePath,
+          directoryRelativePath: currentTraversalFrame.directoryRelativePath,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+        "Directory frame discarded from the preview traversal frontier — the directory could not be read",
+      );
+      discardedDirectoryRelativePaths.push(
+        normalizeRelativePath(currentTraversalFrame.directoryRelativePath),
+      );
       traversalFrames.pop();
       continue;
     }
@@ -706,6 +782,7 @@ async function collectDirectoryEntriesPreviewChunk(
       : {
           traversalFrames: cloneListDirectoryEntriesTraversalFrames(traversalFrames),
         },
+    discardedDirectoryRelativePaths,
   };
 }
 
@@ -901,6 +978,7 @@ async function buildListedDirectoryRoot(
         entries: continuationChunk.entries,
         admissionOutcome: traversalAdmissionDecision.outcome,
         nextContinuationState: continuationChunk.nextContinuationState,
+        discardedDirectoryRelativePaths: continuationChunk.discardedDirectoryRelativePaths,
       };
     }
 
@@ -921,6 +999,7 @@ async function buildListedDirectoryRoot(
       entries: previewChunk.entries,
       admissionOutcome: traversalAdmissionDecision.outcome,
       nextContinuationState: previewChunk.nextContinuationState,
+      discardedDirectoryRelativePaths: previewChunk.discardedDirectoryRelativePaths,
     };
   }
 
@@ -937,6 +1016,7 @@ async function buildListedDirectoryRoot(
     ),
     admissionOutcome: traversalAdmissionDecision.outcome,
     nextContinuationState: null,
+    discardedDirectoryRelativePaths: [],
   };
 }
 
@@ -1015,6 +1095,12 @@ export async function getListDirectoryEntriesResult(
     return {
       roots: [],
       sessionDelivery: createContinuationSessionDeliverySummary(previouslyDeliveredEntryCount, 0),
+      frontierReconciliation: reconcileInspectionResumeFrontierTruthfulness({
+        previouslyDeliveredCount: previouslyDeliveredEntryCount,
+        currentPassDeliveredCount: 0,
+        sessionTotalCount: previouslyDeliveredEntryCount,
+        discardedDirectories: [],
+      }),
       ...createInlineResumeEnvelope(),
     };
   }
@@ -1051,6 +1137,21 @@ export async function getListDirectoryEntriesResult(
     null,
   );
   const currentPassEntryCount = roots.reduce((total, root) => total + root.entries.length, 0);
+  const discardedDirectories: InspectionResumeFrontierDiscard[] = roots.flatMap((root) =>
+    root.discardedDirectoryRelativePaths.map((directoryRelativePath) => ({
+      requestedPath: root.requestedPath,
+      directoryRelativePath,
+    }))
+  );
+  const sessionDelivery = executionContext.continuationState === null
+    ? createBaseSessionDeliverySummary(currentPassEntryCount)
+    : createContinuationSessionDeliverySummary(previouslyDeliveredEntryCount, currentPassEntryCount);
+  const frontierReconciliation = reconcileInspectionResumeFrontierTruthfulness({
+    previouslyDeliveredCount: previouslyDeliveredEntryCount,
+    currentPassDeliveredCount: currentPassEntryCount,
+    sessionTotalCount: sessionDelivery.sessionTotalCount,
+    discardedDirectories,
+  });
   const nextContinuationStateWithDeliveredTotals = nextContinuationState === null
     ? null
     : {
@@ -1066,6 +1167,7 @@ export async function getListDirectoryEntriesResult(
     inspectionResumeSessionStore,
     executionContext.requestPayload,
     roots,
+    frontierReconciliation,
     now,
   );
 
@@ -1074,11 +1176,62 @@ export async function getListDirectoryEntriesResult(
       requestedPath,
       entries,
     })),
-    sessionDelivery: executionContext.continuationState === null
-      ? createBaseSessionDeliverySummary(currentPassEntryCount)
-      : createContinuationSessionDeliverySummary(previouslyDeliveredEntryCount, currentPassEntryCount),
+    sessionDelivery,
+    frontierReconciliation,
     ...continuationEnvelope,
   };
+}
+
+/**
+ * Finalizes the caller-visible text response for an already-executed directory-listing result.
+ *
+ * @remarks
+ * This is the single post-execution surface shared by the composed handler entrypoint and the
+ * tool-registration callback: it formats the precomputed result, enforces the mode-aware response
+ * cap, and closes terminal sessions truthfully. It never re-executes traversal — the registration
+ * callback consumes exactly one execution per tool call through this seam, so the text surface and
+ * the structured surface always derive from the same execution.
+ *
+ * @param result - Structured directory-listing result from the single execution of the current call.
+ * @param requestedResumeMode - The resume intent of the current request, used for the mode-aware cap.
+ * @param resumeToken - The opaque session handle of the current request, when present.
+ * @param inspectionResumeSessionStore - Server-owned SQLite session store for terminal lifecycle marking.
+ * @returns Formatted text output respecting the mode-appropriate response ceiling.
+ */
+export function finalizeListDirectoryEntriesTextOutput(
+  result: ListDirectoryEntriesResult,
+  requestedResumeMode: InspectionResumeMode | undefined,
+  resumeToken: string | undefined,
+  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
+): string {
+  const output = formatListDirectoryEntriesTextOutput(result);
+
+  const isCompleteResultMode = requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
+  const effectiveResponseCap = isCompleteResultMode
+    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
+    : DISCOVERY_RESPONSE_CAP_CHARS;
+
+  assertActualTextBudget(
+    LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
+    output.length,
+    effectiveResponseCap,
+    "directory-listing text output",
+  );
+
+  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
+    if (
+      result.frontierReconciliation.status
+      === INSPECTION_RESUME_FRONTIER_RECONCILIATION_STATUSES.DIVERGED
+    ) {
+      // A diverged frontier closes as cancelled, never as completed: the session did not deliver
+      // its full dataset and must not carry a successful terminal lifecycle state.
+      inspectionResumeSessionStore?.markSessionCancelled(resumeToken, new Date());
+    } else {
+      inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+    }
+  }
+
+  return output;
 }
 
 /**
@@ -1140,24 +1293,11 @@ export async function handleListDirectoryEntries(
     inspectionResumeSessionStore,
   );
 
-  const output = formatListDirectoryEntriesTextOutput(result);
-
-  const isCompleteResultMode = resumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
-  const effectiveResponseCap = isCompleteResultMode
-    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
-    : DISCOVERY_RESPONSE_CAP_CHARS;
-
-  assertActualTextBudget(
-    LIST_DIRECTORY_ENTRIES_FAMILY_MEMBER,
-    output.length,
-    effectiveResponseCap,
-    "directory-listing text output",
+  return finalizeListDirectoryEntriesTextOutput(
+    result,
+    resumeMode,
+    resumeToken,
+    inspectionResumeSessionStore,
   );
-
-  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
-    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
-  }
-
-  return output;
 }
 

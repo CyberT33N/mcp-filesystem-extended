@@ -43,6 +43,7 @@ Do **not** use it as a replacement for:
 - `structuredContent.admission` and `structuredContent.resume` are authoritative when present
 - preview-first responses may surface a bounded directory-entry payload and active `resumeToken` in `content.text`
 - `complete-result` continuation is additive and continues from the persisted frontier
+- a listing session reports completion only when every root frontier was fully delivered; unreadable directories close the session with an explicit incomplete-data statement
 
 ---
 

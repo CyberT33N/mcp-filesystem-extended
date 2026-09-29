@@ -10,6 +10,7 @@ const registerInspectionToolCatalogTestState = vi.hoisted(() => ({
   getPathMetadataResultSchema: { schema: "get-path-metadata-result" },
   getListDirectoryEntriesResult: vi.fn(),
   handleListDirectoryEntries: vi.fn(),
+  finalizeListDirectoryEntriesTextOutput: vi.fn(),
   listDirectoryEntriesArgsSchema: { schema: "list-directory-entries" },
   listDirectoryEntriesStructuredResultSchema: {
     schema: "list-directory-entries-result",
@@ -25,10 +26,12 @@ const registerInspectionToolCatalogTestState = vi.hoisted(() => ({
   normalizeReadFileContentArgs: vi.fn(),
   getFindPathsByNameResult: vi.fn(),
   handleSearchFiles: vi.fn(),
+  finalizeFindPathsByNameTextOutput: vi.fn(),
   findPathsByNameArgsSchema: { schema: "find-paths-by-name" },
   findPathsByNameResultSchema: { schema: "find-paths-by-name-result" },
   getFindFilesByGlobResult: vi.fn(),
   handleSearchGlob: vi.fn(),
+  finalizeFindFilesByGlobTextOutput: vi.fn(),
   findFilesByGlobArgsSchema: { schema: "find-files-by-glob" },
   findFilesByGlobResultSchema: { schema: "find-files-by-glob-result" },
   buildSearchRegexToolResult: vi.fn(),
@@ -100,6 +103,8 @@ vi.mock("@domain/inspection/get-path-metadata/schema", () => ({
 }));
 
 vi.mock("@domain/inspection/list-directory-entries/handler", () => ({
+  finalizeListDirectoryEntriesTextOutput:
+    registerInspectionToolCatalogTestState.finalizeListDirectoryEntriesTextOutput,
   getListDirectoryEntriesResult:
     registerInspectionToolCatalogTestState.getListDirectoryEntriesResult,
   handleListDirectoryEntries:
@@ -139,6 +144,8 @@ vi.mock("@domain/inspection/read-file-content/schema", () => ({
 }));
 
 vi.mock("@domain/inspection/find-paths-by-name/handler", () => ({
+  finalizeFindPathsByNameTextOutput:
+    registerInspectionToolCatalogTestState.finalizeFindPathsByNameTextOutput,
   getFindPathsByNameResult:
     registerInspectionToolCatalogTestState.getFindPathsByNameResult,
   handleSearchFiles: registerInspectionToolCatalogTestState.handleSearchFiles,
@@ -152,6 +159,8 @@ vi.mock("@domain/inspection/find-paths-by-name/schema", () => ({
 }));
 
 vi.mock("@domain/inspection/find-files-by-glob/handler", () => ({
+  finalizeFindFilesByGlobTextOutput:
+    registerInspectionToolCatalogTestState.finalizeFindFilesByGlobTextOutput,
   getFindFilesByGlobResult:
     registerInspectionToolCatalogTestState.getFindFilesByGlobResult,
   handleSearchGlob: registerInspectionToolCatalogTestState.handleSearchGlob,
@@ -294,14 +303,17 @@ describe("register-inspection-tool-catalog", () => {
     registerInspectionToolCatalogTestState.handleGetPathMetadata.mockClear();
     registerInspectionToolCatalogTestState.getListDirectoryEntriesResult.mockClear();
     registerInspectionToolCatalogTestState.handleListDirectoryEntries.mockClear();
+    registerInspectionToolCatalogTestState.finalizeListDirectoryEntriesTextOutput.mockClear();
     registerInspectionToolCatalogTestState.handleReadFiles.mockClear();
     registerInspectionToolCatalogTestState.getReadFileContentResult.mockClear();
     registerInspectionToolCatalogTestState.handleReadFileContent.mockClear();
     registerInspectionToolCatalogTestState.normalizeReadFileContentArgs.mockClear();
     registerInspectionToolCatalogTestState.getFindPathsByNameResult.mockClear();
     registerInspectionToolCatalogTestState.handleSearchFiles.mockClear();
+    registerInspectionToolCatalogTestState.finalizeFindPathsByNameTextOutput.mockClear();
     registerInspectionToolCatalogTestState.getFindFilesByGlobResult.mockClear();
     registerInspectionToolCatalogTestState.handleSearchGlob.mockClear();
+    registerInspectionToolCatalogTestState.finalizeFindFilesByGlobTextOutput.mockClear();
     registerInspectionToolCatalogTestState.buildSearchRegexToolResult.mockClear();
     registerInspectionToolCatalogTestState.buildSearchFixedStringToolResult.mockClear();
     registerInspectionToolCatalogTestState.formatCountLinesResultOutput.mockClear();
@@ -519,7 +531,7 @@ describe("register-inspection-tool-catalog", () => {
       admission: { outcome: "inline" },
       resume: { resumable: false },
     });
-    registerInspectionToolCatalogTestState.handleListDirectoryEntries.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.finalizeListDirectoryEntriesTextOutput.mockReturnValue("text");
     registerInspectionToolCatalogTestState.getFindPathsByNameResult.mockResolvedValue({
       roots: [],
       totalMatches: 0,
@@ -528,7 +540,7 @@ describe("register-inspection-tool-catalog", () => {
       admission: { outcome: "inline" },
       resume: { resumable: false },
     });
-    registerInspectionToolCatalogTestState.handleSearchFiles.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.finalizeFindPathsByNameTextOutput.mockReturnValue("text");
     registerInspectionToolCatalogTestState.getFindFilesByGlobResult.mockResolvedValue({
       roots: [],
       totalMatches: 0,
@@ -537,7 +549,7 @@ describe("register-inspection-tool-catalog", () => {
       admission: { outcome: "inline" },
       resume: { resumable: false },
     });
-    registerInspectionToolCatalogTestState.handleSearchGlob.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.finalizeFindFilesByGlobTextOutput.mockReturnValue("text");
     registerInspectionToolCatalogTestState.buildSearchRegexToolResult.mockResolvedValue({
       text: "text",
       result: {
@@ -611,7 +623,7 @@ describe("register-inspection-tool-catalog", () => {
       admission: {},
       resume: {},
     });
-    registerInspectionToolCatalogTestState.handleListDirectoryEntries.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.finalizeListDirectoryEntriesTextOutput.mockReturnValue("text");
     registerInspectionToolCatalogTestState.getFindPathsByNameResult.mockResolvedValue({
       roots: [],
       totalMatches: 0,
@@ -620,7 +632,7 @@ describe("register-inspection-tool-catalog", () => {
       admission: {},
       resume: {},
     });
-    registerInspectionToolCatalogTestState.handleSearchFiles.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.finalizeFindPathsByNameTextOutput.mockReturnValue("text");
     registerInspectionToolCatalogTestState.getFindFilesByGlobResult.mockResolvedValue({
       roots: [],
       totalMatches: 0,
@@ -629,7 +641,7 @@ describe("register-inspection-tool-catalog", () => {
       admission: {},
       resume: {},
     });
-    registerInspectionToolCatalogTestState.handleSearchGlob.mockResolvedValue("text");
+    registerInspectionToolCatalogTestState.finalizeFindFilesByGlobTextOutput.mockReturnValue("text");
     registerInspectionToolCatalogTestState.buildSearchRegexToolResult.mockResolvedValue({
       text: "text",
       result: {
@@ -856,5 +868,86 @@ describe("register-inspection-tool-catalog", () => {
     expect(
       registerInspectionToolCatalogTestState.buildSearchFixedStringToolResult,
     ).toHaveBeenLastCalledWith(expect.objectContaining({ fixedString: "" }));
+  });
+
+  it("executes each preview-capable discovery traversal exactly once per tool call", async () => {
+    const registerTool = vi.fn();
+    const executeTool = vi.fn(
+      (_toolName: string, operation: () => unknown) => operation(),
+    );
+    const context = {
+      server: {
+        registerTool,
+      },
+      allowedDirectories: ["C:/allowed"],
+      inspectionResumeSessionStore: {
+        cleanupExpiredSessions: vi.fn(),
+      },
+      executeTool,
+    };
+
+    Reflect.apply(registerInspectionToolCatalog, undefined, [context]);
+
+    const registeredCallbackByToolName = new Map(
+      registerTool.mock.calls.map(([toolName, , callback]) => [
+        toolName,
+        callback,
+      ]),
+    );
+
+    registerInspectionToolCatalogTestState.getListDirectoryEntriesResult.mockResolvedValue({
+      roots: [],
+      sessionDelivery: {},
+      admission: {},
+      resume: {},
+    });
+    registerInspectionToolCatalogTestState.finalizeListDirectoryEntriesTextOutput.mockReturnValue("text");
+    registerInspectionToolCatalogTestState.getFindPathsByNameResult.mockResolvedValue({
+      roots: [],
+      totalMatches: 0,
+      truncated: false,
+      sessionDelivery: {},
+      admission: {},
+      resume: {},
+    });
+    registerInspectionToolCatalogTestState.finalizeFindPathsByNameTextOutput.mockReturnValue("text");
+    registerInspectionToolCatalogTestState.getFindFilesByGlobResult.mockResolvedValue({
+      roots: [],
+      totalMatches: 0,
+      truncated: false,
+      sessionDelivery: {},
+      admission: {},
+      resume: {},
+    });
+    registerInspectionToolCatalogTestState.finalizeFindFilesByGlobTextOutput.mockReturnValue("text");
+
+    const discoveryCallbacks = [
+      "list_directory_entries",
+      "find_paths_by_name",
+      "find_files_by_glob",
+    ];
+
+    for (const toolName of discoveryCallbacks) {
+      const callback = registeredCallbackByToolName.get(toolName);
+
+      if (callback === undefined) {
+        throw new Error(`Expected ${toolName} to be registered.`);
+      }
+
+      await Reflect.apply(callback, undefined, [{}]);
+    }
+
+    // The registration callback must consume exactly one traversal execution per tool call: the
+    // structured surface and the text surface derive from the same result, and the composed
+    // handle entrypoint (which would re-execute the traversal) is never invoked by the callback.
+    expect(registerInspectionToolCatalogTestState.getListDirectoryEntriesResult).toHaveBeenCalledOnce();
+    expect(registerInspectionToolCatalogTestState.handleListDirectoryEntries).not.toHaveBeenCalled();
+    expect(registerInspectionToolCatalogTestState.finalizeListDirectoryEntriesTextOutput).toHaveBeenCalledOnce();
+    expect(registerInspectionToolCatalogTestState.getFindPathsByNameResult).toHaveBeenCalledOnce();
+    expect(registerInspectionToolCatalogTestState.handleSearchFiles).not.toHaveBeenCalled();
+    expect(registerInspectionToolCatalogTestState.finalizeFindPathsByNameTextOutput).toHaveBeenCalledOnce();
+    expect(registerInspectionToolCatalogTestState.getFindFilesByGlobResult).toHaveBeenCalledOnce();
+    expect(registerInspectionToolCatalogTestState.handleSearchGlob).not.toHaveBeenCalled();
+    expect(registerInspectionToolCatalogTestState.finalizeFindFilesByGlobTextOutput).toHaveBeenCalledOnce();
   });
 });

@@ -182,6 +182,19 @@ The completion payload continues from the persisted frontier position. It is not
 
 A preview-first session may finalize without an active resume token only when the currently bounded payload already represents the final remaining data and no further continuation step exists.
 
+### Fail-closed terminal truthfulness
+
+A listing session reports completion only when the traversal frontier and the delivery accounting reconcile with the delivered payload:
+
+- every preview pass is audited by the shared fail-closed reconciliation primitive (`src/domain/shared/resume/inspection-resume-reconciliation.ts`)
+- a directory that cannot be read is recorded as frontier-discard evidence instead of vanishing silently from the traversal frontier
+- any divergence closes the session truthfully (`cancelled`, not `completed`) and frames the response as `session closed without completing` with the discard evidence and the incomplete-data statement
+- a false `completion finished` framing is therefore structurally impossible for a diverged frontier
+
+### Single-execution delivery contract
+
+Every tool call executes the traversal exactly once. The caller-visible text surface and the structured surface derive from that single execution through the endpoint's finalizer seam (`finalizeListDirectoryEntriesTextOutput`) — the registration callback never re-executes the traversal for the text surface.
+
 ---
 
 ## Ordering and Stability Invariants

@@ -168,6 +168,20 @@ For preview-first directory-listing responses, `content.text` may also append th
 
 The server continues from the persisted frontier rather than replaying the entire already-delivered preview chunk. Callers must combine the earlier preview payload with the later completion payload to reconstruct the complete dataset.
 
+### Fail-closed terminal truthfulness
+
+The terminal framing of a listing session is fail-closed:
+
+- a directory frame that cannot be read is recorded as discard evidence, never dropped silently
+- a pass whose traversal frontier diverged from the delivered payload closes the session instead of persisting a corrupted frontier
+- a diverged close is framed as `session closed without completing` with the discard evidence — never as `completion finished`
+- a diverged persisted session closes as `cancelled`, not `completed`
+- the reconciliation audit itself lives in the shared resume module (`src/domain/shared/resume/inspection-resume-reconciliation.ts`) so sibling preview families can adopt the same fail-closed gate
+
+### Single-execution registration contract
+
+The registration callback consumes exactly one traversal execution per tool call: the structured result and the caller-visible text derive from the same execution via the endpoint's `finalize*TextOutput` seam. Re-executing the traversal for the text surface is forbidden — it would skip every second delivered chunk in the text chain and double-count the persisted delivery accounting.
+
 ---
 
 ## Guardrail Ownership Conventions

@@ -201,6 +201,10 @@ Those surfaces remain owned by shared architecture conventions because they are 
 
 The completion payload continues from the persisted traversal frontier. It is not a replay of the previously delivered preview chunk. The caller must combine both payloads when reconstructing the full result.
 
+### Single-execution delivery contract
+
+Every tool call executes the traversal exactly once. The caller-visible text surface and the structured surface derive from that single execution through the endpoint's finalizer seam (`finalizeFindPathsByNameTextOutput`) — the registration callback never re-executes the traversal for the text surface.
+
 ### Text-budget interaction
 
 For this endpoint, inline and `next-chunk` delivery remain under the discovery-family response cap. `complete-result` uses the global response fuse as the final ceiling instead of the discovery-family cap. That is a shared resume/guardrail rule and must stay aligned with the shared convention leaves.

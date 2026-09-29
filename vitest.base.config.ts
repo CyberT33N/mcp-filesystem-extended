@@ -5,31 +5,32 @@ import { defineConfig } from 'vitest/config'
 // ═══╡ 🗿 CONSTANTS ╞═══
 
 /**
- * Basis-Pfad aller Test-Suiten.
+ * Base path of every test suite.
  */
 export const BASE_PATH = 'test'
 
 /**
- * Einheitlicher Dateiname der Global-Setup-Datei einer Suite.
+ * Uniform file name of a suite's global setup file.
  */
 export const GLOBAL_SETUP_NAME = 'global.setup.ts'
 
 /**
- * Einheitlicher Dateiname der Suite-Setup-Datei einer Suite.
+ * Uniform file name of a suite's local setup file.
  */
 export const SETUP_NAME = 'setup.ts'
 
 /**
- * Gemeinsames Global-Setup aller Suiten (Orchestrierung, keine vi.* APIs).
+ * Common global setup of all suites (orchestration, no vi.* APIs).
  */
 export const COMMON_GLOBAL_SETUP = [`${BASE_PATH}/${GLOBAL_SETUP_NAME}`]
 
 /**
- * Gemeinsame Setup-Dateien aller Suiten; die deterministische Reihenfolge lebt im Orchestrator.
+ * Common setup files of all suites; the deterministic order lives in the
+ * orchestrator.
  */
 export const COMMON_SETUP_FILES = [`${BASE_PATH}/setup-orchestrator.ts`]
 
-// 📋 Gemeinsame Testkonfiguration für alle Vitest-Projekte (Coverage/Reporter leben in der Root-Config)
+// 📋 Shared test configuration for all Vitest projects (coverage/reporters live in the root config)
 const cfg = defineConfig({
     plugins: [
         tsconfigPaths({

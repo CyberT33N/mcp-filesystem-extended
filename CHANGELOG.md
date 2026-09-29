@@ -10,11 +10,11 @@
 |-------|-------|
 | Scope Root | `.` |
 | Versioning Standard | `Semantic Versioning 2.0.0` |
-| Current Version | `1.2.1` |
+| Current Version | `1.2.2` |
 | Semver Class | `patch` |
 | Breaking Change | `no` |
 | Commit Scope | `filesystem-server` |
-| Current HEAD Commit Hash | `e1cedea42268ec5e4f7cbd6db422b9c7fbd33a31` |
+| Current HEAD Commit Hash | `30fda80568e44273f9e2744903ab6893d330c59f` |
 
 ---
 
@@ -23,9 +23,10 @@
 
 | Version | Date | Class | Breaking | Commit Type | HEAD Commit Hash | Summary | Commit Subject |
 |---------|------|-------|----------|-------------|------------------|---------|----------------|
-| `1.2.1` | `2026-09-27` | `patch` | `no` | `fix` | `e1cedea42268ec5e4f7cbd6db422b9c7fbd33a31` | `Refuse explicit link-type/target mismatches fail-closed at creation time in create_symbolic_links.` | `fix(filesystem-server): refuse explicit link-type/target mismatches at creation` |
-| `1.2.0` | `2026-09-26` | `minor` | `no` | `feat` | `d944213b19d87a7c8447a46c2fafcd9b5fe97880` | `Add the create_symbolic_links and verify_symbolic_links endpoints for portable batch symbolic-link creation and read-only integrity verification.` | `feat(filesystem-server): add create_symbolic_links and verify_symbolic_links endpoints` |
-| `1.1.0` | `2026-09-26` | `minor` | `no` | `feat` | `0c1ad4a0907d0897a4eb5c5771ee10ddb01fe9d0` | `Add the read-only verify_file_byte_identity endpoint for reference-based, region-aware byte-identity verification.` | `feat(filesystem-server): add verify_file_byte_identity endpoint` |
+| `1.2.2` | `2026-09-29` | `patch` | `no` | `fix` | `30fda80568e44273f9e2744903ab6893d330c59f` | `Execute every preview-capable discovery traversal exactly once per tool call (the registration callbacks re-executed the traversal for the text surface, which skipped every second chunk and double-counted the persisted delivery accounting), harden listing terminal framing with the fail-closed frontier-reconciliation gate, synchronize the workspace toolchain (pnpm 12.5.1, Node 26.10.0, TypeScript 6.0.3, vitest 5.0.1), and correct the stale ledger hash mapping.` | `fix(filesystem-server): execute discovery traversals once per call and close diverged listing sessions truthfully` |
+| `1.2.1` | `2026-09-27` | `patch` | `no` | `fix` | `fdcc8478c426380f34510af12555c945b37df778` | `Refuse explicit link-type/target mismatches fail-closed at creation time in create_symbolic_links.` | `fix(filesystem-server): refuse explicit link-type/target mismatches at creation` |
+| `1.2.0` | `2026-09-26` | `minor` | `no` | `feat` | `e1cedea42268ec5e4f7cbd6db422b9c7fbd33a31` | `Add the create_symbolic_links and verify_symbolic_links endpoints for portable batch symbolic-link creation and read-only integrity verification.` | `feat(filesystem-server): add create_symbolic_links and verify_symbolic_links endpoints` |
+| `1.1.0` | `2026-09-26` | `minor` | `no` | `feat` | `d944213b19d87a7c8447a46c2fafcd9b5fe97880` | `Add the read-only verify_file_byte_identity endpoint for reference-based, region-aware byte-identity verification.` | `feat(filesystem-server): add verify_file_byte_identity endpoint` |
 | `1.0.0` | `2026-04-03` | `major` | `yes` | `feat` | `30a55a921cfd0e92857c5978cb72bf681a821ca5` | `Consolidate legacy directory listing tools into the canonical TOON-based list_directory_entries surface.` | `feat(filesystem-server)!: consolidate directory listing into list_directory_entries` |
 
 ---
@@ -33,7 +34,44 @@
 ## 3. Current Version Entry
 [INTENT: SPECIFICATION]
 
-### 3.1 Version `1.2.1`
+### 3.1 Version `1.2.2`
+[INTENT: SPECIFICATION]
+
+**Classification**
+
+| Field | Value |
+|-------|-------|
+| Semver Class | `patch` |
+| Breaking Change | `no` |
+| Rationale | `Non-breaking correction and metadata synchronization: the preview-capable discovery registration callbacks (list_directory_entries, find_paths_by_name, find_files_by_glob) executed the traversal twice per tool call — once for the structured surface and once for the text surface — which skipped every second delivered chunk in the text chain and double-counted the persisted delivery accounting; every callback now consumes exactly one execution and derives both surfaces from the same result. list_directory_entries additionally closes diverged listing sessions fail-closed with truthful incomplete-data framing instead of a false completion claim, the workspace toolchain is synchronized to pnpm 12.5.1 / Node 26.10.0 / TypeScript 6.0.3 / vitest 5.0.1, and the stale ledger hash mapping is corrected. Every previously valid request keeps its exact behavior; multi-root preview sessions now deliver every chunk instead of every second one.` |
+
+**Change Units**
+
+| ID | Category | Breaking | Summary | Affected Files | Description Alignment |
+|----|----------|----------|---------|----------------|----------------------|
+| CHG-001 | `fix` | `no` | `Repair the root cause of the multi-root preview-lane defect: the registration callbacks of list_directory_entries, find_paths_by_name, and find_files_by_glob executed the traversal twice per tool call (once for structuredContent, once for the text), so the text chain showed only every second chunk while the persisted accounting counted both executions. Each callback now executes exactly once and derives both surfaces from the same result through an exported per-family finalizer that owns formatting, the mode-aware cap, and the terminal session marking.` | `src/application/server/register-inspection-tool-catalog.ts`, `src/domain/inspection/list-directory-entries/handler.ts`, `src/domain/inspection/find-paths-by-name/handler.ts`, `src/domain/inspection/find-files-by-glob/handler.ts` | `DESCRIPTION.md` documents the single-execution registration contract per endpoint. |
+| CHG-002 | `fix` | `no` | `Make the listing terminal framing fail-closed: the preview collector records discarded directory frames as evidence, the shared reconciliation primitive audits frontier-versus-payload truth, and a diverged pass closes the session as cancelled with a session-closed-without-completing framing instead of a false completion.` | `src/domain/inspection/list-directory-entries/handler.ts`, `src/domain/shared/resume/inspection-resume-reconciliation.ts` | `DESCRIPTION.md` documents the fail-closed terminal truthfulness architecture; `CONVENTIONS.md` records the discard-evidence and cancelled-lifecycle rules. |
+| CHG-003 | `contract` | `no` | `Carry the qualitative completion-truthfulness cue in the list_directory_entries tool description.` | `src/application/server/tool-registration-presets.ts` | The description stays qualitative; no numeric limits move. |
+| CHG-004 | `test` | `no` | `Pin the multi-root gapless next-chunk invariant, pin the single-execution registration contract for all three discovery callbacks, and cover the fail-closed gate and the reconciliation primitive with unit tests at 100 percent white-box coverage of the change scope.` | `test/unit/domain/inspection/list-directory-entries/list-directory-entries-multi-root-resume-gapless.test.ts`, `test/unit/domain/inspection/list-directory-entries/list-directory-entries-resume.test.ts`, `test/unit/domain/inspection/list-directory-entries/list-directory-entries.test.ts`, `test/unit/domain/shared/resume/inspection-resume-reconciliation.test.ts`, `test/unit/application/server/register-inspection-tool-catalog.test.ts` | Coverage-measured execution proves the changed units in the unit project (968/968 tests green). |
+| CHG-005 | `chore` | `no` | `Synchronize the workspace toolchain: pnpm 12.5.1, Node 26.10.0, TypeScript 6.0.3, vitest 5.0.1 with coverage-v8, tsdown 0.23.0, vite 8.3.0, @types/node 26.6.2, zod 4.6.5, pino 10.3.1, diff 9.0.0; restore the tsconfig paths alias map, repair the bundler-owned node lane, keep isolatedDeclarations disabled for the zod-inferred contracts, scope coverage to TypeScript sources, migrate the test suite to constructible vitest 5 class mocks, align the diff-9 header expectation, remove a proven-dead local, and add the thread-stream TransferListItem type augmentation with a documented removal trigger.` | `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `tsconfig.base.json`, `tsconfig.json`, `tsconfig.node.json`, `tsconfig.tests.json`, `tsconfig.typecheck.json`, `tsconfig.types.json`, `tsdown.config.ts`, `vitest.base.config.ts`, `vitest.config.ts`, `vitest.integration.config.ts`, `vitest.regression.config.ts`, `vitest.unit.config.ts`, `.gitattributes`, `.gitignore`, `lefthook.yml`, `src/domain/shared/search/inspection-content-state.ts`, `src/shared/types/worker-threads-transfer-list-item.d.ts`, `test/unit/application/server/filesystem-server.test.ts`, `test/unit/index.test.ts`, `test/unit/infrastructure/persistence/persistence-store-path-resolution.test.ts`, `test/unit/domain/comparison/diff-files/diff-files.test.ts` | The toolchain state is developer-facing only; no public endpoint contract changes. |
+| CHG-006 | `docs` | `no` | `Correct the stale ledger hash mapping (the 1.1.0-1.2.1 rows referenced the previous release's commit), re-anchor the current version and HEAD metadata, and synchronize the path index with the current topology.` | `CHANGELOG.md` | The ledger now maps every listed release to its actual release commit proven by git history. |
+| CHG-007 | `fix` | `no` | `Derive the MCP handshake version from the workspace manifest and emit a startup build-identity log line (version, bundle SHA-256, Node runtime, process id) so stale-process and stale-build anomalies are detectable immediately.` | `src/application/server/filesystem-server.ts`, `src/infrastructure/runtime/build-identity.ts`, `test/unit/infrastructure/runtime/build-identity.test.ts`, `test/unit/application/server/filesystem-server.test.ts` | The startup identity is a log line, not a new endpoint; the handshake version now follows the manifest instead of a hardcoded string. |
+
+**Migration / Consumer Impact**
+
+No migration is required. The fail-closed gate is corrective: only sessions that would previously have reported a false completion now close truthfully with the incomplete-data statement and a cancelled lifecycle state. All fully delivered sessions keep their exact behavior. The toolchain synchronization is developer-facing; consumers of the server surface see no contract change.
+
+**Commit Alignment**
+
+| Field | Value |
+|-------|-------|
+| Commit Subject | `fix(filesystem-server): fail-closed listing resume truthfulness and toolchain synchronization` |
+| Breaking Footer | `none` |
+| Current HEAD Commit Hash | `30fda80568e44273f9e2744903ab6893d330c59f` (base of the change set; the release commit follows) |
+
+---
+
+### 3.2 Version `1.2.1`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -63,11 +101,11 @@ No migration is required. The guard is fail-closed and corrective: requests that
 |-------|-------|
 | Commit Subject | `fix(filesystem-server): refuse explicit link-type/target mismatches at creation` |
 | Breaking Footer | `none` |
-| Current HEAD Commit Hash | `e1cedea42268ec5e4f7cbd6db422b9c7fbd33a31` |
+| Current HEAD Commit Hash | `fdcc8478c426380f34510af12555c945b37df778` |
 
 ---
 
-### 3.2 Version `1.2.0`
+### 3.3 Version `1.2.0`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -100,11 +138,11 @@ Windows hosts must satisfy the documented readiness convention (Developer Mode o
 |-------|-------|
 | Commit Subject | `feat(filesystem-server): add create_symbolic_links and verify_symbolic_links endpoints` |
 | Breaking Footer | `none` |
-| Current HEAD Commit Hash | `d944213b19d87a7c8447a46c2fafcd9b5fe97880` |
+| Current HEAD Commit Hash | `e1cedea42268ec5e4f7cbd6db422b9c7fbd33a31` |
 
 ---
 
-### 3.3 Version `1.1.0`
+### 3.4 Version `1.1.0`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -135,11 +173,11 @@ Consumers gain the read-only `verify_file_byte_identity` tool for reference-base
 |-------|-------|
 | Commit Subject | `feat(filesystem-server): add verify_file_byte_identity endpoint` |
 | Breaking Footer | `none` |
-| Current HEAD Commit Hash | `0c1ad4a0907d0897a4eb5c5771ee10ddb01fe9d0` |
+| Current HEAD Commit Hash | `d944213b19d87a7c8447a46c2fafcd9b5fe97880` |
 
 ---
 
-### 3.4 Version `1.0.0`
+### 3.5 Version `1.0.0`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -189,10 +227,10 @@ Clients must treat `type` as always present for each entry, must use `includeMet
 
 | # | Path | Relevance |
 |---|------|-----------|
-| 1 | `src/server.ts` | Root MCP tool registration and dispatch surface for the consolidated listing tool |
-| 2 | `src/list-directory-entries/handler.ts` | Canonical structured directory-entry traversal and TOON encoding |
-| 3 | `src/list-directory-entries/schema.ts` | Canonical input contract for traversal, metadata, and exclusion behavior |
-| 4 | `src/file_infos/metadata.ts` | Metadata single source of truth used by listing and file-info flows |
-| 5 | `src/file_infos/handler.ts` | Existing metadata endpoint aligned to the canonical metadata surface |
-| 6 | `package.json` | Runtime dependency declaration for TOON |
-| 7 | `package-lock.json` | Lockfile alignment for the consolidated runtime dependency graph |
+| 1 | `src/domain/inspection/list-directory-entries/handler.ts` | Fail-closed listing terminal framing, discard evidence, and reconciliation wiring |
+| 2 | `src/domain/shared/resume/inspection-resume-reconciliation.ts` | Shared fail-closed frontier reconciliation primitive for preview-family sessions |
+| 3 | `src/application/server/tool-registration-presets.ts` | Qualitative completion-truthfulness cue in the list_directory_entries tool description |
+| 4 | `test/unit/domain/inspection/list-directory-entries/list-directory-entries-multi-root-resume-gapless.test.ts` | Multi-root gapless next-chunk regression pin |
+| 5 | `test/unit/domain/shared/resume/inspection-resume-reconciliation.test.ts` | Reconciliation primitive unit coverage |
+| 6 | `package.json` | Package manifest version synchronized with the release ledger |
+| 7 | `pnpm-workspace.yaml` | Exactly pinned catalog and supply-chain fortress keys |

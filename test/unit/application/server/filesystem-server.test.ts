@@ -10,9 +10,9 @@ const filesystemServerTestState = vi.hoisted(() => {
     cleanupExpiredSessions,
     vacuum,
   };
-  const inspectionResumeSessionStoreConstructor = vi.fn(
-    () => inspectionResumeSessionStore,
-  );
+  const inspectionResumeSessionStoreConstructor = vi.fn(function () {
+    return inspectionResumeSessionStore;
+  });
   const sendLoggingMessage = vi.fn(async () => undefined);
   const connect = vi.fn(async () => undefined);
   const setRequestHandler = vi.fn();
@@ -25,13 +25,24 @@ const filesystemServerTestState = vi.hoisted(() => {
     connect,
     registerTool,
   };
-  const mcpServerConstructor = vi.fn(() => serverInstance);
+  const mcpServerConstructor = vi.fn(function () {
+    return serverInstance;
+  });
   const transportInstance = {
     transport: "stdio",
   };
-  const stdioServerTransportConstructor = vi.fn(() => transportInstance);
+  const stdioServerTransportConstructor = vi.fn(function () {
+    return transportInstance;
+  });
   const registerToolCatalog = vi.fn();
   const getUgrepRuntimeDependency = vi.fn();
+  const buildIdentity = {
+    packageVersion: "9.9.9-test",
+    bundleSha256: "a".repeat(64),
+    nodeVersion: "v0.0.0-test",
+    processId: 4242,
+  };
+  const resolveBuildIdentity = vi.fn(() => buildIdentity);
   const setLevelRequestSchema = {
     name: "set-level-request-schema",
   };
@@ -51,6 +62,8 @@ const filesystemServerTestState = vi.hoisted(() => {
     stdioServerTransportConstructor,
     registerToolCatalog,
     getUgrepRuntimeDependency,
+    buildIdentity,
+    resolveBuildIdentity,
     setLevelRequestSchema,
   };
 });
@@ -78,6 +91,10 @@ vi.mock(
 
 vi.mock("@infrastructure/runtime/ugrep-runtime-dependency", () => ({
   getUgrepRuntimeDependency: filesystemServerTestState.getUgrepRuntimeDependency,
+}));
+
+vi.mock("@infrastructure/runtime/build-identity", () => ({
+  resolveBuildIdentity: filesystemServerTestState.resolveBuildIdentity,
 }));
 
 vi.mock("@application/server/register-tool-catalog", () => ({
@@ -127,7 +144,7 @@ describe("filesystem-server", () => {
     expect(filesystemServerTestState.mcpServerConstructor).toHaveBeenCalledWith(
       {
         name: "mcp-filesystem-extended",
-        version: "0.6.2",
+        version: filesystemServerTestState.buildIdentity.packageVersion,
         description: "server description",
       },
       {
@@ -215,6 +232,10 @@ describe("filesystem-server", () => {
       2,
       "Allowed directories:",
       ["C:/allowed"],
+    );
+    expect(consoleErrorSpy).toHaveBeenNthCalledWith(
+      3,
+      `Build identity: version=${filesystemServerTestState.buildIdentity.packageVersion} bundleSha256=${filesystemServerTestState.buildIdentity.bundleSha256} node=${filesystemServerTestState.buildIdentity.nodeVersion} pid=${filesystemServerTestState.buildIdentity.processId}`,
     );
     expect(filesystemServerTestState.sendLoggingMessage).toHaveBeenCalledWith({
       level: "info",

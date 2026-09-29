@@ -11,6 +11,8 @@ import baseConfig, {
     SETUP_NAME
 } from './vitest.base.config'
 
+// (intentionally not importing from the root config to avoid a cyclic/anti-pattern reference)
+
 // ═══╡ 🏷️TYPES ╞═══
 import type { ViteUserConfig } from 'vitest/config'
 
@@ -19,10 +21,10 @@ const PROJECT_NAME = 'integration'
 const BASE_PATH_INTEGRATION = `${BASE_PATH}/${PROJECT_NAME}`
 
 /*
- * 📋 Integrations-Projekt: Die Infrastruktur ist registriert und ausführbar,
- * enthält aber bewusst noch keine Tests. Das Grün-Halten der leeren Lane wird
- * root-seitig über passWithNoTests in vitest.config.ts gesteuert — die
- * Eigenschaft ist keine Projekt-Config-Oberfläche.
+ * 📋 Integration project: the infrastructure is registered and executable and
+ * carries its first contract tests. Keeping an empty filtered lane green is
+ * controlled at the root via passWithNoTests in vitest.config.ts — that
+ * property is not a project config surface.
  */
 const cfg = defineProject({
     test: {
@@ -40,7 +42,7 @@ const cfg = defineProject({
 })
 
 /**
- * 🛠️ Merges die Basis-Konfiguration mit der Integrations-Suite-Oberfläche.
+ * 🛠️ Merges the base configuration with the integration suite surface.
  */
 const mergedCfg: ViteUserConfig = mergeConfig(baseConfig, cfg)
 

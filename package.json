@@ -1,6 +1,6 @@
 {
   "name": "mcp-filesystem-extended",
-  "version": "0.6.2",
+  "version": "1.2.2",
   "private": true,
   "description": "MCP server for extended filesystem access",
   "license": "MIT",
@@ -12,8 +12,8 @@
     "#docs": "./docs",
     "#scripts": "./scripts"
   },
-  "homepage": "https://github.com/CyberT33N/mcp-filesystem-extended",
-  "bugs": "https://github.com/CyberT33N/mcp-filesystem-extended/issues",
+  "homepage": "https://github.com/t33n-software/filesystem-mcp",
+  "bugs": "https://github.com/t33n-software/filesystem-mcp/issues",
   "bin": {
     "mcp-filesystem-extended": "dist/index.js"
   },
@@ -41,7 +41,6 @@
   "scripts": {
     "prebuild": "pnpm test:build-gate",
     "build": "tsdown",
-    "preinstall": "npx only-allow pnpm",
     "test": "vitest run",
     "test:build-gate": "pnpm test:unit && pnpm test:integration && pnpm test:regression",
     "test:integration": "vitest run --project integration",
@@ -79,44 +78,12 @@
   },
   "devDependencies": {
     "@changesets/cli": "catalog:",
-    "@eslint-community/eslint-plugin-eslint-comments": "catalog:",
-    "@eslint/js": "catalog:",
-    "@eslint/markdown": "catalog:",
-    "@stylistic/eslint-plugin": "catalog:",
     "@types/lodash": "catalog:",
     "@types/node": "catalog:",
     "@types/semver": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "@vitest/eslint-plugin": "catalog:",
     "error-manager-helper": "catalog:",
-    "eslint": "catalog:",
-    "eslint-import-resolver-next": "catalog:",
-    "eslint-import-resolver-node": "catalog:",
-    "eslint-import-resolver-typescript": "catalog:",
-    "eslint-plugin-boundaries": "catalog:",
-    "eslint-plugin-import-x": "catalog:",
-    "eslint-plugin-jest-extended": "catalog:",
-    "eslint-plugin-jsdoc": "catalog:",
-    "eslint-plugin-jsonc": "catalog:",
-    "eslint-plugin-jsx-a11y": "catalog:",
-    "eslint-plugin-n": "catalog:",
-    "eslint-plugin-no-secrets": "catalog:",
-    "eslint-plugin-package-json": "catalog:",
-    "eslint-plugin-perfectionist": "catalog:",
-    "eslint-plugin-playwright": "catalog:",
-    "eslint-plugin-prefer-arrow": "catalog:",
-    "eslint-plugin-promise": "catalog:",
-    "eslint-plugin-regexp": "catalog:",
-    "eslint-plugin-security": "catalog:",
-    "eslint-plugin-sonarjs": "catalog:",
-    "eslint-plugin-tsdoc": "catalog:",
-    "eslint-plugin-unicorn": "catalog:",
-    "eslint-plugin-unused-imports": "catalog:",
-    "eslint-plugin-xss": "catalog:",
-    "eslint-plugin-zod": "catalog:",
     "jest-extended": "catalog:",
-    "jiti": "catalog:",
-    "jsonc-eslint-parser": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-packagejson": "catalog:",
     "publint": "catalog:",
@@ -127,23 +94,20 @@
     "tsdown": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vite-tsconfig-paths": "catalog:",
     "vitest": "catalog:"
   },
-  "packageManager": "pnpm@11.7.0",
-  "engines": {
-    "node": "26.2.0",
-    "pnpm": "11.7.0"
-  },
+  "packageManager": "pnpm@12.5.1",
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "26.2.0",
+      "version": "26.10.0",
       "onFail": "error"
     },
     "packageManager": {
       "name": "pnpm",
-      "version": "11.7.0",
+      "version": "12.5.1",
       "onFail": "error"
     }
   },

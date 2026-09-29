@@ -15,7 +15,20 @@ import {
   INSPECTION_RESUME_ADMISSION_OUTCOMES,
   INSPECTION_RESUME_MODES,
 } from "@domain/shared/resume/inspection-resume-contract";
+import {
+  INSPECTION_RESUME_FRONTIER_RECONCILIATION_STATUSES,
+  type InspectionResumeFrontierReconciliationVerdict,
+} from "@domain/shared/resume/inspection-resume-reconciliation";
 import { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
+
+/**
+ * Shared reconciled verdict for formatter tests whose constructed results carry no divergence.
+ */
+const RECONCILED_FRONTIER_RECONCILIATION: InspectionResumeFrontierReconciliationVerdict = {
+  status: INSPECTION_RESUME_FRONTIER_RECONCILIATION_STATUSES.RECONCILED,
+  divergenceReason: null,
+  discardedDirectories: [],
+};
 
 describe("list_directory_entries", () => {
   let sandboxRootPath = "";
@@ -161,6 +174,7 @@ describe("list_directory_entries", () => {
         previouslyDeliveredCount: 0,
         sessionTotalCount: 1,
       },
+      frontierReconciliation: RECONCILED_FRONTIER_RECONCILIATION,
       admission: {
         outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
         guidanceText: null,
@@ -201,6 +215,7 @@ describe("list_directory_entries", () => {
         previouslyDeliveredCount: 0,
         sessionTotalCount: 1,
       },
+      frontierReconciliation: RECONCILED_FRONTIER_RECONCILIATION,
       admission: {
         outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
         guidanceText: null,
@@ -233,6 +248,7 @@ describe("list_directory_entries", () => {
         previouslyDeliveredCount: 3,
         sessionTotalCount: 3,
       },
+      frontierReconciliation: RECONCILED_FRONTIER_RECONCILIATION,
       admission: {
         outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
         guidanceText:
@@ -271,6 +287,7 @@ describe("list_directory_entries", () => {
         previouslyDeliveredCount: 2,
         sessionTotalCount: 2,
       },
+      frontierReconciliation: RECONCILED_FRONTIER_RECONCILIATION,
       admission: {
         outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.COMPLETION_BACKED_REQUIRED,
         guidanceText: null,

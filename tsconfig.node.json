@@ -1,58 +1,119 @@
-/*
- *███████████████████████████████████████████████████████████████████████████████
- *██******************** PRESENTED BY t33n Software ***************************██
- *██                                                                           ██
- *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
- *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
- *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
- *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
- *██                     ╚═╝   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                      ██
- *██                                                                           ██
- *███████████████████████████████████████████████████████████████████████████████
- *███████████████████████████████████████████████████████████████████████████████
- */
-
 {
   /**
-   * $schema: Better IDE support (completion/validation).
+   * Enables editor validation and completion for the TSConfig file itself.
+   *
+   * Detailed behavior:
+   * - Gives JSONC-aware tooling the official TSConfig schema.
+   * - Prevents silent drift in configuration structure.
+   *
+   * Architectural decision:
+   * Keep the SchemaStore reference because this file is part of the repository's
+   * explicit configuration surface and should remain self-validating.
+   *
+   * Example:
+   * "$schema": "https://json.schemastore.org/tsconfig"
    */
   "$schema": "https://json.schemastore.org/tsconfig",
 
   /**
-   * Extends: Inherit the canonical universal strict baseline.
+   * Inherits the shared strict baseline and opens only the lane-specific deltas.
+   *
+   * Detailed behavior:
+   * - Reuses universal strictness, fixed edition, and package-resolution policy.
+   * - Avoids duplicated policy between base and producer files.
+   *
+   * Architectural decision:
+   * Keep `extends` because the producer should specialize the baseline, not fork it.
+   *
+   * Example:
+   * "extends": "./tsconfig.base.json"
    */
   "extends": "./tsconfig.base.json",
 
   /**
-   * CompilerOptions: Node-hosted bundler consumer deltas.
-   * The bundler (tsdown), not TypeScript, owns the JavaScript runtime artifact.
+   * Description:
+   * Groups the Node-hosted, bundler-owned lane deltas.
+   *
+   * Architectural decision:
+   * The generated canonical base owns all core policy; this lane owns only the
+   * Node host ambient surface and the non-emitting validation posture, because
+   * tsdown owns the runtime artifact.
+   *
+   * Example:
+   * "compilerOptions": { "noEmit": true }
    */
   "compilerOptions": {
     /**
-     * NoEmit: This lane validates only; it must not become a second producer.
+     * Description:
+     * Keeps the canonical generic pair (module Preserve + moduleResolution
+     * Bundler) inherited from the base: this application's JavaScript runtime
+     * artifact is owned by the bundler (tsdown), not by the TypeScript
+     * compiler, so no direct-Node module pair is selected here.
+     *
+     * Architectural decision:
+     * The direct-Node pair (Node20 + Node16) is the wrong terminal role for a
+     * bundler-owned server: it forbids the extensionless relative imports this
+     * codebase uses and would make tsc a second silent owner of dist/.
+     *
+     * Example:
+     * "module": "Preserve" (inherited, not restated)
      */
-    "noEmit": true,
 
     /**
-     * Types: Reopen only the Node ambient declarations for this host.
+     * Description:
+     * Reopens Node ambient declarations for this host-Node lane.
+     *
+     * Architectural decision:
+     * Node globals remain explicit lane-local facts and do not leak through the
+     * canonical base.
+     *
+     * Example:
+     * "types": ["node"]
      */
     "types": ["node"],
 
     /**
-     * Lib: Leaf-local DOM reopening — the verified @modelcontextprotocol/sdk
-     * declaration surface (shared/transport.d.ts) requires the fetch-platform
-     * HeadersInit type. Host libraries stay leaf-local and never widen the root.
+     * Description:
+     * Reopens the fetch-platform DOM declarations for this lane.
+     *
+     * Architectural decision:
+     * The verified @modelcontextprotocol/sdk declaration surface
+     * (shared/transport.d.ts) requires the fetch-platform HeadersInit type;
+     * host libraries stay leaf-local and never widen the canonical base.
+     *
+     * Example:
+     * "lib": ["ES2025", "DOM"]
      */
-    "lib": ["ES2025", "DOM"]
+    "lib": ["ES2025", "DOM"],
+
+    /**
+     * Description:
+     * Keeps this lane non-emitting: the JavaScript runtime artifact is owned
+     * by the bundler (tsdown) through `pnpm build`, never by this TypeScript
+     * lane.
+     *
+     * Architectural decision:
+     * A non-emitting lane validates only; two tools must never silently own
+     * the same dist artifact.
+     *
+     * Example:
+     * "noEmit": true
+     */
+    "noEmit": true
   },
 
   /**
-   * Include: The runtime source tree plus the repo-root config surfaces owned
-   * by this leaf. Test sources live in their own consumer lanes.
+   * Defines the complete lane-owned source surface.
+   *
+   * Detailed behavior:
+   * - Includes only the runtime source tree validated by this lane.
+   * - Keeps scripts, tooling, tests, and configuration files in separate lanes.
+   *
+   * Architectural decision:
+   * Keep this include list code-centric and explicit so the validation graph reflects executable and type-checked source truth only.
+   *
+   * Example:
+   * "include": ["src/**\/*.ts"]
    */
-  "include": [
-    "src/**/*.ts",
-    "*.config.ts"
-  ]
+  "include": ["src/**/*.ts"]
 }

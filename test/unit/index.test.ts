@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 const rootEntrypointTestState = vi.hoisted(() => {
   const connect = vi.fn(async () => undefined);
-  const filesystemServerConstructor = vi.fn(() => ({ connect }));
+  const filesystemServerConstructor = vi.fn(function () {
+    return { connect };
+  });
   const initializeLogger = vi.fn();
   const initializeUgrepRuntimeDependency = vi.fn(async () => undefined);
 

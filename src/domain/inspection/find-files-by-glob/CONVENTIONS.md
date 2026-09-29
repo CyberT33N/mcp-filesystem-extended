@@ -169,6 +169,10 @@ When additive `admission` and `resume` metadata are present:
 
 The server continues from the persisted traversal frontier instead of replaying the already-delivered preview chunk. Callers must combine the earlier preview payload with the later completion payload to reconstruct the complete dataset.
 
+### Single-execution registration contract
+
+The registration callback consumes exactly one traversal execution per tool call: the structured result and the caller-visible text derive from the same execution via the endpoint's `finalize*TextOutput` seam. Re-executing the traversal for the text surface is forbidden — it would skip every second delivered chunk in the text chain and double-count the persisted delivery accounting.
+
 ### Mode-aware response-budget rule
 
 This discovery family uses the shared discovery response cap for inline and `next-chunk` delivery, but `complete-result` follows the global response fuse instead of the family cap. That rule is shared and must be applied here exactly as documented in the guardrail/resume convention slices rather than being redefined locally.

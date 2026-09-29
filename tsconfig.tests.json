@@ -1,66 +1,119 @@
-/*
- *███████████████████████████████████████████████████████████████████████████████
- *██******************** PRESENTED BY t33n Software ***************************██
- *██                                                                           ██
- *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
- *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
- *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
- *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
- *██                     ╚═╝   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                      ██
- *██                                                                           ██
- *███████████████████████████████████████████████████████████████████████████████
- *███████████████████████████████████████████████████████████████████████████████
- */
-
 {
   /**
-   * $schema: Better IDE support (completion/validation).
+   * Enables schema-aware validation for the runtime-test consumer config.
+   *
+   * Detailed behavior:
+   * - Keeps the file self-describing for editors and automated tooling.
+   * - Prevents configuration drift in a secondary TSConfig entrypoint.
+   *
+   * Architectural decision:
+   * Keep the shared TSConfig schema reference on every public TSConfig surface.
+   *
+   * Example:
+   * "$schema": "https://json.schemastore.org/tsconfig"
    */
   "$schema": "https://json.schemastore.org/tsconfig",
 
   /**
-   * Extends: Reuse the Node-hosted runtime semantics; runtime tests are
-   * consumers of that surface, not a separate compiler universe.
+   * Reuses the Node producer baseline for runtime tests.
+   *
+   * Detailed behavior:
+   * - Tests should see the same Node module and strictness behavior as the runtime producer they exercise.
+   * - Only test-specific deltas are declared locally.
+   *
+   * Architectural decision:
+   * Extend the Node producer because runtime tests are consumers of that producer surface, not a separate compiler universe.
+   *
+   * Example:
+   * "extends": "./tsconfig.node.json"
    */
   "extends": "./tsconfig.node.json",
 
   /**
-   * References: Bind runtime tests explicitly to the declaration-validation
-   * producer graph instead of duplicating source ownership.
+   * Binds runtime tests explicitly to the declaration-validation producer graph.
+   *
+   * Detailed behavior:
+   * - Avoids duplicating source ownership in the test config.
+   * - Keeps Project Reference declarations separate from runtime JavaScript output.
+   *
+   * Architectural decision:
+   * Use a direct project reference to the dedicated typecheck producer.
+   *
+   * Example:
+   * "references": [{ "path": "./tsconfig.typecheck.json" }]
    */
-  "references": [
-    {
-      "path": "./tsconfig.typecheck.json"
-    }
-  ],
+  "references": [{ "path": "./tsconfig.typecheck.json" }],
 
   /**
-   * CompilerOptions: Runtime-test consumer deltas.
+   * Description:
+   * Groups runtime-test consumer output and ambient-type deltas.
+   *
+   * Architectural decision:
+   * Tests reuse Node runtime semantics while remaining separate no-output
+   * consumers of the declaration-validation producer.
+   *
+   * Example:
+   * "compilerOptions": { "noEmit": true }
    */
   "compilerOptions": {
     /**
-     * Composite: Runtime tests do not own output artifacts.
+     * Marks runtime tests as consumers, not declaration producers.
+     *
+     * Detailed behavior:
+     * - Prevents the test config from acting like an extra build target.
+     * - Keeps project-reference ownership concentrated in the typecheck producer.
+     *
+     * Architectural decision:
+     * Use `false` because runtime tests do not own output artifacts.
+     *
+     * Example:
+     * "composite": false
      */
     "composite": false,
 
     /**
-     * NoEmit: This lane type-checks only; it emits neither JavaScript nor declarations.
+     * Keeps runtime tests in type-check-only mode.
+     *
+     * Detailed behavior:
+     * - Test configs validate source and test contracts.
+     * - They do not emit JavaScript or declarations.
+     *
+     * Architectural decision:
+     * Use `true` because runtime-test configs are consumers in the graph, not artifact producers.
+     *
+     * Example:
+     * "noEmit": true
      */
     "noEmit": true,
 
     /**
-     * Types: Only the Vitest and Node globals this lane truly owns.
+     * Opens only the ambient globals required by Vitest and Node.
+     *
+     * Detailed behavior:
+     * - The shared base keeps the ambient surface empty.
+     * - This config explicitly adds only the globals it truly owns.
+     *
+     * Architectural decision:
+     * Use `["vitest/globals", "node"]` because runtime tests execute in a Vitest-on-Node lane.
+     *
+     * Example:
+     * "types": ["vitest/globals", "node"]
      */
     "types": ["vitest/globals", "node"]
   },
 
   /**
-   * Include: Test sources and shared testing constants; runtime and declaration
-   * source ownership stays with the Node leaf and the typecheck producer.
+   * Defines the runtime-test-owned file surface.
+   *
+   * Detailed behavior:
+   * - Includes test sources only.
+   * - Leaves runtime and declaration source ownership with the Node and typecheck producers.
+   *
+   * Architectural decision:
+   * Keep the include list consumer-focused to avoid duplicate source ownership.
+   *
+   * Example:
+   * "include": ["test/**\/*.ts"]
    */
-  "include": [
-    "test/**/*.ts",
-    "tooling/testing/constants/**/*.ts"
-  ]
+  "include": ["test/**/*.ts"]
 }

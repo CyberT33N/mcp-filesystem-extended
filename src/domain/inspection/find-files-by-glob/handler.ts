@@ -896,6 +896,79 @@ export async function getFindFilesByGlobResult(
 }
 
 /**
+ * Finalizes the caller-visible text response for an already-executed glob-search result.
+ *
+ * @remarks
+ * This is the single post-execution surface shared by the composed handler entrypoint and the
+ * tool-registration callback: it formats the precomputed result, enforces the mode-aware response
+ * cap, and closes terminal sessions. It never re-executes traversal — the registration callback
+ * consumes exactly one execution per tool call through this seam, so the text surface and the
+ * structured surface always derive from the same execution. The effective pattern and result
+ * ceiling are re-resolved from the execution context (a pure read, never a re-traversal) so resume
+ * passes format with the persisted request's values.
+ *
+ * @param result - Structured glob-search result from the single execution of the current call.
+ * @param requestedResumeMode - The resume intent of the current request, used for the mode-aware cap.
+ * @param resumeToken - The opaque session handle of the current request, when present.
+ * @param searchPaths - Requested root directories in caller-supplied order.
+ * @param pattern - Glob expression applied to relative paths beneath each root.
+ * @param excludePatterns - Glob patterns removed from traversal before result collection.
+ * @param includeExcludedGlobs - Additive descendant re-include globs that reopen excluded subtrees.
+ * @param respectGitIgnore - Whether optional directory-scoped hierarchical `.gitignore` enrichment participates.
+ * @param maxResults - Maximum number of matches retained per root before truncation.
+ * @param inspectionResumeSessionStore - Server-owned SQLite session store for terminal lifecycle marking.
+ * @returns Formatted text output respecting the mode-appropriate response ceiling.
+ */
+export function finalizeFindFilesByGlobTextOutput(
+  result: FindFilesByGlobResult,
+  requestedResumeMode: InspectionResumeMode | undefined,
+  resumeToken: string | undefined,
+  searchPaths: string[],
+  pattern: string,
+  excludePatterns: string[],
+  includeExcludedGlobs: string[],
+  respectGitIgnore: boolean,
+  maxResults: number,
+  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
+): string {
+  const executionContext = resolveFindFilesByGlobExecutionContext(
+    resumeToken,
+    requestedResumeMode,
+    searchPaths,
+    pattern,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    inspectionResumeSessionStore,
+    new Date(),
+  );
+  const output = formatFindFilesByGlobTextOutput(
+    result,
+    executionContext.requestPayload.pattern,
+    executionContext.requestPayload.maxResults,
+  );
+
+  const isCompleteResultMode = requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
+  const effectiveResponseCap = isCompleteResultMode
+    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
+    : DISCOVERY_RESPONSE_CAP_CHARS;
+
+  assertActualTextBudget(
+    "find_files_by_glob",
+    output.length,
+    effectiveResponseCap,
+    "glob-discovery text output",
+  );
+
+  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
+    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+  }
+
+  return output;
+}
+
+/**
  * Formats glob-search results for the caller-visible text response surface.
  *
  * @remarks
@@ -930,18 +1003,6 @@ export async function handleSearchGlob(
   allowedDirectories: string[],
   inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
 ): Promise<string> {
-  const executionContext = resolveFindFilesByGlobExecutionContext(
-    resumeToken,
-    resumeMode,
-    searchPaths,
-    pattern,
-    excludePatterns,
-    includeExcludedGlobs,
-    respectGitIgnore,
-    maxResults,
-    inspectionResumeSessionStore,
-    new Date(),
-  );
   const result = await getFindFilesByGlobResult(
     resumeToken,
     resumeMode,
@@ -954,29 +1015,17 @@ export async function handleSearchGlob(
     allowedDirectories,
     inspectionResumeSessionStore,
   );
-  const effectivePattern = executionContext.requestPayload.pattern;
-  const effectiveMaxResults = executionContext.requestPayload.maxResults;
-  const output = formatFindFilesByGlobTextOutput(
+
+  return finalizeFindFilesByGlobTextOutput(
     result,
-    effectivePattern,
-    effectiveMaxResults,
+    resumeMode,
+    resumeToken,
+    searchPaths,
+    pattern,
+    excludePatterns,
+    includeExcludedGlobs,
+    respectGitIgnore,
+    maxResults,
+    inspectionResumeSessionStore,
   );
-
-  const isCompleteResultMode = resumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
-  const effectiveResponseCap = isCompleteResultMode
-    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
-    : DISCOVERY_RESPONSE_CAP_CHARS;
-
-  assertActualTextBudget(
-    "find_files_by_glob",
-    output.length,
-    effectiveResponseCap,
-    "glob-discovery text output",
-  );
-
-  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
-    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
-  }
-
-  return output;
 }

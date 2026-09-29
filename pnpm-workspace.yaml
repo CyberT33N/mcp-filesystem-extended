@@ -1,181 +1,112 @@
-
-# `autoInstallPeers`
-# Einfach: Verhindert automatisches Nachinstallieren fehlender Peer-Dependencies.
-# Details: Peer-Entscheidungen muessen explizit im Manifest getroffen werden,
-# statt stillschweigend waehrend der Installation zu passieren.
-autoInstallPeers: false
-
-# `catalog`
-# Einfach: Zentraler Katalog freigegebener Versionsstaende fuer dieses Repo.
-# Details: Dieses Repository nutzt bewusst einen befuellten Catalog als
-# Freigabe-Surface, statt Versionsentscheidungen nur verteilt in `package.json`
-# zu halten.
-catalog:
-  '@changesets/cli': ~2.29.6
-  '@eslint-community/eslint-plugin-eslint-comments': ~4.5.0
-  '@eslint/js': ~9.39.2
-  '@eslint/markdown': 7.5.1
-  '@js-temporal/polyfill': 0.5.1
-  '@modelcontextprotocol/sdk': ^1.30.0
-  '@sindresorhus/is': ~7.1.1
-  '@stylistic/eslint-plugin': ~5.7.1
-  '@toon-format/toon': ^2.1.0
-  '@types/lodash': ~4.17.17
-  '@types/node': ~25.8.0
-  '@types/semver': 7.7.1
-  '@vitest/coverage-v8': ~3.2.4
-  '@vitest/eslint-plugin': 1.5.1
-  diff: ^8.0.4
-  dotenv: ~16.5.0
-  error-manager-helper: 4.17.0
-  es-toolkit: ~1.40.0
-  eslint: 9.39.2
-  eslint-import-resolver-next: ~0.6.0
-  eslint-import-resolver-node: ~0.3.9
-  eslint-import-resolver-typescript: ~4.3.5
-  eslint-plugin-boundaries: ~5.4.0
-  eslint-plugin-import-x: ~4.16.1
-  eslint-plugin-jest-extended: ~3.0.1
-  eslint-plugin-jsdoc: ~60.4.0
-  eslint-plugin-jsonc: ~2.20.1
-  eslint-plugin-jsx-a11y: ~6.10.2
-  eslint-plugin-n: ~17.23.1
-  eslint-plugin-no-secrets: ~2.2.1
-  eslint-plugin-package-json: ~0.56.3
-  eslint-plugin-perfectionist: ~4.15.0
-  eslint-plugin-playwright: ~2.2.2
-  eslint-plugin-prefer-arrow: ~1.2.3
-  eslint-plugin-promise: ~7.2.1
-  eslint-plugin-regexp: ~2.10.0
-  eslint-plugin-security: ~3.0.1
-  eslint-plugin-sonarjs: ~3.0.5
-  eslint-plugin-tsdoc: ~0.4.0
-  eslint-plugin-unicorn: ~62.0.0
-  eslint-plugin-unused-imports: ~4.2.0
-  eslint-plugin-xss: ~0.1.12
-  eslint-plugin-zod: ~1.4.0
-  esquery: ~1.7.0
-  fast-copy: ~3.0.2
-  glob: ^13.0.6
-  globals: ~16.4.0
-  ignore: 7.0.5
-  jest-extended: ~6.0.0
-  jiti: ~2.5.1
-  jsonc-eslint-parser: ~2.4.1
-  minimatch: 10.2.5
-  pino: 10.1.1
-  piscina: 5.1.4
-  prettier: ~3.6.2
-  prettier-plugin-packagejson: ~2.5.19
-  publint: ~0.3.12
-  radash: ~12.1.1
-  remeda: ~2.33.7
-  rimraf: ~6.0.1
-  safe-stable-stringify: 2.5.0
-  semver: 7.7.3
-  sort-on: ~6.1.1
-  terser: 5.44.1
-  ts-essentials: 10.1.1
-  tsconfig-paths: ~4.2.0
-  tsdown: ~0.22.0
-  tsx: ~4.19.4
-  type-fest: ~4.41.0
-  typescript: ~6.0.3
-  vite-tsconfig-paths: ~5.1.4
-  vitest: ~3.2.4
-  zod: ~4.6.5
-  zod-to-json-schema: ^3.25.2
-
-# `catalogMode`
-# Einfach: Erzwingt, dass neue Dependencies nicht am Catalog vorbeigehen.
-# Details: `strict` macht auch im Single-Project-Repo den Catalog zur
-# Source of Truth fuer freigegebene Versionen.
-catalogMode: strict
-
-# `cleanupUnusedCatalogs`
-# Einfach: Raeumt ungenutzte Catalog-Eintraege auf.
-# Details: Das verhindert veraltete Freigabe-Leichen und haelt die zentrale
-# Versionsgovernance sauber.
-cleanupUnusedCatalogs: true
+###############################################################################
+# pnpm-workspace.yaml -- PNPM Supply-Chain Fortress (single-project)
+#
+# Surface contract:
+# - pnpm-workspace.yaml: repo-local non-sensitive PNPM policy
+# - package.json: exact Node.js + pnpm toolchain pinning
+# - .npmrc / auth.ini: auth-local tokens + certificates only
+#
+# IMPORTANT:
+# There is intentionally NO `packages:` key in this file.
+# In PNPM 11+, omitting `packages` means the root project is the only workspace
+# package. That is the correct single-project posture.
+###############################################################################
 
 ########################################
 # Supply-chain fortress posture
 ########################################
 
 # `minimumReleaseAge`
-# Einfach: Verzoegert die Aufnahme frisch veroeffentlichter Versionen.
-# Details: Fortress-Baseline ist 7 Tage, damit kompromittierte oder schnell
-# zurueckgezogene Releases nicht sofort im Repo landen.
+# Simple: Delays the adoption of freshly published versions.
+# Details: The Fortress baseline is 7 days, not 24 hours. The goal is maximum
+# caution against compromised or retracted releases.
+# Example: A version published today only becomes installable on the 8th day.
 minimumReleaseAge: 10080
 
 # `minimumReleaseAgeIgnoreMissingTime`
-# Einfach: Schaltet fail-open fuer fehlende Publish-Zeitmetadaten aus.
-# Details: Wenn die Registry keinen `time`-Wert liefert, muss die Aufloesung
-# scheitern, statt die Schutzwirkung still zu verlieren.
+# Simple: Disables fail-open on missing publish time metadata.
+# Details: If the registry does not supply a `time` value, resolution must
+# fail rather than silently losing the protective effect.
+# Example: A mirror without a `time` field blocks resolution until the issue is clarified.
 minimumReleaseAgeIgnoreMissingTime: false
 
 # `minimumReleaseAgeStrict`
-# Einfach: Erzwingt einen harten Abbruch bei zu jungen Versionen.
-# Details: Ohne diese Einstellung koennte PNPM auf eine zu frische Version
-# zurueckfallen; das ist fuer Fortress-Governance unzulaessig.
+# Simple: Enforces that PNPM aborts hard if versions are too young.
+# Details: Without this setting, PNPM might fall back to an overly fresh version
+# in case of doubt. This is unacceptable for Fortress governance.
+# Example: If no version old enough matches, the install ends with an error.
 minimumReleaseAgeStrict: true
 
 # `minimumReleaseAgeExclude`
-# Einfach: Definiert Ausnahmen vom Release-Age-Gate.
-# Details: Die Liste bleibt explizit leer, damit sichtbar ist, dass es keine
-# genehmigten Sofort-Ausnahmen fuer "heisse" Releases gibt.
+# Simple: Defines exceptions from the age gate.
+# Details: In the Fortress baseline, the list remains explicitly empty so that no
+# convenience approvals for "hot" releases are permitted.
+# Example: `[]` signals that there are no approved immediate exceptions.
 minimumReleaseAgeExclude: []
 
 # `trustPolicy`
-# Einfach: Blockiert Versionen, deren Vertrauensniveau abgesunken ist.
-# Details: `no-downgrade` reduziert das Risiko, versehentlich ein weniger
-# vertrauenswuerdiges Nachfolge-Release zu akzeptieren.
+# Simple: Blocks versions whose trust level has decreased compared to previous releases.
+# Details: This reduces the risk of accidentally accepting a less trustworthy
+# follow-up release.
+# Example: A package with a trust downgrade will not be installed.
 trustPolicy: no-downgrade
 
 # `trustPolicyExclude`
-# Einfach: Definiert Ausnahmen von der Trust-Policy.
-# Details: Fortress-Default ist eine leere Liste; aktuell bleibt genau eine
-# reviewte Ausnahme fuer `semver@6.3.1`, weil `eslint-import-resolver-node`
-# ueber `resolve -> node-exports-info` diese transitive Version weiterhin erzwingt.
-# TODO: Im `eslint-plugin-enterprise` pruefen, wie der Resolver-Stack mittelfristig
-# ohne diese `semver@6.3.1`-Kette gestaltet werden kann. Sobald dort ein sauberer
-# Upstream-/Architekturpfad existiert, muss diese `trustPolicyExclude`-Ausnahme
-# wieder entfernt werden.
-trustPolicyExclude:
-  - 'semver@6.3.1'
+# Simple: Defines exceptions from the trust policy.
+# Details: The Fortress baseline intentionally sets an explicitly empty list here
+# so that no hidden trust exceptions exist. If a reviewed exception is later
+# approved, it MUST use an exact version-pinned package selector and follow the
+# dedicated trust-downgrade response-order owner rather than widening into package-wide
+# or multi-version waivers.
+# Example: `[]` means that no package exception from the trust model is approved.
+trustPolicyExclude: []
 
 # `blockExoticSubdeps`
-# Einfach: Verbietet Git- und Tarball-Quellen in transitiven Dependencies.
-# Details: Exotische Quellen duerfen nicht unkontrolliert ueber Subdependencies
-# in den aufgeloesten Graphen einsickern.
+# Simple: Forbids Git or tarball sources in transitive dependencies.
+# Details: Only direct dependencies may use exotic sources; transitive
+# sources must originate from controlled registries.
+# Example: A transitive `https://...tgz` dependency is rejected.
 blockExoticSubdeps: true
 
 # `strictDepBuilds`
-# Einfach: Erzwingt explizite Entscheidungen fuer Dependency-Build-Skripte.
-# Details: Ein neues `postinstall` oder vergleichbares Skript darf nicht still
-# ausgefuehrt werden, sondern muss bewusst freigegeben werden.
+# Simple: Requires explicit decisions for dependency build scripts.
+# Details: A new `postinstall` in a dependency must not run silently,
+# but must be reviewed and approved.
+# Example: A package with a new install script fails until evaluated in `allowBuilds`.
 strictDepBuilds: true
 
 # `allowBuilds`
-# Einfach: Definiert die explizite Allow-/Deny-Liste fuer Dependency-Builds.
-# Details: Fortress-Baseline bleibt fail-closed; freigegeben werden nur die
-# aktuell benoetigten Build-Skripte fuer den Build-/Test- und Resolver-Stack.
+# Simple: Defines the explicit allow/deny list for dependency build scripts.
+# Details: An empty object is the fail-closed Fortress starting point.
+# Example: `esbuild: true` allows `esbuild` later, `core-js: false` forbids `core-js`.
 allowBuilds:
   # Required by tsdown, vite, vitest and tsx for platform-specific binaries.
   esbuild: true
 
-  # Required by the eslint import resolver stack for native resolution support.
-  unrs-resolver: true
-
 # `dangerouslyAllowAllBuilds`
-# Einfach: Oeffnet blanket-weite Build-Skript-Ausfuehrung.
-# Details: In einer Fortress-Architektur bleibt dieser Wert immer `false`.
+# Simple: Opens up blanket-wide build script execution.
+# Details: In a Fortress architecture, this value always remains `false`.
+# Example: `true` would be a deliberate security breach and is forbidden here.
 dangerouslyAllowAllBuilds: false
 
+########################################
+# Registry and transport trust
+########################################
+
+# `registries`
+# Simple: Defines the approved registry destinations.
+# Details: In a real enterprise Fortress, `default` should point to an internal,
+# curated proxy or mirror, not directly to the public registry.
+# Example: `default` points to the organization's internal artifact gateway.
+# Intentionally unset until the internal approved zone exists; no placeholder
+# value is carried. Until then the default public registry applies.
+# registries:
+#   default: <approved-zone>
+
 # `strictSsl`
-# Einfach: Erzwingt TLS-Zertifikatspruefung fuer Registry-Zugriffe.
-# Details: Das ist die Mindesthaertung gegen MITM und fehlerhafte
-# Zertifikatsketten beim Download von Artefakten.
+# Simple: Enforces TLS certificate verification for registry access.
+# Details: This is the minimum hardening against MITM and faulty certificate chains.
+# Example: A registry with an invalid certificate will not be accepted.
 strictSsl: true
 
 ########################################
@@ -183,26 +114,31 @@ strictSsl: true
 ########################################
 
 # `nodeVersion`
-# Einfach: Definiert die Engine-Baseline fuer Dependency-Pruefungen.
-# Details: Dieses Repo ist auf Node.js 26 ausgerichtet; der Patch-Stand bleibt
-# bewusst exakt statt als lockerer Bereich modelliert zu werden.
-nodeVersion: 26.2.0
+# Simple: Defines the root engine baseline for dependency checks.
+# Details: This is the control-plane engine-gate surface, not a blanket equality
+# target for every package-local runtime contract.
+# Example: A dependency that requires Node 27 is rejected by the root policy.
+nodeVersion: 26.10.0
 
 # `engineStrict`
-# Einfach: Macht Engine-Checks hart statt advisory.
-# Details: So koennen keine Dependencies eingefuehrt werden, die gegen die
-# freigegebene Runtime-Linie verstossen.
+# Simple: Makes engine checks hard instead of advisory.
+# Details: This ensures no dependencies can be introduced that violate the
+# approved runtime line.
+# Example: A package with `engines.node: >=27` fails immediately.
 engineStrict: true
 
 # `pmOnFail`
-# Einfach: Bricht ab, wenn die laufende pnpm-Version nicht exakt passt.
-# Details: Fortress-Haltung ist `error`, nicht `download`; die Toolchain muss
-# vorprovisioniert und freigegeben sein.
+# Simple: Aborts if the running pnpm version does not match exactly.
+# Details: The Fortress posture is `error`, not `download`. The toolchain must
+# be pre-provisioned and approved.
+# Example: pnpm `12.5.0` is blocked against a repo with `12.5.1`.
 pmOnFail: error
 
 # `runtimeOnFail`
-# Einfach: Bricht ab, wenn die deklarierte Runtime nicht verfuegbar ist.
-# Details: Auch hier gilt fail-closed statt automatischer Nachbeschaffung.
+# Simple: Aborts if a declared runtime surface is not present or matching.
+# Details: Here too, fail-closed applies instead of automatic fetching, but this
+# setting governs declared runtime fields rather than redefining `nodeVersion`.
+# Example: A runner without the approved declared runtime is stopped.
 runtimeOnFail: error
 
 ########################################
@@ -210,154 +146,284 @@ runtimeOnFail: error
 ########################################
 
 # `lockfile`
-# Einfach: Erzwingt die Verwendung eines Lockfiles.
-# Details: Ein Fortress-Repo arbeitet niemals ohne deterministischen Lockfile.
+# Simple: Enforces the use of a lockfile.
+# Details: A Fortress repo never operates without a deterministic lockfile.
+# Example: `false` would be an architectural error here.
 lockfile: true
 
 # `preferFrozenLockfile`
-# Einfach: Bevorzugt headless, unveraenderte Installationen.
-# Details: CI und regulierte Workflows sollen nicht still resolven, wenn das
-# Lockfile bereits den gewuenschten Graphen beschreibt.
+# Simple: Prefers headless, unchanged installations.
+# Details: CI and regulated workflows should not resolve silently if the
+# lockfile already describes the desired graph.
+# Example: A manifest change without a lockfile update leads to an error.
 preferFrozenLockfile: true
 
 # `lockfileIncludeTarballUrl`
-# Einfach: Speichert Tarball-Quellen direkt im Lockfile.
-# Details: Das verbessert Herkunftsnachvollziehbarkeit und Auditierbarkeit fuer
-# spaetere Review- und Incident-Analysen.
+# Simple: Saves tarball sources directly in the lockfile.
+# Details: This improves traceability and auditability of origin. In
+# private repositories, this makes sense for Fortress governance.
+# Example: The lockfile explicitly shows which artifact endpoint the package originates from.
 lockfileIncludeTarballUrl: true
 
 # `resolutionMode`
-# Einfach: Waehlt die PNPM-Aufloesungsstrategie.
-# Details: `time-based` reduziert das Risiko von Subdependency-Hijacking, weil
-# transitive Updates zeitlich an Direct-Dependency-Releases gekoppelt bleiben.
+# Simple: Selects the PNPM resolution strategy.
+# Details: `time-based` reduces the risk of subdependency hijacking because
+# transitive updates remain tied in time to direct dependency releases.
+# Example: A direct dep update only pulls in temporally matching subdeps.
 resolutionMode: time-based
 
 # `registrySupportsTimeField`
-# Einfach: Schaltet optimierte Zeitmetadaten nur fuer verifizierte Registries frei.
-# Details: Der Wert bleibt `false`, bis die verwendete Registry das benoetigte
-# `time`-Feld nachweislich sauber liefert.
+# Simple: Enables optimized time metadata support for compatible registries.
+# Details: This value remains `false` until the internal mirror is proven to
+# deliver the required `time` field.
+# Example: Verdaccio or an internal proxy is only set to `true` after verification.
 registrySupportsTimeField: false
+
+########################################
+# Manifest save policy
+########################################
+
+# `saveExact`
+# Simple: Saves newly added dependency versions as exact versions instead of ranges.
+# Details: This prevents caret or tilde ranges from being written during `pnpm add`
+# and keeps every new manifest entry pinned to an explicitly approved version.
+# This fits the Fortress goal that dependencies are added as reviewable exact states,
+# not as potentially drifting version corridors.
+# Example: `pnpm add lodash@4.17.21` writes `4.17.21` instead of `^4.17.21`.
+saveExact: true
+
+# `savePrefix`
+# Simple: Defines the version prefix for newly saved specs.
+# Details: An empty string keeps the serialized spec prefix-free and reinforces
+# the exact-version save policy established by `saveExact: true`.
+# Example: `1.2.3` instead of `^1.2.3`.
+savePrefix: ""
 
 ########################################
 # Dependency layout and anti-hoisting
 ########################################
 
 # `nodeLinker`
-# Einfach: Waehlt das Installationsmodell fuer Node-Dependencies.
-# Details: `isolated` ist die strikteste allgemeine Default-Wahl fuer saubere
-# Dependency-Isolation und gegen Phantom-Imports.
+# Simple: Selects the installation model for Node dependencies.
+# Details: `isolated` is the strictest general default choice for correct
+# dependency isolation.
+# Example: The project only sees declared dependencies.
 nodeLinker: isolated
 
 # `enableGlobalVirtualStore`
-# Einfach: Verhindert projektuebergreifende globale Virtual-Store-Nutzung.
-# Details: Eine Fortress-Policy vermeidet implizite Cross-Project-Sharing-Pfade
-# und die damit verbundene `NODE_PATH`-Komplexitaet.
+# Simple: Prevents cross-project global virtual store usage.
+# Details: A Fortress policy avoids implicit cross-project sharing paths
+# and the associated `NODE_PATH` complexity.
+# Example: Dependencies are materialized project-locally rather than via a global virtual store.
 enableGlobalVirtualStore: false
 
 # `hoist`
-# Einfach: Schaltet Hidden-Hoisting global aus.
-# Details: Fortress-Baseline ist kein Hoisting, solange nicht das Gegenteil
-# durch harte Evidenz erzwungen wurde.
+# Simple: Disables hidden hoisting globally.
+# Details: The Fortress baseline is no hoisting unless forced by concrete evidence to the contrary.
+# Example: Undeclared dependencies remain inaccessible.
 hoist: false
 
 # `hoistPattern`
-# Einfach: Laesst standardmaessig keine Hoisting-Ausnahmen zu.
-# Details: Ein leeres Array ist die fail-closed Ausgangslage fuer spaetere,
-# minimalistische Ausnahmen.
+# Simple: Does not allow hoisting exceptions by default.
+# Details: An empty array is the fail-closed baseline; exceptions are
+# added later minimally and based on evidence.
+# Example: Only after a validated tooling error is a single pattern included.
 hoistPattern: []
 
 # `publicHoistPattern`
-# Einfach: Verhindert Root-sichtbares Hoisting fuer Applikationscode.
-# Details: So werden Phantom-Dependencies nicht in den sichtbaren Root-Pfad
-# exportiert.
+# Simple: Prevents root-visible hoisting for application code.
+# Details: This ensures phantom dependencies are not exported to the visible root path.
+# Example: Application code cannot see an undeclared transitive dependency via the root.
 publicHoistPattern: []
 
 # `shamefullyHoist`
-# Einfach: Verhindert blanket-weites Public-Hoisting.
-# Details: Ein npm-/Yarn-Classic-aehnliches flaches Root-Layout ist fuer diese
-# Haertung ausdruecklich nicht gewuenscht.
+# Simple: Prevents blanket-wide public hoisting.
+# Details: This setting always remains `false` in a Fortress architecture.
+# Example: A flat root layout similar to npm/Yarn Classic is not created.
 shamefullyHoist: false
 
 # `virtualStoreDir`
-# Einfach: Legt den projektlokalen Virtual-Store-Pfad fest.
-# Details: `.pnpm` verkuerzt Pfade und macht den Virtual-Store sichtbar und
-# bewusst kontrollierbar.
+# Simple: Sets the project-local virtual store path.
+# Details: `.pnpm` shortens paths and makes the store path explicitly visible.
+# Example: `node_modules/.pnpm` is relocated to `.pnpm`.
 virtualStoreDir: .pnpm
 
 # `virtualStoreDirMaxLength`
-# Einfach: Begrenzt die Laenge der Verzeichnisnamen im Virtual Store.
-# Details: `60` ist der konservative Windows-sichere Grenzwert aus der
-# Referenzhaltung.
+# Simple: Limits the length of directory names in the virtual store.
+# Details: `60` is the conservative Windows-safe limit.
+# Example: Very long package names are shortened in the store layout.
 virtualStoreDirMaxLength: 60
 
 # `verifyStoreIntegrity`
-# Einfach: Prueft Store-Inhalte vor dem Verlinken.
-# Details: Veraenderte Dateien im Content-Addressable Store werden nicht still
-# uebernommen.
+# Simple: Verifies store contents before linking.
+# Details: Modified files in the content-addressable store are not silently accepted.
+# Example: A tampered store artifact is caught during the integrity check.
 verifyStoreIntegrity: true
 
 # `strictStorePkgContentCheck`
-# Einfach: Prueft, ob Name, Version und Inhalt im Store zusammenpassen.
-# Details: Das schuetzt gegen Registries, die identischen Inhalt unter
-# verschiedenen Paketidentitaeten liefern.
+# Simple: Verifies if name, version, and content match in the store.
+# Details: This protects against registries that deliver identical content under different
+# package identities.
+# Example: An inconsistent store entry is not accepted.
 strictStorePkgContentCheck: true
 
 ########################################
 # Peer dependency governance
 ########################################
 
+# `autoInstallPeers`
+# Simple: Prevents automatic installation of missing peers.
+# Details: Peer decisions must be made explicitly in the manifest.
+# Example: A missing `react-dom` is not silently added.
+autoInstallPeers: false
+
 # `strictPeerDependencies`
-# Einfach: Macht Peer-Konflikte hart statt advisory.
-# Details: Das verhindert Laufzeitueberraschungen durch weiche Peer-Abweichungen.
+# Simple: Makes peer conflicts hard instead of advisory.
+# Details: This prevents runtime surprises caused by soft peer deviations.
+# Example: An invalid peer tree leads directly to an error.
 strictPeerDependencies: true
 
 # `peerDependencyRules`
-# Einfach: Haelt blanket-Ausnahmen fuer Peers geschlossen.
-# Details: Leere Listen bleiben fail-closed; die eine `allowedVersions`-Regel
-# unten ist eine gezielte Repo-Ausnahme und keine allgemeine Lockerung.
+# Simple: Keeps blanket exceptions for peers closed.
+# Details: Empty lists and maps mean: no general relaxation, no
+# implicit approvals, no `allowAny` shortcut.
+# Example: A later exception is only added selectively for a leaf->peer pair.
 peerDependencyRules:
   allowAny: []
 
   # `allowedVersions`
-  # Einfach: Dokumentiert gezielte, reviewte Peer-Kompatibilitaetsausnahmen.
-  # Details: Jede Ausnahme bleibt bewusst eng auf das konkrete Paar begrenzt.
+  # Simple: Documents targeted, reviewed peer-compatibility exceptions.
+  # Details: Every exception stays deliberately narrow on the concrete pair.
   allowedVersions:
     # `vite-tsconfig-paths` pulls `tsconfck@3`, whose optional `typescript` peer
     # declares only `^5.0.0` while this repository deliberately pins
-    # `typescript ~6.0.3`. The exception stays scoped to the tsconfck-v3 line.
+    # `typescript 6.0.3`. The exception stays scoped to the tsconfck-v3 line.
     'tsconfck@3>typescript': '6'
 
   # `ignoreMissing`
-  # Einfach: Haelt pauschale Missing-Peer-Ausnahmen geschlossen.
-  # Details: Ein leeres Array bedeutet, dass fehlende Peers nicht blanket-weise
-  # toleriert werden.
+  # Simple: Keeps blanket missing-peer exceptions closed.
+  # Details: An empty array means missing peers are never tolerated wholesale.
   ignoreMissing: []
 
+########################################
+# Graph repair and explicit policy
+########################################
+
+# `overrides`
+# Simple: Allows later, targeted exact transitive graph repair.
+# Details: In the boilerplate, the object remains empty; any later filling is
+# a deliberately reviewed governance intervention. Any later override MUST
+# follow the dedicated override-governance owner for exact parent-edge selector
+# form and owner-surface separation. Trust-downgrade repairs additionally MUST
+# stay on the same major/minor patch line by default and MUST pass the
+# compatibility verification gates defined by the dedicated trust-downgrade owner.
+# Example: `foo@1.0.0>bar: "2.0.0"` pins one reviewed exact repair on one named edge.
+overrides: {}
+
+# `packageExtensions`
+# Simple: Allows targeted manifest repairs for third-party packages.
+# Details: This remains empty until a concrete, reviewed correction is actually necessary.
+# Example: A missing peer can be deliberately added later.
+packageExtensions: {}
+
+# `allowedDeprecatedVersions`
+# Simple: Prevents blanket-wide suppression of deprecation warnings.
+# Details: In the Fortress boilerplate, the list remains empty so that deprecation signals remain visible.
+# Example: Only after explicit risk acceptance is a concrete version entered.
+allowedDeprecatedVersions: {}
+
 # `ignoreCompatibilityDb`
-# Einfach: Deaktiviert implizite automatische Manifest-Patches aus der
-# Kompatibilitaetsdatenbank.
-# Details: Das erhoeht Auditierbarkeit, weil das Repo nicht stillschweigend von
-# externer Patch-Logik beeinflusst wird.
+# Simple: Disables implicit automatic manifest patches from the compatibility database.
+# Details: This increases auditability because the repo is not silently influenced by
+# external patch logic.
+# Example: Missing dependency metadata must be deliberately handled via `packageExtensions`.
 ignoreCompatibilityDb: true
 
 # `updateNotifier`
-# Einfach: Deaktiviert automatische Update-Hinweise.
-# Details: Upgrades sollen im kontrollierten Governance-Prozess passieren und
-# nicht als spontane CLI-Nachricht im Alltag auftauchen.
+# Simple: Disables automatic update notifications.
+# Details: This reduces unplanned network/noise signals and keeps upgrades within the
+# controlled governance process.
+# Example: Contributors do not receive spontaneous pnpm upgrade notifications in daily work.
 updateNotifier: false
+
+########################################
+# Central version approval
+########################################
+
+# `catalog`
+# Simple: Central catalog of approved version states, even for single-project repos.
+# Details: Even in a single-package repo, an explicit approval point for
+# versions is more secure than ad-hoc direct ranges.
+# Example: `typescript: "6.0.3"` would be a catalog entry approved later.
+catalog:
+  '@changesets/cli': 3.0.3
+  '@js-temporal/polyfill': 0.5.1
+  '@modelcontextprotocol/sdk': 1.30.0
+  '@sindresorhus/is': 8.1.0
+  '@toon-format/toon': 4.1.1
+  '@types/lodash': 4.17.25
+  '@types/node': 26.6.2
+  '@types/semver': 7.8.0
+  '@vitest/coverage-v8': 5.0.1
+  diff: 9.0.0
+  dotenv: 18.0.2
+  error-manager-helper: 4.17.0
+  es-toolkit: 1.52.0
+  esquery: 1.7.0
+  fast-copy: 4.1.1
+  glob: 13.0.6
+  globals: 17.12.0
+  ignore: 7.0.9
+  jest-extended: 7.0.0
+  minimatch: 10.2.6
+  pino: 10.3.1
+  piscina: 5.3.2
+  prettier: 3.9.8
+  prettier-plugin-packagejson: 3.0.2
+  publint: 0.3.24
+  radash: 12.1.1
+  remeda: 2.50.0
+  rimraf: 6.1.3
+  safe-stable-stringify: 2.5.0
+  semver: 7.8.5
+  sort-on: 7.0.0
+  terser: 5.51.2
+  ts-essentials: 10.2.1
+  tsconfig-paths: 4.2.0
+  tsdown: 0.23.0
+  tsx: 4.23.15
+  type-fest: 5.10.0
+  typescript: 6.0.3
+  vite: 8.3.0
+  vite-tsconfig-paths: 6.1.1
+  vitest: 5.0.1
+  zod: 4.6.5
+  zod-to-json-schema: 3.25.2
+
+# `catalogMode`
+# Simple: Enforces that new dependencies cannot bypass the catalog.
+# Details: `strict` makes the catalog the single source of truth even in a single-project repo.
+# Example: `pnpm add lodash@latest` fails if `lodash` is not appropriately listed in the catalog.
+catalogMode: strict
+
+# `cleanupUnusedCatalogs`
+# Simple: Cleans up unused catalog entries.
+# Details: This reduces governance clutter and prevents obsolete approval remnants.
+# Example: Removed packages do not remain as dead entries in the catalog.
+cleanupUnusedCatalogs: true
 
 ########################################
 # Script safety
 ########################################
 
 # `enablePrePostScripts`
-# Einfach: Deaktiviert implizite `pre*`/`post*`-Hooks.
-# Details: Skriptverkettung soll explizit sein, nicht still im Hintergrund
-# passieren.
+# Simple: Disables implicit `pre*`/`post*` hooks.
+# Details: Script chaining should be explicit, not happen silently in the background.
+# Example: `pnpm build` does not automatically execute `prebuild` and `postbuild`.
 enablePrePostScripts: false
 
 # `verifyDepsBeforeRun`
-# Einfach: Erzwingt aktuelle Dependencies vor `pnpm run` und `pnpm exec`.
-# Details: `error` verhindert, dass mit stale `node_modules` oder einem nicht
-# mehr passenden Installationszustand gearbeitet wird.
+# Simple: Enforces up-to-date dependencies before `pnpm run` and `pnpm exec`.
+# Details: `error` prevents working with stale `node_modules`.
+# Example: After a manifest change, `pnpm test` blocks until install is run again.
 verifyDepsBeforeRun: error

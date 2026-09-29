@@ -37,8 +37,9 @@ describe("diff_files", () => {
     );
 
     expect(output.startsWith("```diff\n")).toBe(true);
-    expect(output).toContain(leftFilePath);
-    expect(output).toContain(rightFilePath);
+    // diff@9 emits quoted, escaped header paths; JSON.stringify mirrors that contract.
+    expect(output).toContain(JSON.stringify(leftFilePath));
+    expect(output).toContain(JSON.stringify(rightFilePath));
     expect(output).toContain("gamma");
     expect(output).not.toContain("Processed 1 diff files operations:");
   });

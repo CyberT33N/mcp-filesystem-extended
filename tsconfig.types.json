@@ -1,71 +1,137 @@
-/*
- *███████████████████████████████████████████████████████████████████████████████
- *██******************** PRESENTED BY t33n Software ***************************██
- *██                                                                           ██
- *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
- *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
- *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
- *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
- *██                     ╚═╝   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                      ██
- *██                                                                           ██
- *███████████████████████████████████████████████████████████████████████████████
- *███████████████████████████████████████████████████████████████████████████████
- */
-
 {
   /**
-   * $schema: Better IDE support (completion/validation).
+   * Enables schema-aware validation for the type-only test consumer config.
+   *
+   * Detailed behavior:
+   * - Keeps the file self-describing for editors and automation.
+   * - Makes the type-only entrypoint follow the same formal config hygiene as the rest of the graph.
+   *
+   * Architectural decision:
+   * Keep the TSConfig schema reference on every externally used config surface.
+   *
+   * Example:
+   * "$schema": "https://json.schemastore.org/tsconfig"
    */
   "$schema": "https://json.schemastore.org/tsconfig",
 
   /**
-   * Extends: Reuse the Node-hosted runtime semantics; type-only tests validate
-   * the same Node module contract as the runtime surface.
+   * Reuses the Node producer baseline for type-only tests.
+   *
+   * Detailed behavior:
+   * - Type-only tests must validate the same Node module contract as the runtime producer.
+   * - Only type-test-specific consumer deltas belong here.
+   *
+   * Architectural decision:
+   * Extend the Node producer because type-only tests are contract consumers, not an independent source model.
+   *
+   * Example:
+   * "extends": "./tsconfig.node.json"
    */
   "extends": "./tsconfig.node.json",
 
   /**
-   * References: Anchor type-only tests to the declaration-validation producer
-   * graph instead of duplicating source ownership.
+   * Anchors type-only tests to the declaration-validation producer graph.
+   *
+   * Detailed behavior:
+   * - Avoids duplicating source ownership.
+   * - Keeps declaration validation separate from direct Node runtime output.
+   *
+   * Architectural decision:
+   * Use a direct project reference to the dedicated typecheck producer.
+   *
+   * Example:
+   * "references": [{ "path": "./tsconfig.typecheck.json" }]
    */
-  "references": [
-    {
-      "path": "./tsconfig.typecheck.json"
-    }
-  ],
+  "references": [{ "path": "./tsconfig.typecheck.json" }],
 
   /**
-   * CompilerOptions: Type-only consumer deltas.
+   * Description:
+   * Groups type-only consumer output and ambient-type deltas.
+   *
+   * Architectural decision:
+   * Contract tests remain no-output graph consumers and model only their own
+   * Vitest-on-Node host needs.
+   *
+   * Example:
+   * "compilerOptions": { "noEmit": true }
    */
   "compilerOptions": {
     /**
-     * Composite: Type-only suites validate contracts; they do not emit them.
+     * Marks type-only suites as consumers, not declaration producers.
+     *
+     * Detailed behavior:
+     * - Prevents the type-test config from becoming an extra producer lane.
+     * - Keeps declaration ownership concentrated in the typecheck producer.
+     *
+     * Architectural decision:
+     * Use `false` because type-only tests validate contracts; they do not emit them.
+     *
+     * Example:
+     * "composite": false
      */
     "composite": false,
 
     /**
-     * NoEmit: A type-only suite is a verification lane, not an artifact lane.
+     * Keeps the type-only test lane in pure validation mode.
+     *
+     * Detailed behavior:
+     * - No JavaScript or declaration output is created here.
+     * - The config exists only to verify repository-owned type contracts.
+     *
+     * Architectural decision:
+     * Use `true` because a type-only suite is a verification lane, not an artifact lane.
+     *
+     * Example:
+     * "noEmit": true
      */
     "noEmit": true,
 
     /**
-     * Types: Only the Vitest and Node globals this lane truly needs.
+     * Opens only the ambient globals required by the type-only Vitest lane.
+     *
+     * Detailed behavior:
+     * - The shared base keeps the ambient surface empty.
+     * - This config adds only the Vitest and Node globals it truly needs.
+     *
+     * Architectural decision:
+     * Use `["vitest/globals", "node"]` because the suite runs as a Vitest-on-Node contract consumer.
+     *
+     * Example:
+     * "types": ["vitest/globals", "node"]
      */
     "types": ["vitest/globals", "node"]
   },
 
   /**
-   * Exclude: The explicit include list already bounds the scope tightly.
+   * Declares that no additional exclusions are needed on top of the explicit include list.
+   *
+   * Detailed behavior:
+   * - The scope is already tightly bounded to type-test files.
+   * - An empty exclude makes that intent explicit.
+   *
+   * Architectural decision:
+   * Keep `[]` because this consumer config already controls its boundary through a narrow include surface.
+   *
+   * Example:
+   * "exclude": []
    */
   "exclude": [],
 
   /**
-   * Include: Type-test files, supporting fixtures, and shared testing constants.
+   * Defines the type-only consumer surface.
+   *
+   * Detailed behavior:
+   * - Includes `.test-d.ts` files and supporting fixtures.
+   * - Leaves runtime and declaration source ownership with the Node and typecheck producers.
+   *
+   * Architectural decision:
+   * Keep the include list type-test-specific so the contract lane remains small, deterministic, and consumer-only.
+   *
+   * Example:
+   * "include": ["test/types/**\/*.test-d.ts", "test/types/**\/*.ts"]
    */
   "include": [
     "test/types/**/*.test-d.ts",
-    "test/types/**/*.ts",
-    "tooling/testing/constants/**/*.ts"
+    "test/types/**/*.ts"
   ]
 }

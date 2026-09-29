@@ -635,6 +635,51 @@ export async function getFindPathsByNameResult(
 }
 
 /**
+ * Finalizes the caller-visible text response for an already-executed name-search result.
+ *
+ * @remarks
+ * This is the single post-execution surface shared by the composed handler entrypoint and the
+ * tool-registration callback: it formats the precomputed result, enforces the mode-aware response
+ * cap, and closes terminal sessions. It never re-executes traversal — the registration callback
+ * consumes exactly one execution per tool call through this seam, so the text surface and the
+ * structured surface always derive from the same execution.
+ *
+ * @param result - Structured name-search result from the single execution of the current call.
+ * @param maxResults - Maximum number of matches retained per root before truncation.
+ * @param requestedResumeMode - The resume intent of the current request, used for the mode-aware cap.
+ * @param resumeToken - The opaque session handle of the current request, when present.
+ * @param inspectionResumeSessionStore - Server-owned SQLite session store for terminal lifecycle marking.
+ * @returns Formatted text output respecting the mode-appropriate response ceiling.
+ */
+export function finalizeFindPathsByNameTextOutput(
+  result: FindPathsByNameResult,
+  maxResults: number,
+  requestedResumeMode: InspectionResumeMode | undefined,
+  resumeToken: string | undefined,
+  inspectionResumeSessionStore?: InspectionResumeSessionSqliteStore,
+): string {
+  const output = formatFindPathsByNameTextOutput(result, maxResults);
+
+  const isCompleteResultMode = requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
+  const effectiveResponseCap = isCompleteResultMode
+    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
+    : DISCOVERY_RESPONSE_CAP_CHARS;
+
+  assertActualTextBudget(
+    FIND_PATHS_BY_NAME_FAMILY_MEMBER,
+    output.length,
+    effectiveResponseCap,
+    "name-discovery text output",
+  );
+
+  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
+    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
+  }
+
+  return output;
+}
+
+/**
  * Formats name-search results for the caller-visible text response surface.
  *
  * @remarks
@@ -684,23 +729,11 @@ export async function handleSearchFiles(
     maxResults,
   );
 
-  const output = formatFindPathsByNameTextOutput(result, maxResults);
-
-  const isCompleteResultMode = resumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
-  const effectiveResponseCap = isCompleteResultMode
-    ? GLOBAL_RESPONSE_HARD_CAP_CHARS
-    : DISCOVERY_RESPONSE_CAP_CHARS;
-
-  assertActualTextBudget(
-    FIND_PATHS_BY_NAME_FAMILY_MEMBER,
-    output.length,
-    effectiveResponseCap,
-    "name-discovery text output",
+  return finalizeFindPathsByNameTextOutput(
+    result,
+    maxResults,
+    resumeMode,
+    resumeToken,
+    inspectionResumeSessionStore,
   );
-
-  if (resumeToken !== undefined && !result.resume.resumable && result.resume.resumeToken === null) {
-    inspectionResumeSessionStore?.markSessionCompleted(resumeToken, new Date());
-  }
-
-  return output;
 }

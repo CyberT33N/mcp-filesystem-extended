@@ -13,6 +13,10 @@ import {
 import { GLOBAL_RESPONSE_HARD_CAP_CHARS } from "@domain/shared/guardrails/tool-guardrail-limits";
 import { assertActualTextBudget } from "@domain/shared/guardrails/text-response-budget";
 import { InspectionResumeSessionSqliteStore } from "@infrastructure/persistence/inspection-resume-session-sqlite-store";
+import {
+  resolveBuildIdentity,
+  type BuildIdentity,
+} from "@infrastructure/runtime/build-identity";
 import { getUgrepRuntimeDependency } from "@infrastructure/runtime/ugrep-runtime-dependency";
 
 import { registerToolCatalog } from "./register-tool-catalog";
@@ -47,6 +51,7 @@ export class FilesystemServer {
   private readonly server: McpServer;
   private readonly allowedDirectories: string[];
   private readonly inspectionResumeSessionStore: InspectionResumeSessionSqliteStore;
+  private readonly buildIdentity: BuildIdentity;
   private rootLogLevel: LoggingLevel = "info";
 
   /**
@@ -61,6 +66,7 @@ export class FilesystemServer {
    */
   constructor(allowedDirectories: string[]) {
     this.allowedDirectories = allowedDirectories;
+    this.buildIdentity = resolveBuildIdentity();
     this.inspectionResumeSessionStore = new InspectionResumeSessionSqliteStore();
     this.inspectionResumeSessionStore.cleanupExpiredSessions();
     this.inspectionResumeSessionStore.vacuum();
@@ -69,7 +75,7 @@ export class FilesystemServer {
     this.server = new McpServer(
       {
         name: "mcp-filesystem-extended",
-        version: "0.6.2",
+        version: this.buildIdentity.packageVersion,
         description: SERVER_DESCRIPTION,
       },
       {
@@ -217,7 +223,9 @@ export class FilesystemServer {
    *
    * @remarks
    * The transport layer exposes the already-harmonized caller contract, including the stable server
-   * instructions and the non-bypassable global response fuse owned by this class.
+   * instructions and the non-bypassable global response fuse owned by this class. The startup
+   * surface also emits the build identity (manifest version, bundle SHA-256, Node runtime, process
+   * id) so stale-process or stale-build anomalies are detectable immediately.
    *
    * @returns Nothing. The method resolves once the MCP transport is connected.
    */
@@ -226,6 +234,9 @@ export class FilesystemServer {
     await this.server.connect(transport);
     console.error("MCP Filesystem Extended Server running on stdio");
     console.error("Allowed directories:", this.allowedDirectories);
+    console.error(
+      `Build identity: version=${this.buildIdentity.packageVersion} bundleSha256=${this.buildIdentity.bundleSha256} node=${this.buildIdentity.nodeVersion} pid=${this.buildIdentity.processId}`,
+    );
     await this.log("info", "main", { message: "Server connected via stdio" });
   }
 }

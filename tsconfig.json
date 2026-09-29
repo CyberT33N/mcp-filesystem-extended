@@ -1,38 +1,45 @@
-/*
- *███████████████████████████████████████████████████████████████████████████████
- *██******************** PRESENTED BY t33n Software ***************************██
- *██                                                                           ██
- *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
- *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
- *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
- *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
- *██                     ╚═╝   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                      ██
- *██                                                                           ██
- *███████████████████████████████████████████████████████████████████████████████
- *███████████████████████████████████████████████████████████████████████████████
- */
-
 {
   /**
-   * $schema: Better IDE support (completion/validation).
-   */
-  "$schema": "https://json.schemastore.org/tsconfig",
-
-  /**
-   * The root solution config owns no source files directly; it coordinates
-   * referenced projects only and never creates a second implicit program.
+   * Declares that the root solution config owns no source files directly.
+   *
+   * Detailed behavior:
+   * - This config coordinates referenced projects only.
+   * - It does not create a second implicit program over the same sources.
+   *
+   * Architectural decision:
+   * Keep `files` empty because the root is an orchestration surface, not a compile target.
+   *
+   * Example:
+   * "files": []
    */
   "files": [],
 
   /**
-   * Stop solution traversal when the referenced validation producer fails.
+   * Description:
+   * Stops solution traversal when the referenced validation producer fails.
+   *
+   * Architectural decision:
+   * Downstream type validation must not continue from an invalid upstream
+   * producer state.
+   *
+   * Example:
+   * "stopBuildOnErrors": true
    */
   "stopBuildOnErrors": true,
 
   /**
-   * Only the canonical declaration-validation producer is referenced at the
-   * root solution layer; runtime and test consumers are separate owners.
+   * Exposes only the canonical declaration-validation producer at the root solution layer.
+   *
+   * Detailed behavior:
+   * - Runtime and type-test configs consume the producer separately.
+   * - The root solution should not pretend that every consumer lane is also a producer lane.
+   *
+   * Architectural decision:
+   * Reference only `tsconfig.typecheck.json` because runtime output and
+   * Project Reference declarations have separate owners.
+   *
+   * Example:
+   * "references": [{ "path": "./tsconfig.typecheck.json" }]
    */
   "references": [
     {

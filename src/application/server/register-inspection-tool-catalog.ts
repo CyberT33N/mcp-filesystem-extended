@@ -7,8 +7,8 @@ import {
   GetPathMetadataResultSchema,
 } from "@domain/inspection/get-path-metadata/schema";
 import {
+  finalizeListDirectoryEntriesTextOutput,
   getListDirectoryEntriesResult,
-  handleListDirectoryEntries,
 } from "@domain/inspection/list-directory-entries/handler";
 import {
   ListDirectoryEntriesArgsSchema,
@@ -26,16 +26,16 @@ import {
   normalizeReadFileContentArgs,
 } from "@domain/inspection/read-file-content/schema";
 import {
+  finalizeFindPathsByNameTextOutput,
   getFindPathsByNameResult,
-  handleSearchFiles,
 } from "@domain/inspection/find-paths-by-name/handler";
 import {
   FindPathsByNameArgsSchema,
   FindPathsByNameResultSchema,
 } from "@domain/inspection/find-paths-by-name/schema";
 import {
+  finalizeFindFilesByGlobTextOutput,
   getFindFilesByGlobResult,
-  handleSearchGlob,
 } from "@domain/inspection/find-files-by-glob/handler";
 import {
   FindFilesByGlobArgsSchema,
@@ -203,16 +203,10 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           allowedDirectories,
           inspectionResumeSessionStore,
         );
-        const text = await handleListDirectoryEntries(
-          resumeToken,
+        const text = finalizeListDirectoryEntriesTextOutput(
+          result,
           resumeMode,
-          roots,
-          recursive,
-          metadata,
-          excludeGlobs,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          allowedDirectories,
+          resumeToken,
           inspectionResumeSessionStore,
         );
 
@@ -255,17 +249,12 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           allowedDirectories,
           maxResults,
         );
-        const text = await handleSearchFiles(
-          resumeToken,
-          resumeMode,
-          roots,
-          resolvedNameContains,
-          excludeGlobs,
-          includeExcludedGlobs,
-          respectGitIgnore,
-          inspectionResumeSessionStore,
-          allowedDirectories,
+        const text = finalizeFindPathsByNameTextOutput(
+          result,
           maxResults,
+          resumeMode,
+          resumeToken,
+          inspectionResumeSessionStore,
         );
 
         return {
@@ -309,16 +298,16 @@ export function registerInspectionToolCatalog(context: RegisterToolCatalogContex
           allowedDirectories,
           inspectionResumeSessionStore,
         );
-        const text = await handleSearchGlob(
-          resumeToken,
+        const text = finalizeFindFilesByGlobTextOutput(
+          result,
           resumeMode,
+          resumeToken,
           roots,
           resolvedGlob,
           excludeGlobs,
           includeExcludedGlobs,
           respectGitIgnore,
           maxResults,
-          allowedDirectories,
           inspectionResumeSessionStore,
         );
 

@@ -61,6 +61,7 @@ export function buildListDirectoryEntriesToolDescription(
     + "Preview-capable directory listing supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. "
     + `${finalPreviewFirstDescription} `
     + "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. "
+    + "A listing session reports completion only when every root frontier was fully delivered; directories that cannot be read close the session with an explicit incomplete-data statement instead of a false completion. "
     + `${externalConsumerBoundaryDescription}`
   );
 }

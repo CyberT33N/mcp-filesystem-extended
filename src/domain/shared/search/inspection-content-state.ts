@@ -542,7 +542,6 @@ function assessSampleTextCompatibility(
   const replacementCharacterRatio = replacementCharacterCount / decodedLength;
   const decodedControlCharacterRatio = countDecodedControlCharacters(decodedSample) / decodedLength;
   const textCompatibleCharacterRatio = countTextCompatibleCharacters(decodedSample) / decodedLength;
-  const rawNulByteRatio = countOccurrences(sample, 0) / sample.byteLength;
   const rawControlByteRatio = countControlBytes(sample) / sample.byteLength;
 
   if (textEncoding === INSPECTION_CONTENT_TEXT_ENCODING_LITERALS.UTF8) {

@@ -1,18 +1,3 @@
-/*
- *███████████████████████████████████████████████████████████████████████████████
- *██******************** PRESENTED BY t33n Software ***************************██
- *██                                                                           ██
- *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
- *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
- *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
- *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
- *██                     ╚═╝   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                      ██
- *██                                                                           ██
- *███████████████████████████████████████████████████████████████████████████████
- *███████████████████████████████████████████████████████████████████████████████
- */
-
 // ═══╡ 🧩 IMPORTS ╞═══
 import { defineConfig } from 'vitest/config'
 
@@ -20,9 +5,10 @@ import { defineConfig } from 'vitest/config'
 import type { ViteUserConfig } from 'vitest/config'
 
 /*
- * 📋 Root-Konfiguration für die modulare Server-Topologie.
- * Trägt ausschließlich globale, prozessweite Optionen (Coverage) und die Projekt-Registrierung.
- * Geteilte Test-Optionen, Plugins und Setup-Orchestrierung leben in vitest.base.config.ts.
+ * 📋 Root configuration for the modular server topology.
+ * Carries only global, process-wide options (coverage) and the project
+ * registration. Shared test options, plugins, and setup orchestration live in
+ * vitest.base.config.ts.
  */
 const cfg = defineConfig({
     test: {
@@ -48,9 +34,11 @@ const cfg = defineConfig({
             ],
 
             /**
-             * Specifies the directories to include for coverage.
+             * Restricts coverage measurement to TypeScript sources so the v8
+             * provider never attempts to parse Markdown or other non-code
+             * artifacts beneath src/.
              */
-            include: ['src/'],
+            include: ['src/**/*.ts'],
 
             /**
              * Specifies the coverage provider to use.
@@ -68,8 +56,9 @@ const cfg = defineConfig({
         },
 
         /**
-         * Project configurations keep unit, integration and regression verification surfaces
-         * distinct while sharing one modularized server baseline.
+         * Project configurations keep unit, integration and regression
+         * verification surfaces distinct while sharing one modularized server
+         * baseline.
          */
         projects: [
             './vitest.unit.config.ts',
@@ -78,9 +67,9 @@ const cfg = defineConfig({
         ],
 
         /**
-         * Die Integrations-Lane ist absichtlich registriert, aber noch ohne Tests.
-         * Der Exit-Code einer leeren, gefilterten Lane wird root-seitig bewertet:
-         * Der Lauf meldet sichtbar "No test files found" und endet dennoch grün.
+         * The integration lane is deliberately registered while still empty:
+         * the exit code of an empty filtered lane is evaluated at the root —
+         * the run visibly reports "No test files found" and still ends green.
          */
         passWithNoTests: true
     }

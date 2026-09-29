@@ -1,18 +1,3 @@
-/*
- *███████████████████████████████████████████████████████████████████████████████
- *██******************** PRESENTED BY t33n Software ***************************██
- *██                                                                           ██
- *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
- *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
- *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
- *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
- *██                     ╚═╝   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                      ██
- *██                                                                           ██
- *███████████████████████████████████████████████████████████████████████████████
- *███████████████████████████████████████████████████████████████████████████████
- */
-
 // ═══╡ 🧩 IMPORTS ╞═══
 import {
     defineProject, mergeConfig
@@ -22,10 +7,15 @@ import baseConfig, {
     COMMON_SETUP_FILES
 } from './vitest.base.config'
 
+// (intentionally not importing from the root config to avoid a cyclic/anti-pattern reference)
+
 // ═══╡ 🏷️TYPES ╞═══
 import type { ViteUserConfig } from 'vitest/config'
 
-// 📋 Define the unit verification configuration for the final modularized topology
+// ═══╡ 🗿 CONSTANTS ╞═══
+const PROJECT_NAME = 'unit'
+
+// 📋 Define the unit verification configuration
 const cfg = defineProject({
     test: {
         /**
@@ -36,11 +26,11 @@ const cfg = defineProject({
         /**
          * Name of the verification project for workspace selection.
          */
-        name: 'unit',
+        name: PROJECT_NAME,
 
         /**
-         * Setup files: gemeinsame Orchestrierung plus Suite-lokales Setup.
-         * Arrays werden bei mergeConfig ersetzt — der Spread ist verbindlich.
+         * Setup files: common orchestration plus the suite-local setup.
+         * Arrays are replaced by mergeConfig — the spread is binding.
          */
         setupFiles: [
             ...COMMON_SETUP_FILES,
@@ -60,7 +50,7 @@ const cfg = defineProject({
 })
 
 /**
- * 🛠️ Merges the shared modular verification baseline with the unit-specific surface.
+ * 🛠️ Merges the shared verification baseline with the unit-specific surface.
  */
 const mergedCfg: ViteUserConfig = mergeConfig(baseConfig, cfg)
 

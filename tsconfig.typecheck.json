@@ -1,89 +1,166 @@
-/*
- *███████████████████████████████████████████████████████████████████████████████
- *██******************** PRESENTED BY t33n Software ***************************██
- *██                                                                           ██
- *██                  ████████╗██████╗ ██████╗ ███╗   ██╗                      ██
- *██                  ╚══██╔══╝╚════██╗╚════██╗██╔██╗ ██║                      ██
- *██                     ██║    █████╔╝ █████╔╝██╔██╗ ██║                      ██
- *██                     ██║    ╚═══██╗ ╚═══██╗██║╚██╗██║                      ██
- *██                     ██║   ██████╔╝██████╔╝██║ ╚████║                      ██
- *██                     ╚═╝   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝                      ██
- *██                                                                           ██
- *███████████████████████████████████████████████████████████████████████████████
- *███████████████████████████████████████████████████████████████████████████████
- */
-
 {
   /**
-   * $schema: Better IDE support (completion/validation).
+   * Description:
+   * Enables schema-aware validation for the declaration-only typecheck producer.
+   *
+   * Architectural decision:
+   * This graph producer is an independently maintained configuration surface.
+   *
+   * Example:
+   * "$schema": "https://json.schemastore.org/tsconfig"
    */
   "$schema": "https://json.schemastore.org/tsconfig",
 
   /**
-   * Extends: Reuse the Node-hosted runtime semantics without inheriting its
-   * delivery ownership; declaration output stays isolated from runtime output.
+   * Description:
+   * Reuses direct Node runtime semantics without inheriting its delivery owner.
+   *
+   * Architectural decision:
+   * The producer needs the same host and module truth, while its declaration
+   * output remains isolated from application runtime output.
+   *
+   * Example:
+   * "extends": "./tsconfig.node.json"
    */
   "extends": "./tsconfig.node.json",
 
   /**
-   * CompilerOptions: The only composite producer in the single-project graph.
-   * Emits declaration-only validation output into the internal build area.
+   * Description:
+   * Groups graph-producer and internal validation-artifact deltas.
+   *
+   * Architectural decision:
+   * This is the only composite producer in the single-project graph.
+   *
+   * Example:
+   * "compilerOptions": { "composite": true }
    */
   "compilerOptions": {
     /**
-     * Composite: Enables project-reference build-mode participation.
+     * Description:
+     * Enables project-reference build-mode participation.
+     *
+     * Architectural decision:
+     * Consumer configs must reference a real composite declaration producer.
+     *
+     * Example:
+     * "composite": true
      */
     "composite": true,
 
     /**
-     * NoEmit: A no-emit config cannot fulfill producer responsibilities.
+     * Description:
+     * Reopens output required by the reference graph.
+     *
+     * Architectural decision:
+     * A no-emit config cannot fulfill producer responsibilities.
+     *
+     * Example:
+     * "noEmit": false
      */
     "noEmit": false,
 
     /**
-     * EmitDeclarationOnly: Runtime JavaScript remains owned by the bundler.
+     * Description:
+     * Restricts graph output to declarations.
+     *
+     * Architectural decision:
+     * Runtime JavaScript remains exclusively owned by tsconfig.node.json.
+     *
+     * Example:
+     * "emitDeclarationOnly": true
      */
     "emitDeclarationOnly": true,
 
     /**
-     * Declaration: The graph exposes a real type producer for consumers.
+     * Description:
+     * Enables declaration files for referenced consumers.
+     *
+     * Architectural decision:
+     * The graph must expose a real type producer.
+     *
+     * Example:
+     * "declaration": true
      */
     "declaration": true,
 
     /**
-     * DeclarationMap: Cross-project type navigation for internal artifacts.
+     * Description:
+     * Enables declaration maps for cross-project type navigation.
+     *
+     * Architectural decision:
+     * Internal graph artifacts preserve traceability without becoming runtime
+     * artifacts.
+     *
+     * Example:
+     * "declarationMap": true
      */
     "declarationMap": true,
 
     /**
-     * IsolatedDeclarations: Documented deviation from the canonical producer
-     * reference. This repository is a private MCP server whose contracts are
+     * Description:
+     * Documented deviation from the canonical producer reference: this
+     * repository is a private MCP server whose contracts are
      * zod-inference-driven and whose real declaration artifact is owned by
-     * tsdown; this producer is a validation lane only. Full compliance would
-     * require manual annotations across the entire schema surface for zero
-     * delivery value. Composite graph validation does not require this flag.
+     * tsdown; this producer is a validation lane only.
+     *
+     * Architectural decision:
+     * Full compliance would require manual annotations across the entire
+     * schema surface for zero delivery value. Composite graph validation does
+     * not require this flag.
+     *
+     * Example:
+     * "isolatedDeclarations": false
      */
     "isolatedDeclarations": false,
 
     /**
-     * SourceMap: This lane emits declarations only and owns no JavaScript maps.
+     * Description:
+     * Disables JavaScript source-map output.
+     *
+     * Architectural decision:
+     * This lane emits declarations only and therefore owns no JavaScript maps.
+     *
+     * Example:
+     * "sourceMap": false
      */
     "sourceMap": false,
 
     /**
-     * OutDir: Validation declarations live outside the runtime distribution.
+     * Description:
+     * Places validation declarations outside runtime distribution output.
+     *
+     * Architectural decision:
+     * Internal build artifacts must not be exposed as deployable application
+     * files.
+     *
+     * Example:
+     * "outDir": "./.tsbuild/typecheck"
      */
     "outDir": "./.tsbuild/typecheck",
 
     /**
-     * TsBuildInfoFile: Incremental build state stays in the internal build area.
+     * Description:
+     * Places incremental typecheck build state under the internal build area.
+     *
+     * Architectural decision:
+     * Build state remains separate from runtime and package delivery artifacts.
+     *
+     * Example:
+     * "tsBuildInfoFile": "./.tsbuild/tsconfig.typecheck.tsbuildinfo"
      */
     "tsBuildInfoFile": "./.tsbuild/tsconfig.typecheck.tsbuildinfo"
   },
 
   /**
-   * Include: Only implementation source enters the graph-validation producer;
-   * consumer test source retains separate ownership.
+   * Description:
+   * Includes only implementation source in the graph-validation producer.
+   *
+   * Architectural decision:
+   * Consumer test source retains separate ownership and cannot enter the
+   * producer program by accident.
+   *
+   * Example:
+   * "include": ["src/**\/*.ts"]
    */
   "include": ["src/**/*.ts"]
 }

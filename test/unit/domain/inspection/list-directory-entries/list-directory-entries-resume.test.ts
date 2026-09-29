@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -634,5 +635,201 @@ describe("list_directory_entries resume lifecycle", () => {
         store,
       ),
     ).rejects.toThrow(`Narrow the requested root '${sandboxRootPath}'`);
+  });
+
+  it("closes a preview-first base pass truthfully when a directory frame must be discarded", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    const doomedDirectoryPath = join(sandboxRootPath, "zz-doomed");
+    await mkdir(doomedDirectoryPath, { recursive: true });
+    await writeFile(join(doomedDirectoryPath, "hidden.txt"), "hidden");
+    await writeFile(join(sandboxRootPath, "aaa.txt"), "aaa");
+
+    mockedAssertTraversalRuntimeBudget.mockImplementation((toolName: string, state: { visitedDirectories: number }) => {
+      // The candidate-workload probe runs under its own tool name and passes through. The
+      // 'zz-doomed' directory sorts last beneath the root and vanishes at its child frame's
+      // directory visit — after the entry was materialized, before its content is read — so the
+      // collector must record a frontier discard instead of silently dropping the frame.
+      if (toolName !== "list_directory_entries") {
+        return;
+      }
+
+      if (state.visitedDirectories === 3) {
+        rmSync(doomedDirectoryPath, { recursive: true, force: true });
+      }
+    });
+
+    const result = await getListDirectoryEntriesResult(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      true,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      [sandboxRootPath],
+      activeStore,
+    );
+
+    expect(result.resume.resumable).toBe(false);
+    expect(result.resume.resumeToken).toBeNull();
+    expect(result.frontierReconciliation.status).toBe("diverged");
+    expect(result.frontierReconciliation.discardedDirectories).toEqual([
+      { requestedPath: sandboxRootPath, directoryRelativePath: "zz-doomed" },
+    ]);
+    expect(result.sessionDelivery).toEqual({
+      continuationPass: false,
+      previouslyDeliveredCount: 0,
+      sessionTotalCount: 4,
+    });
+    expect(result.roots[0]?.entries.map((entry) => entry.path)).toEqual([
+      "aaa.txt",
+      "nested",
+      "nested/sample.txt",
+      "zz-doomed",
+    ]);
+
+    // Recreate the discarded directory so the formatted handler drive replays the same seam.
+    await mkdir(doomedDirectoryPath, { recursive: true });
+    await writeFile(join(doomedDirectoryPath, "hidden.txt"), "hidden");
+
+    const output = await handleListDirectoryEntries(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      true,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      [sandboxRootPath],
+      activeStore,
+    );
+
+    expect(output).toContain("Directory-listing session closed without completing:");
+    expect(output).toContain(`First discard: 'zz-doomed' beneath root '${sandboxRootPath}'.`);
+    expect(output).not.toContain("completion finished");
+  });
+
+  it("cancels the persisted session truthfully when a resume pass discards a directory frame", async () => {
+    const activeStore = store;
+
+    if (activeStore === undefined) {
+      throw new Error("Expected the resume session store to be initialized.");
+    }
+
+    const doomedDirectoryPath = join(sandboxRootPath, "zz-doomed");
+    await mkdir(doomedDirectoryPath, { recursive: true });
+    await writeFile(join(doomedDirectoryPath, "hidden.txt"), "hidden");
+    await writeFile(join(sandboxRootPath, "aaa.txt"), "aaa");
+    await writeFile(join(sandboxRootPath, "bbb.txt"), "bbb");
+
+    let budgetExhaustionArmed = true;
+
+    mockedAssertTraversalRuntimeBudget.mockImplementation((toolName: string, state: { visitedEntries: number; visitedDirectories: number }) => {
+      // The candidate-workload probe runs under its own tool name and passes through. The base
+      // pass aborts at the third entry visit; on the disarmed resume pass the 'zz-doomed'
+      // directory sorts last beneath the root and vanishes at its child frame's directory visit —
+      // after the entry was materialized, before its content is read.
+      if (toolName !== "list_directory_entries") {
+        return;
+      }
+
+      if (budgetExhaustionArmed && state.visitedEntries >= 3) {
+        throw new TraversalRuntimeBudgetExceededError(
+          "Traversal runtime budget exhausted for the current listing pass.",
+          "list_directory_entries",
+          "traversal entries visited",
+          state.visitedEntries,
+          2,
+          "entries",
+        );
+      }
+
+      if (!budgetExhaustionArmed && state.visitedDirectories === 2) {
+        rmSync(doomedDirectoryPath, { recursive: true, force: true });
+      }
+    });
+
+    const baseResult = await getListDirectoryEntriesResult(
+      undefined,
+      undefined,
+      [sandboxRootPath],
+      true,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      [sandboxRootPath],
+      activeStore,
+    );
+
+    expect(baseResult.resume.resumable).toBe(true);
+    expect(baseResult.roots[0]?.entries.map((entry) => entry.path)).toEqual(["aaa.txt", "bbb.txt"]);
+
+    const resumeToken = baseResult.resume.resumeToken;
+
+    if (resumeToken === null) {
+      throw new Error("Expected an active resume token after the preview-first base pass.");
+    }
+
+    budgetExhaustionArmed = false;
+
+    const resumeResult = await getListDirectoryEntriesResult(
+      resumeToken,
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      [],
+      true,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      [sandboxRootPath],
+      activeStore,
+    );
+
+    expect(resumeResult.resume.resumable).toBe(false);
+    expect(resumeResult.resume.resumeToken).toBeNull();
+    expect(resumeResult.frontierReconciliation.status).toBe("diverged");
+    expect(resumeResult.frontierReconciliation.discardedDirectories).toEqual([
+      { requestedPath: sandboxRootPath, directoryRelativePath: "zz-doomed" },
+    ]);
+    expect(resumeResult.sessionDelivery).toEqual({
+      continuationPass: true,
+      previouslyDeliveredCount: 2,
+      sessionTotalCount: 5,
+    });
+
+    // Recreate the discarded directory so the formatted handler drive replays the same seam.
+    await mkdir(doomedDirectoryPath, { recursive: true });
+    await writeFile(join(doomedDirectoryPath, "hidden.txt"), "hidden");
+
+    const terminalOutput = await handleListDirectoryEntries(
+      resumeToken,
+      INSPECTION_RESUME_MODES.NEXT_CHUNK,
+      [],
+      true,
+      DEFAULT_FILE_SYSTEM_ENTRY_METADATA_SELECTION,
+      [],
+      [],
+      false,
+      [sandboxRootPath],
+      activeStore,
+    );
+
+    expect(terminalOutput).toContain("Directory-listing session closed without completing:");
+    expect(terminalOutput).not.toContain("completion finished");
+    expect(
+      activeStore.loadActiveSession(
+        resumeToken,
+        "list_directory_entries",
+        "list_directory_entries",
+      ),
+    ).toBeNull();
   });
 });
