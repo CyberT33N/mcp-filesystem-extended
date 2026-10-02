@@ -35,6 +35,10 @@ import {
 } from "@domain/shared/guardrails/traversal-preview-lane";
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
+  buildTraversalAdmissionProjection,
+  type TraversalAdmissionProjection,
+} from "@domain/shared/guardrails/traversal-admission-projection";
+import {
   INSPECTION_CONTENT_OPERATION_LITERALS,
   type InspectionContentTextEncoding,
   resolveInspectionContentOperationCapability,
@@ -938,6 +942,15 @@ export async function getSearchFixedStringPathResult(
   options: GetSearchFixedStringPathResultOptions,
 ): Promise<SearchFixedStringPathResult & {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+  /**
+   * Per-request workload projection derived from this root's bounded candidate-workload probe.
+   *
+   * @remarks
+   * `artifact_projection_only` birth-admission evidence for the admission envelope; not part
+   * of the public per-root result surface. Absent on resume passes (which never re-run the
+   * blocking probe) and on explicit file scopes (which run no probe).
+   */
+  admissionProjection: TraversalAdmissionProjection | null;
   nextContinuationState: SearchFixedStringRootContinuationState | null;
 }> {
   const {
@@ -1034,6 +1047,17 @@ export async function getSearchFixedStringPathResult(
           taskBackedExecutionSupported: false,
         },
       });
+  const admissionProjection = candidateWorkloadEvidence === null
+    ? null
+    : buildTraversalAdmissionProjection({
+        candidateWorkloadEvidence,
+        executionCostModel: {
+          executionTimeCostMultiplier:
+            TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.LITERAL_SEARCH.executionTimeCostMultiplier,
+          estimatedPerCandidateFileCostMs:
+            SEARCH_FAMILY_FIXED_STRING_ESTIMATED_PER_CANDIDATE_FILE_COST_MS,
+        },
+      });
   const previewFirstAdmissionActive =
     traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST;
   const completeResultRequested =
@@ -1096,6 +1120,7 @@ export async function getSearchFixedStringPathResult(
       stopReason: null,
       stopMessage: null,
       admissionOutcome: traversalAdmissionDecision.outcome,
+      admissionProjection,
       nextContinuationState: null,
     };
   }
@@ -1144,6 +1169,7 @@ export async function getSearchFixedStringPathResult(
       stopReason: fileScopeStopState.stopReason,
       stopMessage: fileScopeStopState.stopMessage,
       admissionOutcome: traversalAdmissionDecision.outcome,
+      admissionProjection,
       nextContinuationState,
     };
   }
@@ -1654,6 +1680,7 @@ export async function getSearchFixedStringPathResult(
     stopReason: rootStopState.stopReason,
     stopMessage: rootStopState.stopMessage,
     admissionOutcome: traversalAdmissionDecision.outcome,
+    admissionProjection,
     nextContinuationState,
     ...(aliasReferenceEvents.length > 0 ? { aliasReferences: aliasReferenceEvents } : {}),
   };

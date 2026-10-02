@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+import type { TraversalAdmissionProjection } from "@domain/shared/guardrails/traversal-admission-projection";
+import { TraversalAdmissionProjectionSchema } from "@domain/shared/guardrails/traversal-admission-projection";
+
 /**
  * Public request field that resumes one persisted server-owned inspection session.
  */
@@ -181,6 +184,18 @@ export interface InspectionResumeAdmission {
    * First-class scope-reduction guidance that callers may use instead of resume.
    */
   scopeReductionGuidanceText: string | null;
+
+  /**
+   * Per-request workload projection derived from the bounded candidate-workload probe.
+   *
+   * @remarks
+   * Optional additive birth-admission evidence: present when the current request's admission
+   * collected probe evidence (base requests), absent on resume passes, which never re-run the
+   * blocking probe. The projection is `artifact_projection_only`: it mirrors the server-bound
+   * probe truth so callers can size the workload before any continuation, narrowing, or
+   * delegation decision. It is never an escalation, planning, or spawn authority by itself.
+   */
+  projection?: TraversalAdmissionProjection;
 }
 
 /**
@@ -380,6 +395,7 @@ export const InspectionResumeAdmissionSchema = z.object({
   ]),
   guidanceText: z.string().nullable(),
   scopeReductionGuidanceText: z.string().nullable(),
+  projection: TraversalAdmissionProjectionSchema.optional(),
 });
 
 /**
@@ -509,14 +525,19 @@ function createEmptyResumeMetadata(): InspectionResumeMetadata {
 /**
  * Builds the canonical inline response envelope when no persisted resume session is active.
  *
+ * @param projection - Optional per-request workload projection derived from the bounded
+ * candidate-workload probe; attached when the current admission collected probe evidence.
  * @returns Shared inline admission-plus-resume metadata with no active session handle.
  */
-export function createInlineResumeEnvelope(): InspectionResumeEnvelope {
+export function createInlineResumeEnvelope(
+  projection?: TraversalAdmissionProjection | null,
+): InspectionResumeEnvelope {
   return {
     admission: {
       outcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
       guidanceText: null,
       scopeReductionGuidanceText: null,
+      ...(projection != null ? { projection } : {}),
     },
     resume: createEmptyResumeMetadata(),
   };
@@ -532,6 +553,8 @@ export function createInlineResumeEnvelope(): InspectionResumeEnvelope {
  * @see {@link InspectionResumeAdmission.guidanceText} for the full additive continuation semantics.
  * @param scopeReductionGuidanceText - First-class narrowing guidance surfaced alongside resume.
  * @param resume - Active persisted resume metadata when the response remains resumable.
+ * @param projection - Optional per-request workload projection derived from the bounded
+ * candidate-workload probe; attached when the current admission collected probe evidence.
  * @returns Shared admission-plus-resume envelope for the current response.
  */
 export function createResumeEnvelope(
@@ -541,6 +564,7 @@ export function createResumeEnvelope(
   resume:
     | Omit<InspectionResumeMetadata, "resumable">
     | null,
+  projection?: TraversalAdmissionProjection | null,
 ): InspectionResumeEnvelope {
   if (resume === null || resume.resumeToken === null) {
     return {
@@ -548,6 +572,7 @@ export function createResumeEnvelope(
         outcome,
         guidanceText,
         scopeReductionGuidanceText,
+        ...(projection != null ? { projection } : {}),
       },
       resume: {
         ...createEmptyResumeMetadata(),
@@ -562,6 +587,7 @@ export function createResumeEnvelope(
       outcome,
       guidanceText,
       scopeReductionGuidanceText,
+      ...(projection != null ? { projection } : {}),
     },
     resume: {
       ...resume,
@@ -581,6 +607,8 @@ export function createResumeEnvelope(
  * @param guidanceText - Server-owned guidance for the current resumable state.
  * @param scopeReductionGuidanceText - First-class narrowing guidance surfaced alongside resume.
  * @param outcome - Canonical lane outcome for the current response.
+ * @param projection - Optional per-request workload projection derived from the bounded
+ * candidate-workload probe; attached when the current admission collected probe evidence.
  * @returns Shared admission-plus-resume envelope for one active persisted session.
  */
 export function createPersistedResumeEnvelope(
@@ -592,6 +620,7 @@ export function createPersistedResumeEnvelope(
   guidanceText: string,
   scopeReductionGuidanceText: string | null,
   outcome: InspectionResumeAdmissionOutcome,
+  projection?: TraversalAdmissionProjection | null,
 ): InspectionResumeEnvelope {
   return createResumeEnvelope(outcome, guidanceText, scopeReductionGuidanceText, {
     resumeToken,
@@ -599,7 +628,7 @@ export function createPersistedResumeEnvelope(
     expiresAt,
     supportedResumeModes: [...supportedResumeModes],
     recommendedResumeMode,
-  });
+  }, projection);
 }
 
 /**

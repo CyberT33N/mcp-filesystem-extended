@@ -18,6 +18,18 @@ import {
 
 const TOOL_DESCRIPTION_NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
 
+/**
+ * Shared qualitative capability cue for the preview-capable discovery and search families.
+ *
+ * @remarks
+ * Single source of truth for the one-sentence admission-projection awareness line: it names the
+ * machine-readable projection surface without carrying any numeric limit, threshold, or probe
+ * internal. Exact projection semantics live in the `admission.projection` envelope field; probe
+ * mechanics stay internal per the public limit disclosure governance.
+ */
+const ADMISSION_PROJECTION_CAPABILITY_CUE =
+  "The admission envelope may carry a per-request workload projection so callers can size broad workloads before any continuation or narrowing decision. ";
+
 function formatToolDescriptionInteger(value: number): string {
   return TOOL_DESCRIPTION_NUMBER_FORMATTER.format(value);
 }
@@ -55,6 +67,7 @@ export function buildListDirectoryEntriesToolDescription(
     + "Required `type` and `size` are always included, while grouped timestamp and permission metadata can be requested explicitly. "
     + `Inline and \`next-chunk\` text delivery remain bounded by the discovery-family response cap of ${formatToolDescriptionCharacterLimit(DISCOVERY_RESPONSE_CAP_CHARS)}, while additive \`complete-result\` continuation follows the shared global fuse instead of that family cap. `
     + "Valid broad listing workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken`; no separate continuation endpoint exists. "
+    + `${ADMISSION_PROJECTION_CAPABILITY_CUE}`
     + `${structuredContinuationAuthorityDescription} `
     + "Scope reduction remains a first-class alternative: narrow roots, choose a deeper root, or set `recursive = false` when a shallow listing is sufficient. "
     + `${listDirectoryEntriesTextSurfacingDescription} `
@@ -77,6 +90,7 @@ export function buildFindPathsByNameToolDescription(
     + "Use this tool for path discovery, not for searching file contents. "
     + `Inline and \`next-chunk\` text delivery remain bounded by the discovery-family response cap of ${formatToolDescriptionCharacterLimit(DISCOVERY_RESPONSE_CAP_CHARS)}. Additive \`complete-result\` continuation follows the shared global fuse instead of that family cap. `
     + "Valid broad discovery workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. "
+    + `${ADMISSION_PROJECTION_CAPABILITY_CUE}`
     + `${structuredContinuationAuthorityDescription} `
     + "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. "
     + "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. "
@@ -95,6 +109,7 @@ export function buildFindFilesByGlobToolDescription(
     + "Use this tool when the selection is expressed in glob syntax rather than plain name matching or regex content search. "
     + `Inline and \`next-chunk\` text delivery remain bounded by the discovery-family response cap of ${formatToolDescriptionCharacterLimit(DISCOVERY_RESPONSE_CAP_CHARS)}. Additive \`complete-result\` continuation follows the shared global fuse instead of that family cap. `
     + "Valid broad discovery workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint. "
+    + `${ADMISSION_PROJECTION_CAPABILITY_CUE}`
     + `${structuredContinuationAuthorityDescription} `
     + "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. "
     + "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. "
@@ -113,6 +128,7 @@ export function buildSearchFileContentsByRegexToolDescription(
     + "Use this tool for content matching, not for file-name or glob matching. "
     + `Inline and \`next-chunk\` text delivery remain bounded by the regex-search family response cap of ${formatToolDescriptionCharacterLimit(REGEX_SEARCH_RESPONSE_CAP_CHARS)}. Additive \`complete-result\` continuation follows the shared global fuse instead of that family cap. `
     + "Explicit large text-compatible file scopes may proceed to the shared regex-search lane after content-state eligibility succeeds, while broad recursive workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while structurally unsafe patterns, unsupported surfaces, and recursive workloads that still exceed the server-owned lane budgets continue to refuse. "
+    + `${ADMISSION_PROJECTION_CAPABILITY_CUE}`
     + `${structuredContinuationAuthorityDescription} `
     + "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. "
     + "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. "
@@ -131,6 +147,7 @@ export function buildSearchFileContentsByFixedStringToolDescription(
     + "Use this tool for literal content matching, not for regex content matching, file-name matching, or glob matching. "
     + `Inline and \`next-chunk\` text delivery remain bounded by the fixed-string-search family response cap of ${formatToolDescriptionCharacterLimit(FIXED_STRING_SEARCH_RESPONSE_CAP_CHARS)}. Additive \`complete-result\` continuation follows the shared global fuse instead of that family cap. `
     + "Explicit large text-compatible file scopes may proceed to the shared fixed-string-search lane after content-state eligibility succeeds, while broad recursive workloads may degrade into preview-first delivery that keeps primary result data complete in `content.text`. When more data remains, additive `admission` and `resume` metadata support same-endpoint resume through `resumeToken` on this endpoint, while unsupported surfaces and recursive workloads that still exceed the server-owned lane budgets continue to refuse. "
+    + `${ADMISSION_PROJECTION_CAPABILITY_CUE}`
     + `${structuredContinuationAuthorityDescription} `
     + "This preview-capable family supports `resumeMode = 'next-chunk'` for bounded inspection and `resumeMode = 'complete-result'` for a server-owned completion attempt without bypassing hard caps. "
     + "Resume only when `structuredContent.resume.resumable` is true and a non-null `resumeToken` is present, using the same endpoint and only that token plus the desired `resumeMode`. "

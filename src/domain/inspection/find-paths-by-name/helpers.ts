@@ -11,6 +11,10 @@ import {
 } from "@domain/shared/guardrails/traversal-workload-admission";
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
+  buildTraversalAdmissionProjection,
+  type TraversalAdmissionProjection,
+} from "@domain/shared/guardrails/traversal-admission-projection";
+import {
   assertTraversalRuntimeBudget,
   COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
   createTraversalRuntimeBudgetState,
@@ -62,6 +66,16 @@ export interface SearchFilesResult {
    * consumers never re-derive or default the outcome downstream.
    */
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+
+  /**
+   * Per-request workload projection derived from the bounded candidate-workload probe.
+   *
+   * @remarks
+   * `artifact_projection_only` birth-admission evidence: it mirrors the probe truth for the
+   * caller-facing admission envelope and never escalates, plans, or spawns by itself.
+   */
+  admissionProjection: TraversalAdmissionProjection | null;
+
   nextContinuationState?: FindPathsByNameContinuationState | null;
 }
 
@@ -196,6 +210,16 @@ export async function searchFiles(
       traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(rootPath),
     );
   }
+
+  const admissionProjection = buildTraversalAdmissionProjection({
+    candidateWorkloadEvidence,
+    executionCostModel: {
+      executionTimeCostMultiplier:
+        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.executionTimeCostMultiplier,
+      estimatedPerCandidateFileCostMs:
+        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.estimatedPerCandidateFileCostMs,
+    },
+  });
   const validatedRootPath = traversalPreflightContext.rootEntry.validPath;
   const traversalScopePolicyResolution = traversalPreflightContext.traversalScopePolicyResolution;
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
@@ -355,6 +379,7 @@ export async function searchFiles(
     truncated,
     ...(symlinkMatches.length > 0 ? { symlinkMatches } : {}),
     admissionOutcome: traversalAdmissionDecision.outcome,
+    admissionProjection,
     nextContinuationState,
   };
 }

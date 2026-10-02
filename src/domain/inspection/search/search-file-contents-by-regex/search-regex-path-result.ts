@@ -43,6 +43,10 @@ import {
   shouldStopTraversalPreviewLane,
 } from "@domain/shared/guardrails/traversal-preview-lane";
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
+import {
+  buildTraversalAdmissionProjection,
+  type TraversalAdmissionProjection,
+} from "@domain/shared/guardrails/traversal-admission-projection";
 import type { PatternClassification } from "@domain/shared/search/pattern-classifier";
 import { resolveSearchExecutionPolicy, type SearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import {
@@ -1421,6 +1425,15 @@ export async function getSearchRegexPathResult(
   options: GetSearchRegexPathResultOptions,
 ): Promise<SearchRegexPathResult & {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+  /**
+   * Per-request workload projection derived from this root's bounded candidate-workload probe.
+   *
+   * @remarks
+   * `artifact_projection_only` birth-admission evidence for the admission envelope; not part
+   * of the public per-root result surface. Absent on resume passes (which never re-run the
+   * blocking probe) and on explicit file scopes (which run no probe).
+   */
+  admissionProjection: TraversalAdmissionProjection | null;
   nextContinuationState: SearchRegexRootContinuationState | null;
 }> {
   const {
@@ -1532,6 +1545,17 @@ export async function getSearchRegexPathResult(
           taskBackedExecutionSupported: false,
         },
       });
+  const admissionProjection = candidateWorkloadEvidence === null
+    ? null
+    : buildTraversalAdmissionProjection({
+        candidateWorkloadEvidence,
+        executionCostModel: {
+          executionTimeCostMultiplier:
+            TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.REGEX_SEARCH.executionTimeCostMultiplier,
+          estimatedPerCandidateFileCostMs:
+            SEARCH_FAMILY_REGEX_ESTIMATED_PER_CANDIDATE_FILE_COST_MS,
+        },
+      });
   const previewFirstAdmissionActive =
     traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST;
   const completeResultRequested =
@@ -1635,6 +1659,7 @@ export async function getSearchRegexPathResult(
       stopReason: null,
       stopMessage: null,
       admissionOutcome: traversalAdmissionDecision.outcome,
+      admissionProjection,
       nextContinuationState: null,
     };
   }
@@ -1687,6 +1712,7 @@ export async function getSearchRegexPathResult(
       stopReason: fileScopeStopState.stopReason,
       stopMessage: fileScopeStopState.stopMessage,
       admissionOutcome: traversalAdmissionDecision.outcome,
+      admissionProjection,
       nextContinuationState,
     };
   }
@@ -2295,6 +2321,7 @@ export async function getSearchRegexPathResult(
     stopReason: rootStopState.stopReason,
     stopMessage: rootStopState.stopMessage,
     admissionOutcome: traversalAdmissionDecision.outcome,
+    admissionProjection,
     nextContinuationState,
     ...(aliasReferenceEvents.length > 0 ? { aliasReferences: aliasReferenceEvents } : {}),
   };

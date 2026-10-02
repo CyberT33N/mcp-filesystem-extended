@@ -1,5 +1,9 @@
 import { REGEX_SEARCH_MAX_RESULTS_HARD_CAP } from "@domain/shared/guardrails/tool-guardrail-limits";
 import type { TraversalWorkloadAdmissionOutcome } from "@domain/shared/guardrails/traversal-workload-admission";
+import {
+  aggregateTraversalAdmissionProjections,
+  type TraversalAdmissionProjection,
+} from "@domain/shared/guardrails/traversal-admission-projection";
 import { resolveSearchExecutionPolicy } from "@domain/shared/search/search-execution-policy";
 import {
   createInlineResumeEnvelope,
@@ -139,6 +143,14 @@ interface GetSearchFixedStringResultOptions {
 
 type SearchFixedStringRootExecutionResult = SearchFixedStringPathResult & {
   admissionOutcome: TraversalWorkloadAdmissionOutcome;
+  /**
+   * Per-request workload projection derived from this root's bounded candidate-workload probe.
+   *
+   * @remarks
+   * `artifact_projection_only` birth-admission evidence for the admission envelope; not part
+   * of the public per-root result surface.
+   */
+  admissionProjection: TraversalAdmissionProjection | null;
   nextContinuationState: SearchFixedStringRootContinuationState | null;
 };
 
@@ -260,9 +272,12 @@ function buildSearchFixedStringContinuationEnvelope(
     (rootResult) =>
       rootResult.admissionOutcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
   );
+  const admissionProjection = aggregateTraversalAdmissionProjections(
+    roots.map((rootResult) => rootResult.admissionProjection),
+  );
 
   if (!previewFirstActive) {
-    return createInlineResumeEnvelope();
+    return createInlineResumeEnvelope(admissionProjection);
   }
 
   if (nextContinuationState === null) {
@@ -271,6 +286,7 @@ function buildSearchFixedStringContinuationEnvelope(
       guidanceText,
       scopeReductionGuidanceText,
       null,
+      admissionProjection,
     );
   }
 
@@ -300,6 +316,7 @@ function buildSearchFixedStringContinuationEnvelope(
       guidanceText,
       scopeReductionGuidanceText,
       admissionOutcome,
+      admissionProjection,
     );
   }
 
@@ -319,6 +336,7 @@ function buildSearchFixedStringContinuationEnvelope(
     guidanceText,
     scopeReductionGuidanceText,
     admissionOutcome,
+    admissionProjection,
   );
 }
 
@@ -536,6 +554,7 @@ export async function getSearchFixedStringResult(
             `This resume pass could not be executed to completion: ${errorMessage} The session remains active with its persisted frontier — resume the same request again or narrow the scope.`,
           ),
           admissionOutcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
+          admissionProjection: null,
           nextContinuationState: persistedRootContinuationState,
         });
         continue;
@@ -544,6 +563,7 @@ export async function getSearchFixedStringResult(
       roots.push({
         ...createFixedStringRootErrorResult(searchPath, errorMessage),
         admissionOutcome: INSPECTION_RESUME_ADMISSION_OUTCOMES.INLINE,
+        admissionProjection: null,
         nextContinuationState: null,
       });
     }

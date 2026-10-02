@@ -6,6 +6,10 @@ import {
 import { buildTraversalNarrowingGuidance } from "@domain/shared/guardrails/filesystem-preflight";
 import type { TraversalWorkloadAdmissionOutcome } from "@domain/shared/guardrails/traversal-workload-admission";
 import {
+  aggregateTraversalAdmissionProjections,
+  type TraversalAdmissionProjection,
+} from "@domain/shared/guardrails/traversal-admission-projection";
+import {
   createBaseSessionDeliverySummary,
   createContinuationSessionDeliverySummary,
   createInlineResumeEnvelope,
@@ -143,6 +147,14 @@ interface FindPathsByNameExecutionContext {
 
 interface FindPathsByNameRootExecutionResult extends FindPathsByNameRootResult {
   admissionOutcome: TraversalWorkloadAdmissionOutcome;
+  /**
+   * Per-request workload projection derived from this root's bounded candidate-workload probe.
+   *
+   * @remarks
+   * `artifact_projection_only` birth-admission evidence for the admission envelope; not part
+   * of the public per-root result surface.
+   */
+  admissionProjection: TraversalAdmissionProjection | null;
   nextContinuationState: FindPathsByNameContinuationState | null;
 }
 
@@ -364,9 +376,12 @@ function buildFindPathsByNameResumeEnvelope(
     (rootResult) =>
       rootResult.admissionOutcome === INSPECTION_RESUME_ADMISSION_OUTCOMES.PREVIEW_FIRST,
   );
+  const admissionProjection = aggregateTraversalAdmissionProjections(
+    rootResults.map((rootResult) => rootResult.admissionProjection),
+  );
 
   if (!previewFirstActive) {
-    return createInlineResumeEnvelope();
+    return createInlineResumeEnvelope(admissionProjection);
   }
 
   const effectiveResumeMode = resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK;
@@ -386,6 +401,7 @@ function buildFindPathsByNameResumeEnvelope(
       FIND_PATHS_BY_NAME_CONTINUATION_ADDITIVE_GUIDANCE,
       scopeReductionGuidanceText,
       null,
+      admissionProjection,
     );
   }
 
@@ -415,6 +431,7 @@ function buildFindPathsByNameResumeEnvelope(
       guidanceText,
       scopeReductionGuidanceText,
       admissionOutcome,
+      admissionProjection,
     );
   }
 
@@ -434,6 +451,7 @@ function buildFindPathsByNameResumeEnvelope(
     guidanceText,
     scopeReductionGuidanceText,
     admissionOutcome,
+    admissionProjection,
   );
 }
 
@@ -470,6 +488,7 @@ async function getFindPathsByNameRootResult(
       ? { symlinkMatches: result.symlinkMatches }
       : {}),
     admissionOutcome: result.admissionOutcome,
+    admissionProjection: result.admissionProjection,
     nextContinuationState: result.nextContinuationState ?? null,
   };
 }

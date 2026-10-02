@@ -274,6 +274,27 @@ They are part of the **internal stability model**, not the normal tool-call cons
 
 ---
 
+## Per-Request Workload Projections (Probe-Derived Envelope Evidence)
+
+Per-request, dynamic, caller-actionable workload projections are **not** Class D internals, even when they are derived from probe mechanics.
+
+The distinction is the probe **surface**, not the probe **origin**:
+
+| Surface | Class | Placement |
+|---|---|---|
+| Probe **mechanics** — budgets, ceilings, sampling windows, emergency admission internals | Class D | shared architecture conventions; never in tool text |
+| Probe **projection** — the per-request coarse-band workload picture (`band`, `confidence`, `probeTruncated`, honest `projectionUnavailable` markers) | caller-actionable per-request evidence | the machine-readable `admission` envelope (`admission.projection`), never tool text |
+
+**Policy:**
+
+- Per-request workload projections derived from the bounded candidate-workload probe are caller-actionable evidence and belong in the machine-readable `admission` envelope.
+- Probe budgets, ceilings, and sampling internals remain Class D and stay out of tool text.
+- The projection surface is `artifact_projection_only`: it mirrors probe truth, it never plans or escalates. Escalation, planning, and delegation decisions remain owned by the consuming governance layer, never by the envelope field.
+- Tool descriptions carry exactly one qualitative capability cue naming the projection surface; they never carry projection numbers, band thresholds, or probe internals.
+- Projections are honest Grobbänder: a field is either a coarse band with declared confidence and a `probeTruncated` lower-bound marker, or an explicit `projectionUnavailable` marker with a canonical reason. Fabricated precision is forbidden.
+
+---
+
 ## Endpoint-Family Disclosure Strategy
 
 ## 1. Read family — highest disclosure priority

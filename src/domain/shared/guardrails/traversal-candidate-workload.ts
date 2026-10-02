@@ -31,6 +31,15 @@ export interface TraversalCandidateWorkloadEvidence {
   matchedCandidateFiles: number;
 
   /**
+   * Number of entries the bounded probe visited before stopping.
+   *
+   * @remarks
+   * A documented lower bound when `probeTruncated` is true: the probe stopped before the full
+   * candidate surface was exhausted, so the total entry volume is at least this value.
+   */
+  visitedEntries: number;
+
+  /**
    * Projected caller-visible inline text characters derived from the bounded probe when a family
    * supplies a response-surface estimator.
    */
@@ -99,6 +108,7 @@ export async function collectTraversalCandidateWorkloadEvidence(
   const responseSurfaceEstimator = input.responseSurfaceEstimator ?? null;
   let estimatedCandidateBytes = 0;
   let matchedCandidateFiles = 0;
+  let visitedEntries = 0;
   let estimatedResponseCharsTotal = 0;
   let probeTruncated = false;
 
@@ -174,6 +184,7 @@ export async function collectTraversalCandidateWorkloadEvidence(
       }
 
       recordTraversalEntryVisit(traversalRuntimeBudgetState);
+      visitedEntries += 1;
 
       try {
         assertTraversalRuntimeBudget(
@@ -259,6 +270,7 @@ export async function collectTraversalCandidateWorkloadEvidence(
   return {
     estimatedCandidateBytes,
     matchedCandidateFiles,
+    visitedEntries,
     estimatedResponseChars:
       responseSurfaceEstimator === null ? null : estimatedResponseCharsTotal,
     probeElapsedMs: Date.now() - startedAtMs,

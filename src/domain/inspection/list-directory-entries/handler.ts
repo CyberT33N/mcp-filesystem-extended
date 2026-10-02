@@ -12,6 +12,11 @@ import {
 } from "@domain/shared/guardrails/traversal-workload-admission";
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
+  aggregateTraversalAdmissionProjections,
+  buildTraversalAdmissionProjection,
+  type TraversalAdmissionProjection,
+} from "@domain/shared/guardrails/traversal-admission-projection";
+import {
   assertTraversalRuntimeBudget,
   COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
   createTraversalRuntimeBudgetState,
@@ -207,6 +212,15 @@ interface ListDirectoryEntriesExecutionContext {
 
 interface ListDirectoryEntriesRootExecutionResult extends ListedDirectoryRoot {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+  /**
+   * Per-request workload projection derived from this root's bounded candidate-workload probe.
+   *
+   * @remarks
+   * `artifact_projection_only` birth-admission evidence for the admission envelope; not part
+   * of the public per-root result surface. Absent when the root was listed non-recursively,
+   * because the probe only runs for recursive traversals.
+   */
+  admissionProjection: TraversalAdmissionProjection | null;
   nextContinuationState: ListDirectoryEntriesRootContinuationState | null;
   /**
    * Directory frames discarded without delivery during this root's current pass.
@@ -531,9 +545,12 @@ function buildListDirectoryEntriesResumeEnvelope(
     (rootResult) =>
       rootResult.admissionOutcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST,
   );
+  const admissionProjection = aggregateTraversalAdmissionProjections(
+    rootResults.map((rootResult) => rootResult.admissionProjection),
+  );
 
   if (!previewFirstActive) {
-    return createInlineResumeEnvelope();
+    return createInlineResumeEnvelope(admissionProjection);
   }
 
   const effectiveResumeMode = resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK;
@@ -558,6 +575,7 @@ function buildListDirectoryEntriesResumeEnvelope(
       LIST_DIRECTORY_ENTRIES_FRONTIER_DIVERGENCE_GUIDANCE,
       scopeReductionGuidanceText,
       null,
+      admissionProjection,
     );
   }
 
@@ -567,6 +585,7 @@ function buildListDirectoryEntriesResumeEnvelope(
       LIST_DIRECTORY_ENTRIES_CONTINUATION_ADDITIVE_GUIDANCE,
       scopeReductionGuidanceText,
       null,
+      admissionProjection,
     );
   }
 
@@ -596,6 +615,7 @@ function buildListDirectoryEntriesResumeEnvelope(
       guidanceText,
       scopeReductionGuidanceText,
       admissionOutcome,
+      admissionProjection,
     );
   }
 
@@ -615,6 +635,7 @@ function buildListDirectoryEntriesResumeEnvelope(
     guidanceText,
     scopeReductionGuidanceText,
     admissionOutcome,
+    admissionProjection,
   );
 }
 
@@ -945,6 +966,18 @@ async function buildListedDirectoryRoot(
     );
   }
 
+  const admissionProjection = candidateWorkloadEvidence === null
+    ? null
+    : buildTraversalAdmissionProjection({
+        candidateWorkloadEvidence,
+        executionCostModel: {
+          executionTimeCostMultiplier:
+            TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.executionTimeCostMultiplier,
+          estimatedPerCandidateFileCostMs:
+            TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.estimatedPerCandidateFileCostMs,
+        },
+      });
+
   const traversalRuntimeBudgetState = createTraversalRuntimeBudgetState();
   const traversalNarrowingGuidance = buildTraversalNarrowingGuidance(requestedPath);
   const previewExecutionRuntimeBudgetLimits = {
@@ -977,6 +1010,7 @@ async function buildListedDirectoryRoot(
         requestedPath,
         entries: continuationChunk.entries,
         admissionOutcome: traversalAdmissionDecision.outcome,
+        admissionProjection,
         nextContinuationState: continuationChunk.nextContinuationState,
         discardedDirectoryRelativePaths: continuationChunk.discardedDirectoryRelativePaths,
       };
@@ -998,6 +1032,7 @@ async function buildListedDirectoryRoot(
       requestedPath,
       entries: previewChunk.entries,
       admissionOutcome: traversalAdmissionDecision.outcome,
+      admissionProjection,
       nextContinuationState: previewChunk.nextContinuationState,
       discardedDirectoryRelativePaths: previewChunk.discardedDirectoryRelativePaths,
     };
@@ -1015,6 +1050,7 @@ async function buildListedDirectoryRoot(
       traversalNarrowingGuidance,
     ),
     admissionOutcome: traversalAdmissionDecision.outcome,
+    admissionProjection,
     nextContinuationState: null,
     discardedDirectoryRelativePaths: [],
   };

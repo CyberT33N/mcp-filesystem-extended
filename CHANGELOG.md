@@ -10,11 +10,11 @@
 |-------|-------|
 | Scope Root | `.` |
 | Versioning Standard | `Semantic Versioning 2.0.0` |
-| Current Version | `1.2.2` |
-| Semver Class | `patch` |
+| Current Version | `1.3.0` |
+| Semver Class | `minor` |
 | Breaking Change | `no` |
 | Commit Scope | `filesystem-server` |
-| Current HEAD Commit Hash | `30fda80568e44273f9e2744903ab6893d330c59f` |
+| Current HEAD Commit Hash | `edd228908f1e6b2d7b2ddac1905988a24ac65815` (base of the change set; the release commit follows) |
 
 ---
 
@@ -23,6 +23,7 @@
 
 | Version | Date | Class | Breaking | Commit Type | HEAD Commit Hash | Summary | Commit Subject |
 |---------|------|-------|----------|-------------|------------------|---------|----------------|
+| `1.3.0` | `2026-10-02` | `minor` | `no` | `feat` | `edd228908f1e6b2d7b2ddac1905988a24ac65815` (base of the change set; the release commit follows) | `Expose the per-request candidate-workload probe evidence as an honest, additive, machine-readable admission projection (admission.projection: coarse volume bands with declared confidence, documented lower bounds through probeTruncated, and explicit projectionUnavailable markers) on the five volumenrisiko-bearing discovery and search endpoints, so consuming agents can size broad workloads before any continuation, narrowing, or delegation decision.` | `feat(filesystem-server): expose per-request admission workload projections on discovery and search endpoints` |
 | `1.2.2` | `2026-09-29` | `patch` | `no` | `fix` | `30fda80568e44273f9e2744903ab6893d330c59f` | `Execute every preview-capable discovery traversal exactly once per tool call (the registration callbacks re-executed the traversal for the text surface, which skipped every second chunk and double-counted the persisted delivery accounting), harden listing terminal framing with the fail-closed frontier-reconciliation gate, synchronize the workspace toolchain (pnpm 12.5.1, Node 26.10.0, TypeScript 6.0.3, vitest 5.0.1), and correct the stale ledger hash mapping.` | `fix(filesystem-server): execute discovery traversals once per call and close diverged listing sessions truthfully` |
 | `1.2.1` | `2026-09-27` | `patch` | `no` | `fix` | `fdcc8478c426380f34510af12555c945b37df778` | `Refuse explicit link-type/target mismatches fail-closed at creation time in create_symbolic_links.` | `fix(filesystem-server): refuse explicit link-type/target mismatches at creation` |
 | `1.2.0` | `2026-09-26` | `minor` | `no` | `feat` | `e1cedea42268ec5e4f7cbd6db422b9c7fbd33a31` | `Add the create_symbolic_links and verify_symbolic_links endpoints for portable batch symbolic-link creation and read-only integrity verification.` | `feat(filesystem-server): add create_symbolic_links and verify_symbolic_links endpoints` |
@@ -34,7 +35,41 @@
 ## 3. Current Version Entry
 [INTENT: SPECIFICATION]
 
-### 3.1 Version `1.2.2`
+### 3.1 Version `1.3.0`
+[INTENT: SPECIFICATION]
+
+**Classification**
+
+| Field | Value |
+|-------|-------|
+| Semver Class | `minor` |
+| Breaking Change | `no` |
+| Rationale | `Non-breaking additive feature: the five volumenrisiko-bearing discovery and search endpoints (list_directory_entries, find_paths_by_name, find_files_by_glob, search_file_contents_by_regex, search_file_contents_by_fixed_string) now carry an optional, honest, machine-readable workload projection (admission.projection) in the existing admission envelope, derived from the already-running bounded candidate-workload probe. Every previously valid request keeps its exact behavior; every previously valid response keeps its exact shape and gains at most one optional envelope field. No request contract changes.` |
+
+**Change Units**
+
+| ID | Category | Breaking | Summary | Affected Files | Description Alignment |
+|----|----------|----------|---------|----------------|----------------------|
+| CHG-001 | `feat` | `no` | `Expose the bounded candidate-workload probe evidence as a per-request admission projection: the new shared projection module derives honest coarse volume bands with declared confidence for candidate entries, candidate bytes, projected response characters, and modeled remaining execution duration; a truncated probe is disclosed as a documented lower bound through probeTruncated with low confidence, and non-measurable surfaces are disclosed through explicit projectionUnavailable markers (probe_truncated_hard, match_density_unknown, no_execution_cost_model) instead of fabricated precision. The projection is artifact_projection_only: it mirrors probe truth and never plans or escalates by itself. The probe additionally reports the measured visitedEntries count.` | `src/domain/shared/guardrails/traversal-admission-projection.ts`, `src/domain/shared/guardrails/traversal-candidate-workload.ts`, `src/domain/shared/resume/inspection-resume-contract.ts`, `src/domain/inspection/list-directory-entries/handler.ts`, `src/domain/inspection/find-paths-by-name/handler.ts`, `src/domain/inspection/find-paths-by-name/helpers.ts`, `src/domain/inspection/find-files-by-glob/handler.ts`, `src/domain/inspection/search/search-file-contents-by-regex/handler.ts`, `src/domain/inspection/search/search-file-contents-by-regex/search-regex-path-result.ts`, `src/domain/inspection/search/search-file-contents-by-fixed-string/handler.ts`, `src/domain/inspection/search/search-file-contents-by-fixed-string/search-fixed-string-path-result.ts` | The shared admission interface, the shared zod admission schema (and through it all five outputSchema surfaces), and the shared envelope builders carry the optional projection; the response text surface stays untouched. |
+| CHG-002 | `contract` | `no` | `Carry one qualitative capability cue per target tool description naming the projection surface without any numeric limit, threshold, or probe internal.` | `src/application/server/tool-registration-presets.ts` | The descriptions stay qualitative; no numeric limits move and no probe mechanics are disclosed. |
+| CHG-003 | `docs` | `no` | `Bind the projection-surface distinction in the disclosure governance (probe mechanics stay Class D internals; the per-request probe projection is caller-actionable envelope evidence with the artifact_projection_only naming), add the admission.projection row to the resume-architecture envelope table, and update the non-disclosure rationale of the five endpoint conventions to separate probe mechanics from probe projection.` | `conventions/guardrails/public-limit-disclosure-governance.md`, `conventions/resume-architecture/overview.md`, `src/domain/inspection/list-directory-entries/CONVENTIONS.md`, `src/domain/inspection/find-paths-by-name/CONVENTIONS.md`, `src/domain/inspection/find-files-by-glob/CONVENTIONS.md`, `src/domain/inspection/search/search-file-contents-by-regex/CONVENTIONS.md`, `src/domain/inspection/search/search-file-contents-by-fixed-string/CONVENTIONS.md` | The convention surfaces document the surface distinction once at the governance leaf and re-reference it endpoint-locally. |
+| CHG-004 | `test` | `no` | `Cover the projection module with unit tests at 100 percent white-box coverage of the change surface (band ladders, confidence semantics, truncation lower bounds, all unavailable reasons, aggregation, and schema rejection of fabricated precision) and pin the probe's visitedEntries evidence.` | `test/unit/domain/shared/guardrails/traversal-admission-projection.test.ts`, `test/unit/domain/shared/guardrails/traversal-candidate-workload.test.ts` | Coverage-measured execution proves the changed units in the unit project (981/981 tests green; the three core changed modules measure 100 percent statements, branches, functions, and lines). |
+
+**Migration / Consumer Impact**
+
+No migration is required. The projection is additive and optional: consumers that ignore `structuredContent.admission.projection` see identical behavior to 1.2.2, and text-surface consumers are unaffected because the projection is protocol metadata in the machine-readable envelope only. The nineteen untouched endpoints keep their exact contracts.
+
+**Commit Alignment**
+
+| Field | Value |
+|-------|-------|
+| Commit Subject | `feat(filesystem-server): expose per-request admission workload projections on discovery and search endpoints` |
+| Breaking Footer | `none` |
+| Current HEAD Commit Hash | `edd228908f1e6b2d7b2ddac1905988a24ac65815` (base of the change set; the release commit follows) |
+
+---
+
+### 3.2 Version `1.2.2`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -71,7 +106,7 @@ No migration is required. The fail-closed gate is corrective: only sessions that
 
 ---
 
-### 3.2 Version `1.2.1`
+### 3.3 Version `1.2.1`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -105,7 +140,7 @@ No migration is required. The guard is fail-closed and corrective: requests that
 
 ---
 
-### 3.3 Version `1.2.0`
+### 3.4 Version `1.2.0`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -142,7 +177,7 @@ Windows hosts must satisfy the documented readiness convention (Developer Mode o
 
 ---
 
-### 3.4 Version `1.1.0`
+### 3.5 Version `1.1.0`
 [INTENT: SPECIFICATION]
 
 **Classification**
@@ -177,7 +212,7 @@ Consumers gain the read-only `verify_file_byte_identity` tool for reference-base
 
 ---
 
-### 3.5 Version `1.0.0`
+### 3.6 Version `1.0.0`
 [INTENT: SPECIFICATION]
 
 **Classification**

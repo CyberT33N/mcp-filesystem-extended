@@ -106,6 +106,7 @@ describe("traversal candidate workload", () => {
 
     expect(result.estimatedCandidateBytes).toBe(12);
     expect(result.matchedCandidateFiles).toBe(2);
+    expect(result.visitedEntries).toBe(4);
     expect(result.estimatedResponseChars).toBe(42);
     expect(result.probeTruncated).toBe(false);
     expect(result.probeElapsedMs).toBeGreaterThanOrEqual(0);

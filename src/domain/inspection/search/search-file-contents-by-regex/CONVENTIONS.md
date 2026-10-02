@@ -196,7 +196,8 @@ This endpoint must not promote the following internal or broader server-owned li
 - the exact global fuse as the dominant optimization number
 - traversal emergency-runtime ceilings
 - dynamic lane-tier budgets
-- internal admission and probe internals
+- internal admission and probe mechanics (budgets, ceilings, and sampling windows)
+- the per-request probe PROJECTION is deliberately not internal: it is caller-actionable envelope evidence surfaced in `admission.projection` (`artifact_projection_only` — it mirrors probe truth, it never plans or escalates); see the public limit disclosure governance
 
 Those surfaces remain owned by shared architecture conventions because they are server-internal execution-protection mechanics rather than the primary caller-actionable contract.
 

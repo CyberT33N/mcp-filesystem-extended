@@ -35,6 +35,11 @@ import {
 } from "@domain/shared/resume/inspection-resume-frontier";
 import { collectTraversalCandidateWorkloadEvidence } from "@domain/shared/guardrails/traversal-candidate-workload";
 import {
+  aggregateTraversalAdmissionProjections,
+  buildTraversalAdmissionProjection,
+  type TraversalAdmissionProjection,
+} from "@domain/shared/guardrails/traversal-admission-projection";
+import {
   assertTraversalRuntimeBudget,
   COMPLETE_RESULT_TRAVERSAL_RUNTIME_BUDGET_LIMITS,
   createTraversalRuntimeBudgetState,
@@ -144,6 +149,14 @@ interface FindFilesByGlobDeliveredTotals {
 
 interface FindFilesByGlobRootExecutionResult extends FindFilesByGlobRootResult {
   admissionOutcome: typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES[keyof typeof TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES];
+  /**
+   * Per-request workload projection derived from this root's bounded candidate-workload probe.
+   *
+   * @remarks
+   * `artifact_projection_only` birth-admission evidence for the admission envelope; not part
+   * of the public per-root result surface.
+   */
+  admissionProjection: TraversalAdmissionProjection | null;
   nextContinuationState: FindFilesByGlobRootContinuationState | null;
 }
 
@@ -411,9 +424,12 @@ function buildFindFilesByGlobResumeEnvelope(
     (rootResult) =>
       rootResult.admissionOutcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST,
   );
+  const admissionProjection = aggregateTraversalAdmissionProjections(
+    rootResults.map((rootResult) => rootResult.admissionProjection),
+  );
 
   if (!previewFirstActive) {
-    return createInlineResumeEnvelope();
+    return createInlineResumeEnvelope(admissionProjection);
   }
 
   const effectiveResumeMode = resumeMode ?? INSPECTION_RESUME_MODES.NEXT_CHUNK;
@@ -433,6 +449,7 @@ function buildFindFilesByGlobResumeEnvelope(
       FIND_FILES_BY_GLOB_CONTINUATION_ADDITIVE_GUIDANCE,
       scopeReductionGuidanceText,
       null,
+      admissionProjection,
     );
   }
 
@@ -462,6 +479,7 @@ function buildFindFilesByGlobResumeEnvelope(
       guidanceText,
       scopeReductionGuidanceText,
       admissionOutcome,
+      admissionProjection,
     );
   }
 
@@ -481,6 +499,7 @@ function buildFindFilesByGlobResumeEnvelope(
     guidanceText,
     scopeReductionGuidanceText,
     admissionOutcome,
+    admissionProjection,
   );
 }
 
@@ -595,6 +614,16 @@ async function getFindFilesByGlobRootResult(
       traversalAdmissionDecision.guidanceText ?? buildTraversalNarrowingGuidance(searchPath),
     );
   }
+
+  const admissionProjection = buildTraversalAdmissionProjection({
+    candidateWorkloadEvidence,
+    executionCostModel: {
+      executionTimeCostMultiplier:
+        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.executionTimeCostMultiplier,
+      estimatedPerCandidateFileCostMs:
+        TRAVERSAL_ADMISSION_EXECUTION_COST_MODELS.DISCOVERY.estimatedPerCandidateFileCostMs,
+    },
+  });
 
   const completeResultRequested =
     traversalAdmissionDecision.outcome === TRAVERSAL_WORKLOAD_ADMISSION_OUTCOMES.PREVIEW_FIRST
@@ -760,6 +789,7 @@ async function getFindFilesByGlobRootResult(
     truncated: searchAborted || nextContinuationState !== null,
     ...(symlinkMatches.length > 0 ? { symlinkMatches } : {}),
     admissionOutcome: traversalAdmissionDecision.outcome,
+    admissionProjection,
     nextContinuationState,
   };
 }

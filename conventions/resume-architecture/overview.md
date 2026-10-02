@@ -35,6 +35,7 @@ The architecture gives every affected endpoint three first-class choices:
 | `admission.outcome` | Lane selected by the server: `inline`, `preview-first`, `completion-backed-required`, `narrowing-required` |
 | `admission.guidanceText` | Server-owned guidance for the current bounded delivery or completion state |
 | `admission.scopeReductionGuidanceText` | Scope-reduction guidance surfaced as a first-class alternative to resume |
+| `admission.projection` | Optional per-request workload projection (`artifact_projection_only`): coarse volume bands with declared confidence derived from the bounded candidate-workload probe, present on birth admissions that collected probe evidence and absent on resume passes |
 | `resume.resumeToken` | Opaque session handle when the response is resumable |
 | `resume.resumable` | Whether the caller may send a resume request for this response |
 | `resume.status` | Session lifecycle state: `active`, `completed`, `cancelled`, `expired` |
