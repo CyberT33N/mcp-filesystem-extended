@@ -34,12 +34,12 @@ Shared ownership boundaries that remain true across the workspace:
 
 | Concern | Root SSOT surface | Why it stays centralized |
 |---|---|---|
-| Guardrail layers and response budgets | [`CONVENTIONS.md`](CONVENTIONS.md) plus [`conventions/guardrails/overview.md`](conventions/guardrails/overview.md) | Cross-endpoint safety policy |
-| Public limit disclosure governance | [`public-limit-disclosure-governance.md`](conventions/guardrails/public-limit-disclosure-governance.md) | Global rule for what must be exposed in parameter descriptions, what must be exposed in tool descriptions, and what must remain internal |
-| Structured response authority | [`structured-content-contract.md`](conventions/mcp-response-contract/structured-content-contract.md) | Primary-result authority of `content.text` and machine-readable envelope ownership |
-| Resume architecture | [`conventions/resume-architecture/overview.md`](conventions/resume-architecture/overview.md) | Same-endpoint resume, additive completion, and continuation-envelope rules |
-| Content classification | [`conventions/content-classification/overview.md`](conventions/content-classification/overview.md) | Shared text/binary/hybrid eligibility and sampling contract |
-| Search platform | [`conventions/search-platform/overview.md`](conventions/search-platform/overview.md) | Explicit-file versus recursive search lanes and search-family governance |
+| Guardrail layers and response budgets | [`CONVENTIONS.md`](CONVENTIONS.md) plus [`conventions/guardrails/overview.md`](docs/conventions/guardrails/overview.md) | Cross-endpoint safety policy |
+| Public limit disclosure governance | [`public-limit-disclosure-governance.md`](docs/conventions/guardrails/public-limit-disclosure-governance.md) | Global rule for what must be exposed in parameter descriptions, what must be exposed in tool descriptions, and what must remain internal |
+| Structured response authority | [`structured-content-contract.md`](docs/conventions/mcp-response-contract/structured-content-contract.md) | Primary-result authority of `content.text` and machine-readable envelope ownership |
+| Resume architecture | [`conventions/resume-architecture/overview.md`](docs/conventions/resume-architecture/overview.md) | Same-endpoint resume, additive completion, and continuation-envelope rules |
+| Content classification | [`conventions/content-classification/overview.md`](docs/conventions/content-classification/overview.md) | Shared text/binary/hybrid eligibility and sampling contract |
+| Search platform | [`conventions/search-platform/overview.md`](docs/conventions/search-platform/overview.md) | Explicit-file versus recursive search lanes and search-family governance |
 | Read-surface split | [`CONVENTIONS.md`](CONVENTIONS.md) plus endpoint-local read descriptions | Public split between `read_files_with_line_numbers` and `read_file_content`, shared internal read-core SSOT |
 
 ---
@@ -146,7 +146,7 @@ When describing or modifying the system:
 
 - start with this root file for shared architecture only,
 - use `CONVENTIONS.md` for cross-endpoint rules and leaf-slice routing,
-- use [`public-limit-disclosure-governance.md`](conventions/guardrails/public-limit-disclosure-governance.md) when deciding whether a stable limit belongs in a parameter description, a tool description, or must remain internal,
+- use [`public-limit-disclosure-governance.md`](docs/conventions/guardrails/public-limit-disclosure-governance.md) when deciding whether a stable limit belongs in a parameter description, a tool description, or must remain internal,
 - descend into the endpoint-local `DESCRIPTION.md` for tool-specific architecture,
 - keep endpoint detail out of the root layer unless it is truly cross-endpoint,
 - describe only the current final target state, not historical migration narration.

@@ -447,7 +447,7 @@ function formatCountLinesPathOutput(
  * through the resume-session protocol, so only the global response fuse applies. For inline
  * responses the family-specific `DISCOVERY_RESPONSE_CAP_CHARS` cap applies instead.
  *
- * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the mode-aware cap rule.
+ * @see {@link docs/conventions/resume-architecture/guardrail-interaction.md} for the mode-aware cap rule.
  *
  * @param result - Structured per-path and aggregate line-count totals.
  * @param pattern - Optional regex used to count matching lines in addition to total lines.

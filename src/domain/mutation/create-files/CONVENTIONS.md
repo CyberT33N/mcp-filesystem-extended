@@ -10,7 +10,7 @@ This file is the endpoint-local single source of truth for `create_files` conven
 
 The workspace-level [`CONVENTIONS.md`](../../../../CONVENTIONS.md) is a TOC surface and should re-reference this local file instead of duplicating endpoint-specific detail.
 
-This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md).
 
 ---
 
@@ -143,8 +143,8 @@ Those surfaces remain owned by shared architecture conventions because they are 
 
 This endpoint re-references generic SSOT surfaces instead of redefining them:
 
-- [Guardrails Overview](../../../../conventions/guardrails/overview.md)
-- [MCP Client Governance](../../../../conventions/guardrails/mcp-client-governance.md)
+- [Guardrails Overview](../../../../docs/conventions/guardrails/overview.md)
+- [MCP Client Governance](../../../../docs/conventions/guardrails/mcp-client-governance.md)
 
 These shared documents own the cross-endpoint budget and guardrail model. This local file documents only how those rules apply to `create_files`.
 

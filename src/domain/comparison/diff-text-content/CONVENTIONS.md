@@ -10,7 +10,7 @@ This file is the endpoint-local single source of truth for `diff_text_content` c
 
 The workspace-level `CONVENTIONS.md` is a TOC surface. It should re-reference this local file instead of duplicating endpoint-specific detail.
 
-This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md).
 
 ---
 
@@ -144,9 +144,9 @@ Those behaviors belong to [`diff_files`](../diff-files/README.md).
 
 This endpoint re-references generic SSOT surfaces instead of redefining them:
 
-- [Guardrails Overview](../../../../conventions/guardrails/overview.md)
-- [MCP Client Governance](../../../../conventions/guardrails/mcp-client-governance.md)
-- [Structured Content Contract](../../../../conventions/mcp-response-contract/structured-content-contract.md)
+- [Guardrails Overview](../../../../docs/conventions/guardrails/overview.md)
+- [MCP Client Governance](../../../../docs/conventions/guardrails/mcp-client-governance.md)
+- [Structured Content Contract](../../../../docs/conventions/mcp-response-contract/structured-content-contract.md)
 
 These shared documents own the cross-endpoint guardrail model. This local file documents only how those rules apply to `diff_text_content`.
 

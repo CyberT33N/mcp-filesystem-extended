@@ -1,6 +1,6 @@
 # Guardrails Overview
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants.
 
 This document catalogs all guardrail layers in the MCP Filesystem Extended server, their placement in the execution stack, the concrete limits they enforce, and which endpoint families they govern.
 
@@ -23,7 +23,7 @@ The following table lists all guardrail layers from first to last execution posi
 
 ## Layer 1: Request Schema Caps
 
-**Source:** [`src/domain/shared/guardrails/tool-guardrail-limits.ts`](../../src/domain/shared/guardrails/tool-guardrail-limits.ts)
+**Source:** [`src/domain/shared/guardrails/tool-guardrail-limits.ts`](../../../src/domain/shared/guardrails/tool-guardrail-limits.ts)
 
 **Purpose:** Reject abusive or malformed request shapes before handler execution begins.
 
@@ -46,7 +46,7 @@ These caps are **schema-layer controls only**. They reject requests before any f
 
 ## Layer 2: Proactive Admission Decision
 
-**Source:** [`src/domain/shared/guardrails/traversal-workload-admission.ts`](../../src/domain/shared/guardrails/traversal-workload-admission.ts)
+**Source:** [`src/domain/shared/guardrails/traversal-workload-admission.ts`](../../../src/domain/shared/guardrails/traversal-workload-admission.ts)
 
 **Purpose:** Route broad recursive traversal requests into the correct execution lane before any traversal begins.
 
@@ -81,7 +81,7 @@ The tier is resolved from the detected `IoCapabilityProfile`. Inline entry and t
 
 ## Layer 3: Candidate Workload Probe
 
-**Source:** [`src/domain/shared/guardrails/traversal-candidate-workload.ts`](../../src/domain/shared/guardrails/traversal-candidate-workload.ts)
+**Source:** [`src/domain/shared/guardrails/traversal-candidate-workload.ts`](../../../src/domain/shared/guardrails/traversal-candidate-workload.ts)
 
 **Purpose:** Sample the candidate traversal workload before execution begins to supply conservative cost estimates to the admission layer.
 
@@ -99,7 +99,7 @@ The shared preflight soft-time ceiling is therefore calibrated at `4,500 ms`, no
 
 ## Layer 4: Preview-Lane Runtime Budget
 
-**Source:** [`src/domain/shared/guardrails/traversal-runtime-budget.ts`](../../src/domain/shared/guardrails/traversal-runtime-budget.ts)
+**Source:** [`src/domain/shared/guardrails/traversal-runtime-budget.ts`](../../../src/domain/shared/guardrails/traversal-runtime-budget.ts)
 
 **Purpose:** Enforce deterministic per-chunk boundaries during preview-first traversal so a bounded preview chunk can be delivered safely.
 
@@ -121,7 +121,7 @@ The breadth ceilings remain internal emergency stabilizers for pathological comp
 
 ## Layer 5: Family-Level Response Cap
 
-**Source:** [`src/domain/shared/guardrails/text-response-budget.ts`](../../src/domain/shared/guardrails/text-response-budget.ts) + [`src/domain/shared/guardrails/tool-guardrail-limits.ts`](../../src/domain/shared/guardrails/tool-guardrail-limits.ts)
+**Source:** [`src/domain/shared/guardrails/text-response-budget.ts`](../../../src/domain/shared/guardrails/text-response-budget.ts) + [`src/domain/shared/guardrails/tool-guardrail-limits.ts`](../../../src/domain/shared/guardrails/tool-guardrail-limits.ts)
 
 **Purpose:** Enforce per-family text-output ceilings that are tighter than the global fuse, to prevent any single family from consuming an unreasonable share of the caller's context window in a single inline or chunk response.
 
@@ -160,7 +160,7 @@ For non-resume endpoints (`read_files_with_line_numbers`, `diff_files`, mutation
 
 ## Layer 6: Global Response Fuse
 
-**Source:** [`src/application/server/filesystem-server.ts`](../../src/application/server/filesystem-server.ts)
+**Source:** [`src/application/server/filesystem-server.ts`](../../../src/application/server/filesystem-server.ts)
 
 **Purpose:** Non-bypassable final safety ceiling applied by the server shell to every successful tool response regardless of endpoint, family, or delivery mode.
 

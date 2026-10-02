@@ -20,7 +20,7 @@ It owns the rules for:
 
 The endpoint-local architecture description lives in [`DESCRIPTION.md`](./DESCRIPTION.md), and the concise developer-facing summary lives in [`README.md`](./README.md).
 
-This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md).
 
 ---
 

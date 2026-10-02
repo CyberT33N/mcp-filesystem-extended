@@ -8,28 +8,29 @@ This document is the entry point for the architecture conventions of this projec
  
 | Document | Covers |
 |---|---|
-| [Guardrails Overview](conventions/guardrails/overview.md) | All guardrail layers, their placement, limits, and scope |
-| [MCP Client Governance](conventions/guardrails/mcp-client-governance.md) | L1/L2 defense-in-depth model, response-family ceiling rationale with full limit inventory, and chunk-read governance contract |
-| [Public Limit Disclosure Governance](conventions/guardrails/public-limit-disclosure-governance.md) | Which limits belong in parameter descriptions, which belong in tool descriptions, which stay internal, and how endpoint-local re-references must specialize the policy |
-| [Resume Architecture Overview](conventions/resume-architecture/overview.md) | Resume-session model, delivery modes, endpoint families, and scope reduction |
-| [Resume Architecture Workflow](conventions/resume-architecture/workflow.md) | Step-by-step execution flow for each delivery mode |
-| [Guardrail–Resume Interaction](conventions/resume-architecture/guardrail-interaction.md) | Which guardrails apply in which mode, the mode-aware cap rule, and the global fuse as the non-bypassable floor |
-| [Resume Endpoint Schema Contract](conventions/resume-architecture/endpoint-schema-contract.md) | MCP SDK flat-schema constraint, required `superRefine` pattern, sentinel-check discipline, shared field builders, and affected endpoint list |
-| [Content Classification Overview](conventions/content-classification/overview.md) | Classifier states, decision tree, sampling strategy, endpoint integration, and invariants |
-| [Content Inspection Capability Matrix](conventions/content-classification/operation-capability-matrix.md) | Content-inspecting endpoint list, shared capability matrix, encoding-aware hybrid policy, and discovery-family exclusion |
-| [Schema Optionality Contract](conventions/content-classification/schema-optionality-contract.md) | Why optional string query fields must not carry `.default("")`, sentinel-check detection, and correct modeling |
-| [Structured Content Contract](conventions/mcp-response-contract/structured-content-contract.md) | Primary-result authority of `content.text`, additive structured mirroring, and continuation-guidance placement |
-| [Search Platform Overview](conventions/search-platform/overview.md) | Ugrep search architecture, endpoint-family search roles, explicit-file versus recursive lane model, and search/read/count boundaries |
-| [Search Platform Endpoint Lane Matrix](conventions/search-platform/endpoint-family-lane-matrix.md) | Complete affected endpoint matrix, lane capabilities, resume modes, refusal surfaces, and supported large-file behaviors |
-| [Search Platform Preflight and Hardgap Governance](conventions/search-platform/preflight-and-hardgap-governance.md) | Correct preflight ownership, recursive admission lanes, explicit-file search entry rules, and hardgap boundaries |
-| [Search Platform Threshold and Variable Registry](conventions/search-platform/threshold-and-variable-registry.md) | Canonical search-platform variables, family thresholds, hardgaps, sync caps, response caps, and their intended ownership |
+| [Guardrails Overview](docs/conventions/guardrails/overview.md) | All guardrail layers, their placement, limits, and scope |
+| [MCP Client Governance](docs/conventions/guardrails/mcp-client-governance.md) | L1/L2 defense-in-depth model, response-family ceiling rationale with full limit inventory, and chunk-read governance contract |
+| [Public Limit Disclosure Governance](docs/conventions/guardrails/public-limit-disclosure-governance.md) | Which limits belong in parameter descriptions, which belong in tool descriptions, which stay internal, and how endpoint-local re-references must specialize the policy |
+| [Resume Architecture Overview](docs/conventions/resume-architecture/overview.md) | Resume-session model, delivery modes, endpoint families, and scope reduction |
+| [Resume Architecture Workflow](docs/conventions/resume-architecture/workflow.md) | Step-by-step execution flow for each delivery mode |
+| [Guardrail–Resume Interaction](docs/conventions/resume-architecture/guardrail-interaction.md) | Which guardrails apply in which mode, the mode-aware cap rule, and the global fuse as the non-bypassable floor |
+| [Resume Endpoint Schema Contract](docs/conventions/resume-architecture/endpoint-schema-contract.md) | MCP SDK flat-schema constraint, required `superRefine` pattern, sentinel-check discipline, shared field builders, and affected endpoint list |
+| [Admission Projection Contract](docs/conventions/resume-architecture/admission-projection-contract.md) | The per-request workload projection: band vocabulary, calibration ownership, the no-raw-numbers rationale, forbidden patterns, and the tool-versus-orchestration contract split |
+| [Content Classification Overview](docs/conventions/content-classification/overview.md) | Classifier states, decision tree, sampling strategy, endpoint integration, and invariants |
+| [Content Inspection Capability Matrix](docs/conventions/content-classification/operation-capability-matrix.md) | Content-inspecting endpoint list, shared capability matrix, encoding-aware hybrid policy, and discovery-family exclusion |
+| [Schema Optionality Contract](docs/conventions/content-classification/schema-optionality-contract.md) | Why optional string query fields must not carry `.default("")`, sentinel-check detection, and correct modeling |
+| [Structured Content Contract](docs/conventions/mcp-response-contract/structured-content-contract.md) | Primary-result authority of `content.text`, additive structured mirroring, and continuation-guidance placement |
+| [Search Platform Overview](docs/conventions/search-platform/overview.md) | Ugrep search architecture, endpoint-family search roles, explicit-file versus recursive lane model, and search/read/count boundaries |
+| [Search Platform Endpoint Lane Matrix](docs/conventions/search-platform/endpoint-family-lane-matrix.md) | Complete affected endpoint matrix, lane capabilities, resume modes, refusal surfaces, and supported large-file behaviors |
+| [Search Platform Preflight and Hardgap Governance](docs/conventions/search-platform/preflight-and-hardgap-governance.md) | Correct preflight ownership, recursive admission lanes, explicit-file search entry rules, and hardgap boundaries |
+| [Search Platform Threshold and Variable Registry](docs/conventions/search-platform/threshold-and-variable-registry.md) | Canonical search-platform variables, family thresholds, hardgaps, sync caps, response caps, and their intended ownership |
 | [Inspection Search Family Conventions](src/domain/inspection/search/CONVENTIONS.md) | Search-family topology, preview-threshold philosophy, regex versus fixed-string differentiation, and the too-eager-preview problem |
 
 ---
 
 ## Endpoint-Local Conventions Index
 
-This root conventions file routes both shared convention leaveslices under [`conventions/`](conventions/) and endpoint-local [`CONVENTIONS.md`](src/domain/inspection/list-directory-entries/CONVENTIONS.md) surfaces.
+This root conventions file routes both shared convention leaveslices under [`docs/conventions/`](docs/conventions/) and endpoint-local [`CONVENTIONS.md`](src/domain/inspection/list-directory-entries/CONVENTIONS.md) surfaces.
 
 Shared cross-endpoint policy stays in the linked convention leaveslices above.
 Endpoint-specific policy stays in the linked endpoint-local convention files below.

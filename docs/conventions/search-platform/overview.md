@@ -1,9 +1,9 @@
 # Search Platform Overview
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the root conventions index.  
-> **Related guardrails:** See [`conventions/guardrails/overview.md`](../guardrails/overview.md) for the full guardrail stack.  
-> **Related resume model:** See [`conventions/resume-architecture/overview.md`](../resume-architecture/overview.md) for the shared resume-session architecture.
-> **Structured response authority:** See [`conventions/mcp-response-contract/structured-content-contract.md`](../mcp-response-contract/structured-content-contract.md) for the primary-result versus envelope contract.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the root conventions index.  
+> **Related guardrails:** See [`docs/conventions/guardrails/overview.md`](../guardrails/overview.md) for the full guardrail stack.  
+> **Related resume model:** See [`docs/conventions/resume-architecture/overview.md`](../resume-architecture/overview.md) for the shared resume-session architecture.
+> **Structured response authority:** See [`docs/conventions/mcp-response-contract/structured-content-contract.md`](../mcp-response-contract/structured-content-contract.md) for the primary-result versus envelope contract.
 
 ---
 

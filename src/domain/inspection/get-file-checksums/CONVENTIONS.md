@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `get_file_checksums`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the checksum-generation surface.
+Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices, especially [`public-limit-disclosure-governance.md`](../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the checksum-generation surface.
 
 ---
 

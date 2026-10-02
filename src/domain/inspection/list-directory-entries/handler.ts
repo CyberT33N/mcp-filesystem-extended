@@ -1071,8 +1071,8 @@ async function buildListedDirectoryRoot(
  * server-owned full completion (`complete-result`). Scope reduction is always a first-class
  * alternative to resuming.
  *
- * @see {@link conventions/resume-architecture/overview.md} for the resume-session model and delivery modes.
- * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the mode-aware response cap rule.
+ * @see {@link docs/conventions/resume-architecture/overview.md} for the resume-session model and delivery modes.
+ * @see {@link docs/conventions/resume-architecture/guardrail-interaction.md} for the mode-aware response cap rule.
  *
  * @param resumeToken - Opaque server-owned session handle from a prior preview-first or
  * completion-backed response. Absent on base requests.
@@ -1286,8 +1286,8 @@ export function finalizeListDirectoryEntriesTextOutput(
  * Applying the family cap unconditionally in `complete-result` mode is an architectural
  * legacy conflict. The mode-aware cap selection here is the correct target state.
  *
- * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the full mode-aware cap rule.
- * @see {@link conventions/guardrails/overview.md} for all guardrail layers and their effective scopes.
+ * @see {@link docs/conventions/resume-architecture/guardrail-interaction.md} for the full mode-aware cap rule.
+ * @see {@link docs/conventions/guardrails/overview.md} for all guardrail layers and their effective scopes.
  *
  * @param resumeToken - Opaque server-owned session handle from a prior preview-first or
  * completion-backed response. Absent on base requests.

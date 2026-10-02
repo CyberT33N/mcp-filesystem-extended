@@ -44,7 +44,7 @@ Wichtig ist dabei:
 
 ## Architektonische Entscheidung — Public Limit Disclosure Placement
 
-`count_lines` folgt der globalen Public-Limit-Disclosure-Governance aus [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md), aber mit einer count-family-spezifischen Ausprägung.
+`count_lines` folgt der globalen Public-Limit-Disclosure-Governance aus [`public-limit-disclosure-governance.md`](../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md), aber mit einer count-family-spezifischen Ausprägung.
 
 ### Parameter-description disclosure (erforderlich)
 

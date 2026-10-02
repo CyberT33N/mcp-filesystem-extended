@@ -4,7 +4,7 @@
 
 This file is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `read_files_with_line_numbers`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate the full global disclosure tree. It explains how that policy applies specifically to the batch full-read surface.
+Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices, especially [`public-limit-disclosure-governance.md`](../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate the full global disclosure tree. It explains how that policy applies specifically to the batch full-read surface.
 
 ---
 

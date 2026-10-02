@@ -149,7 +149,7 @@ async function readBoundedInspectionContentSample(
  * Reads the shared inspection sample for one validated file surface.
  *
  * @remarks
- * See {@link ../../../../conventions/content-classification/overview.md | Content Classification Architecture Overview}
+ * See {@link ../../../../docs/conventions/content-classification/overview.md | Content Classification Architecture Overview}
  * for the shared sampling contract that requires complete small-surface evidence and bounded
  * head/middle/tail evidence for large surfaces.
  *

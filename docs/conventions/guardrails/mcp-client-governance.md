@@ -1,6 +1,6 @@
 # MCP Client Governance — L1/L2 Defense-in-Depth, Limit Rationale, and Chunk-Read Policy
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants. See [`guardrails/overview.md`](./overview.md) for the execution-stack overview of all guardrail layers.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants. See [`guardrails/overview.md`](./overview.md) for the execution-stack overview of all guardrail layers.
 
 This document defines the two-layer governance model for MCP clients (LLM agents) interacting with this server, explains the calibration rationale for every response-family ceiling, and establishes the chunk-based reading pattern as the designated contract for oversized file access.
 
@@ -40,7 +40,7 @@ This is the preferred path. When L1 governance is functioning correctly, the ser
 
 ### Layer 2 — Server-Side Governance (MCP Server Hard-Gap)
 
-**Owner:** This MCP server via the endpoint-family guardrails in [`tool-guardrail-limits.ts`](../../src/domain/shared/guardrails/tool-guardrail-limits.ts).
+**Owner:** This MCP server via the endpoint-family guardrails in [`tool-guardrail-limits.ts`](../../../src/domain/shared/guardrails/tool-guardrail-limits.ts).
 
 **Mechanism:** A deterministic, context-agnostic hard ceiling applied before or after response serialization. The server cannot inspect the caller's live context occupancy. It enforces a calibrated static budget derived from the default model context window.
 

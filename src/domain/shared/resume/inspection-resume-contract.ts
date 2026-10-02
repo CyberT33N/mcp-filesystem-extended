@@ -175,8 +175,8 @@ export interface InspectionResumeAdmission {
    * from the root in `complete-result` mode is incorrect — the continuation payload is additive,
    * not a full re-delivery.
    *
-   * @see {@link conventions/resume-architecture/overview.md} for the full additive continuation rationale.
-   * @see {@link conventions/resume-architecture/workflow.md} for the step-by-step `complete-result` flow.
+   * @see {@link docs/conventions/resume-architecture/overview.md} for the full additive continuation rationale.
+   * @see {@link docs/conventions/resume-architecture/workflow.md} for the step-by-step `complete-result` flow.
    */
   guidanceText: string | null;
 

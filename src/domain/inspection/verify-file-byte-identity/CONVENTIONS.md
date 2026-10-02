@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `verify_file_byte_identity`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the byte-identity verification surface.
+Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail slices, especially [`public-limit-disclosure-governance.md`](../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the byte-identity verification surface.
 
 ---
 

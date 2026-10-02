@@ -1,8 +1,8 @@
 # Resume Architecture Workflow
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.  
-> **Overview:** [`conventions/resume-architecture/overview.md`](./overview.md) for endpoint families, session lifecycle, and contract surfaces.  
-> **Guardrail interaction:** [`conventions/resume-architecture/guardrail-interaction.md`](./guardrail-interaction.md) for mode-aware cap rules.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants.  
+> **Overview:** [`docs/conventions/resume-architecture/overview.md`](./overview.md) for endpoint families, session lifecycle, and contract surfaces.  
+> **Guardrail interaction:** [`docs/conventions/resume-architecture/guardrail-interaction.md`](./guardrail-interaction.md) for mode-aware cap rules.
 
 ---
 

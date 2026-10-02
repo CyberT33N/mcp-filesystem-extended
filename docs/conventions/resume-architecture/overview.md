@@ -1,9 +1,10 @@
 # Resume Architecture Overview
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.  
-> **Related:** [`conventions/guardrails/overview.md`](../guardrails/overview.md) for guardrail layers and limits.  
-> **Workflow:** [`conventions/resume-architecture/workflow.md`](./workflow.md) for step-by-step execution flows.  
-> **Guardrail interaction:** [`conventions/resume-architecture/guardrail-interaction.md`](./guardrail-interaction.md) for mode-aware cap rules.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants.  
+> **Related:** [`docs/conventions/guardrails/overview.md`](../guardrails/overview.md) for guardrail layers and limits.
+> **Related:** [`admission-projection-contract.md`](./admission-projection-contract.md) for the per-request workload projection contract.  
+> **Workflow:** [`docs/conventions/resume-architecture/workflow.md`](./workflow.md) for step-by-step execution flows.  
+> **Guardrail interaction:** [`docs/conventions/resume-architecture/guardrail-interaction.md`](./guardrail-interaction.md) for mode-aware cap rules.
 
 ---
 
@@ -43,7 +44,7 @@ The architecture gives every affected endpoint three first-class choices:
 | `resume.supportedResumeModes` | Which `resumeMode` values the endpoint accepts for the active session |
 | `resume.recommendedResumeMode` | Server hint for the most appropriate `resumeMode` |
 
-**Source:** [`src/domain/shared/resume/inspection-resume-contract.ts`](../../src/domain/shared/resume/inspection-resume-contract.ts)
+**Source:** [`src/domain/shared/resume/inspection-resume-contract.ts`](../../../src/domain/shared/resume/inspection-resume-contract.ts)
 
 ---
 
@@ -196,4 +197,4 @@ Preview-family cursor state must be **commit-based**. A traversal frontier may a
 
 Pre-advancing the frontier without a commit is forbidden. This ensures that resume replay never skips or duplicates entries.
 
-**Source:** [`src/domain/shared/resume/inspection-resume-frontier.ts`](../../src/domain/shared/resume/inspection-resume-frontier.ts)
+**Source:** [`src/domain/shared/resume/inspection-resume-frontier.ts`](../../../src/domain/shared/resume/inspection-resume-frontier.ts)

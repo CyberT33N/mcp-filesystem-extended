@@ -1,7 +1,7 @@
 # Structured Content Contract
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.
-> **Related:** [`conventions/guardrails/overview.md`](../guardrails/overview.md) for size-cap governance and the global response fuse.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants.
+> **Related:** [`docs/conventions/guardrails/overview.md`](../guardrails/overview.md) for size-cap governance and the global response fuse.
 
 ---
 

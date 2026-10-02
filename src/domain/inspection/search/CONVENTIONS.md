@@ -12,7 +12,7 @@ It explains:
 - why preview-first must remain available,
 - and why preview-first must not trigger too eagerly for moderate recursive code-search workloads.
 
-Shared cross-project rules remain owned by the workspace-level conventions index and the shared convention slices under [`conventions/`](../../../../conventions/).
+Shared cross-project rules remain owned by the workspace-level conventions index and the shared convention slices under [`docs/conventions/`](../../../../docs/conventions/).
 This file does not replace those broader rules.
 It specializes them for the inspection search family.
 
@@ -87,7 +87,7 @@ The search family uses a three-level documentation hierarchy.
 
 ### Level 1 — Workspace-wide architecture
 
-Owned by [`CONVENTIONS.md`](../../../../CONVENTIONS.md) and the shared convention leaves under [`conventions/`](../../../../conventions/).
+Owned by [`CONVENTIONS.md`](../../../../CONVENTIONS.md) and the shared convention leaves under [`docs/conventions/`](../../../../docs/conventions/).
 
 This level owns:
 - global guardrails,

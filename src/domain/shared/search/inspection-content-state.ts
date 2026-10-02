@@ -36,7 +36,7 @@ export type InspectionContentTextEncoding =
  * Canonical literal map for operation-capability routing.
  *
  * @remarks
- * See {@link ../../../../conventions/content-classification/operation-capability-matrix.md | Content Inspection Operation Capability Matrix}
+ * See {@link ../../../../docs/conventions/content-classification/operation-capability-matrix.md | Content Inspection Operation Capability Matrix}
  * for the architectural rules that govern these operation families.
  */
 export const INSPECTION_CONTENT_OPERATION_LITERALS = {
@@ -782,7 +782,7 @@ export function classifyInspectionContentState(
  * operation.
  *
  * @remarks
- * See {@link ../../../../conventions/content-classification/operation-capability-matrix.md | Content Inspection Operation Capability Matrix}
+ * See {@link ../../../../docs/conventions/content-classification/operation-capability-matrix.md | Content Inspection Operation Capability Matrix}
  * for the architectural contract that owns this decision surface.
  *
  * @param classification - Shared content-state classification that should be evaluated.

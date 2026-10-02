@@ -1010,7 +1010,7 @@ export function finalizeFindFilesByGlobTextOutput(
  * - In `complete-result` mode only the global response fuse (`GLOBAL_RESPONSE_HARD_CAP_CHARS`,
  *   600,000 chars) applies, because the caller has explicitly contracted for a complete result.
  *
- * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the mode-aware cap rule.
+ * @see {@link docs/conventions/resume-architecture/guardrail-interaction.md} for the mode-aware cap rule.
  *
  * @param searchPaths - Requested root directories in caller-supplied order.
  * @param pattern - Glob expression applied to relative paths beneath each root.

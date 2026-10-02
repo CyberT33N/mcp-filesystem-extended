@@ -1,9 +1,9 @@
 # Public Limit Disclosure Governance
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the root conventions index and core invariants.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the root conventions index and core invariants.
 > **Related:** See [`overview.md`](./overview.md) for the shared guardrail stack and limit inventory.
 > **Related:** See [`mcp-client-governance.md`](./mcp-client-governance.md) for the L1/L2 client-governance model and the direct-read family rationale.
-> **Related:** Endpoint-local disclosure decisions must be re-referenced from each endpoint-specific [`CONVENTIONS.md`](../../src/domain/inspection/read-file-content/CONVENTIONS.md) and reflected in each corresponding [`DESCRIPTION.md`](../../src/domain/inspection/read-file-content/DESCRIPTION.md).
+> **Related:** Endpoint-local disclosure decisions must be re-referenced from each endpoint-specific [`CONVENTIONS.md`](../../../src/domain/inspection/read-file-content/CONVENTIONS.md) and reflected in each corresponding [`DESCRIPTION.md`](../../../src/domain/inspection/read-file-content/DESCRIPTION.md).
 
 ---
 
@@ -65,7 +65,7 @@ Public disclosure decisions must differentiate between four architectural limit 
 
 These are schema-level limits that directly constrain a public request field or public batch container.
 
-Examples from [`tool-guardrail-limits.ts`](../../src/domain/shared/guardrails/tool-guardrail-limits.ts):
+Examples from [`tool-guardrail-limits.ts`](../../../src/domain/shared/guardrails/tool-guardrail-limits.ts):
 
 - `PATH_MAX_CHARS = 4,096`
 - `GLOB_PATTERN_MAX_CHARS = 1,024`
@@ -95,7 +95,7 @@ Examples from [`tool-guardrail-limits.ts`](../../src/domain/shared/guardrails/to
 
 These are stable output-family ceilings that shape the whole caller-visible result surface and therefore materially affect retry planning.
 
-Examples from [`tool-guardrail-limits.ts`](../../src/domain/shared/guardrails/tool-guardrail-limits.ts):
+Examples from [`tool-guardrail-limits.ts`](../../../src/domain/shared/guardrails/tool-guardrail-limits.ts):
 
 - `READ_FILES_RESPONSE_CAP_CHARS = 450,000`
 - `READ_FILE_CONTENT_RESPONSE_CAP_CHARS = 450,000`
@@ -140,7 +140,7 @@ Examples:
 - `TRAVERSAL_RUNTIME_MAX_VISITED_ENTRIES`
 - `TRAVERSAL_RUNTIME_MAX_VISITED_DIRECTORIES`
 - `TRAVERSAL_RUNTIME_SOFT_TIME_BUDGET_MS`
-- tier-specific runtime budgets in [`search-execution-policy.ts`](../../src/domain/shared/search/search-execution-policy.ts)
+- tier-specific runtime budgets in [`search-execution-policy.ts`](../../../src/domain/shared/search/search-execution-policy.ts)
 - bounded sampling-window constants used by content-state classification
 
 **Policy:** These limits remain documented in architecture and server-governance surfaces, but they are **not** routine per-tool contract material unless a narrower endpoint-local reason proves otherwise.
@@ -216,7 +216,7 @@ Each endpoint-local `DESCRIPTION.md` must then reflect the resulting caller-faci
 | Surface | Ownership |
 |---|---|
 | this document | global disclosure policy and placement rules |
-| root [`CONVENTIONS.md`](../../CONVENTIONS.md) | TOC and re-reference |
+| root [`CONVENTIONS.md`](../../../CONVENTIONS.md) | TOC and re-reference |
 | endpoint-local `CONVENTIONS.md` | endpoint-specific disclosure rationale |
 | endpoint-local `DESCRIPTION.md` | caller-facing endpoint contract text |
 
@@ -249,7 +249,7 @@ The caller should optimize around the read-family cap, not around the global fus
 
 ## 2. Dynamic traversal and runtime tier budgets
 
-Tier-specific and runtime-sensitive budgets from [`search-execution-policy.ts`](../../src/domain/shared/search/search-execution-policy.ts) must not be blindly promoted into public tool descriptions.
+Tier-specific and runtime-sensitive budgets from [`search-execution-policy.ts`](../../../src/domain/shared/search/search-execution-policy.ts) must not be blindly promoted into public tool descriptions.
 
 ### Why
 
@@ -301,8 +301,8 @@ The distinction is the probe **surface**, not the probe **origin**:
 
 ### Endpoints
 
-- [`read_file_content`](../../src/domain/inspection/read-file-content/CONVENTIONS.md)
-- [`read_files_with_line_numbers`](../../src/domain/inspection/read-files-with-line-numbers/CONVENTIONS.md)
+- [`read_file_content`](../../../src/domain/inspection/read-file-content/CONVENTIONS.md)
+- [`read_files_with_line_numbers`](../../../src/domain/inspection/read-files-with-line-numbers/CONVENTIONS.md)
 
 ### Policy
 
@@ -331,8 +331,8 @@ The read family is where hidden response ceilings cause the most retry churn, be
 
 ### Endpoints
 
-- [`search_file_contents_by_regex`](../../src/domain/inspection/search/search-file-contents-by-regex/CONVENTIONS.md)
-- [`search_file_contents_by_fixed_string`](../../src/domain/inspection/search/search-file-contents-by-fixed-string/CONVENTIONS.md)
+- [`search_file_contents_by_regex`](../../../src/domain/inspection/search/search-file-contents-by-regex/CONVENTIONS.md)
+- [`search_file_contents_by_fixed_string`](../../../src/domain/inspection/search/search-file-contents-by-fixed-string/CONVENTIONS.md)
 
 ### Policy
 
@@ -362,9 +362,9 @@ Do not publish tier-specific candidate-byte or execution-time internals as if th
 
 ### Endpoints
 
-- [`list_directory_entries`](../../src/domain/inspection/list-directory-entries/CONVENTIONS.md)
-- [`find_files_by_glob`](../../src/domain/inspection/find-files-by-glob/CONVENTIONS.md)
-- [`find_paths_by_name`](../../src/domain/inspection/find-paths-by-name/CONVENTIONS.md)
+- [`list_directory_entries`](../../../src/domain/inspection/list-directory-entries/CONVENTIONS.md)
+- [`find_files_by_glob`](../../../src/domain/inspection/find-files-by-glob/CONVENTIONS.md)
+- [`find_paths_by_name`](../../../src/domain/inspection/find-paths-by-name/CONVENTIONS.md)
 
 ### Policy
 
@@ -391,8 +391,8 @@ Numeric disclosure is acceptable when it materially helps caller planning, but i
 
 ### Endpoints
 
-- [`diff_files`](../../src/domain/comparison/diff-files/CONVENTIONS.md)
-- [`diff_text_content`](../../src/domain/comparison/diff-text-content/CONVENTIONS.md)
+- [`diff_files`](../../../src/domain/comparison/diff-files/CONVENTIONS.md)
+- [`diff_text_content`](../../../src/domain/comparison/diff-text-content/CONVENTIONS.md)
 
 ### Policy
 
@@ -422,7 +422,7 @@ Diff workflows fail both from oversized caller-supplied payloads and from oversi
 
 ### Endpoint
 
-- [`count_lines`](../../src/domain/inspection/count-lines/CONVENTIONS.md)
+- [`count_lines`](../../../src/domain/inspection/count-lines/CONVENTIONS.md)
 
 ### Policy
 
@@ -438,9 +438,9 @@ Numeric output-cap disclosure is acceptable, but the primary caller-value lies i
 
 ### Endpoints
 
-- [`get_path_metadata`](../../src/domain/inspection/get-path-metadata/CONVENTIONS.md)
-- [`get_file_checksums`](../../src/domain/inspection/get-file-checksums/CONVENTIONS.md)
-- [`verify_file_checksums`](../../src/domain/inspection/verify-file-checksums/CONVENTIONS.md)
+- [`get_path_metadata`](../../../src/domain/inspection/get-path-metadata/CONVENTIONS.md)
+- [`get_file_checksums`](../../../src/domain/inspection/get-file-checksums/CONVENTIONS.md)
+- [`verify_file_checksums`](../../../src/domain/inspection/verify-file-checksums/CONVENTIONS.md)
 
 ### Policy
 
@@ -454,13 +454,13 @@ Their caller-visible outputs are usually compact. The more important planning qu
 
 ### Endpoints
 
-- [`create_files`](../../src/domain/mutation/create-files/CONVENTIONS.md)
-- [`append_files`](../../src/domain/mutation/append-files/CONVENTIONS.md)
-- [`create_directories`](../../src/domain/mutation/create-directories/CONVENTIONS.md)
-- [`copy_paths`](../../src/domain/mutation/copy-paths/CONVENTIONS.md)
-- [`move_paths`](../../src/domain/mutation/move-paths/CONVENTIONS.md)
-- [`delete_paths`](../../src/domain/mutation/delete-paths/CONVENTIONS.md)
-- [`replace_file_line_ranges`](../../src/domain/mutation/replace-file-line-ranges/CONVENTIONS.md)
+- [`create_files`](../../../src/domain/mutation/create-files/CONVENTIONS.md)
+- [`append_files`](../../../src/domain/mutation/append-files/CONVENTIONS.md)
+- [`create_directories`](../../../src/domain/mutation/create-directories/CONVENTIONS.md)
+- [`copy_paths`](../../../src/domain/mutation/copy-paths/CONVENTIONS.md)
+- [`move_paths`](../../../src/domain/mutation/move-paths/CONVENTIONS.md)
+- [`delete_paths`](../../../src/domain/mutation/delete-paths/CONVENTIONS.md)
+- [`replace_file_line_ranges`](../../../src/domain/mutation/replace-file-line-ranges/CONVENTIONS.md)
 
 ### Policy
 
@@ -477,7 +477,7 @@ The formatted mutation-summary cap usually remains a lower-priority disclosure s
 
 ### Endpoint
 
-- [`list_allowed_directories`](../../src/application/server/list-allowed-directories/CONVENTIONS.md)
+- [`list_allowed_directories`](../../../src/application/server/list-allowed-directories/CONVENTIONS.md)
 
 ### Policy
 

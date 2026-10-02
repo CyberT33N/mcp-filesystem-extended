@@ -130,9 +130,9 @@ The current endpoint contract is derived from these concrete surfaces:
 - [`schema.ts`](./schema.ts)
 - [`register-comparison-and-mutation-tool-catalog.ts`](../../../application/server/register-comparison-and-mutation-tool-catalog.ts)
 - [`6.1-diff-files-doc-set.md`](../../../../.plan/6-comparison-docs/6.1-diff-files-doc-set.md)
-- [Guardrails Overview](../../../../conventions/guardrails/overview.md)
-- [MCP Client Governance](../../../../conventions/guardrails/mcp-client-governance.md)
-- [Structured Content Contract](../../../../conventions/mcp-response-contract/structured-content-contract.md)
+- [Guardrails Overview](../../../../docs/conventions/guardrails/overview.md)
+- [MCP Client Governance](../../../../docs/conventions/guardrails/mcp-client-governance.md)
+- [Structured Content Contract](../../../../docs/conventions/mcp-response-contract/structured-content-contract.md)
 
 The root TOC documents [`README.md`](../../../../README.md), [`DESCRIPTION.md`](../../../../DESCRIPTION.md), and [`CONVENTIONS.md`](../../../../CONVENTIONS.md) remain higher-level entry surfaces only.
 

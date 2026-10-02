@@ -1,8 +1,8 @@
 # Resume-Architecture Endpoint Schema Contract
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.  
-> **Overview:** [`conventions/resume-architecture/overview.md`](./overview.md) for the resume-session model, delivery modes, endpoint families, and scope reduction.  
-> **Related:** [`conventions/content-classification/schema-optionality-contract.md`](../content-classification/schema-optionality-contract.md) for the optionality and sentinel-check rules for query fields.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants.  
+> **Overview:** [`docs/conventions/resume-architecture/overview.md`](./overview.md) for the resume-session model, delivery modes, endpoint families, and scope reduction.  
+> **Related:** [`docs/conventions/content-classification/schema-optionality-contract.md`](../content-classification/schema-optionality-contract.md) for the optionality and sentinel-check rules for query fields.
 
 ---
 
@@ -24,7 +24,7 @@ MCP clients discover tool parameters exclusively through `inputSchema.properties
 
 This behavior is intrinsic to how the MCP SDK transforms Zod schemas into JSON Schema for the `tools/list` response. It is not a version-specific bug; it is a structural consequence of how `anyOf`/`oneOf` are modeled in JSON Schema versus flat `object` with `properties`.
 
-**Verified in:** [`node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.d.ts`](../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.d.ts) — `registerTool` accepts `inputSchema` as `ZodRawShapeCompat | AnySchema`, and the SDK normalizes object schemas before parameter extraction.
+**Verified in:** [`node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.d.ts`](../../../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.d.ts) — `registerTool` accepts `inputSchema` as `ZodRawShapeCompat | AnySchema`, and the SDK normalizes object schemas before parameter extraction.
 
 ### Why This Matters for Resume Endpoints
 
@@ -90,7 +90,7 @@ export const EndpointArgsSchema = z.object({
 
 ### What `superRefine` Enforces
 
-The shared `applyCommonResumeSchemaRefinement` helper (from [`src/domain/shared/resume/inspection-resume-contract.ts`](../../src/domain/shared/resume/inspection-resume-contract.ts)) enforces three cross-field invariants that are identical across all endpoint families:
+The shared `applyCommonResumeSchemaRefinement` helper (from [`src/domain/shared/resume/inspection-resume-contract.ts`](../../../src/domain/shared/resume/inspection-resume-contract.ts)) enforces three cross-field invariants that are identical across all endpoint families:
 
 | Invariant | Rule |
 |---|---|
@@ -107,7 +107,7 @@ Each endpoint schema adds its own endpoint-specific checks on top of these share
 
 ## Sentinel-Check Discipline for Optional String Query Fields
 
-This section summarizes the rule from [`conventions/content-classification/schema-optionality-contract.md`](../content-classification/schema-optionality-contract.md) as it applies specifically to resume endpoint query fields.
+This section summarizes the rule from [`docs/conventions/content-classification/schema-optionality-contract.md`](../content-classification/schema-optionality-contract.md) as it applies specifically to resume endpoint query fields.
 
 ### The Rule
 
@@ -174,7 +174,7 @@ if (!resumeRequest && args.queryField === "") {  // ← sentinel smell
 
 ## Shared Field-Builder Functions
 
-To prevent description drift across the six resume-capable endpoint schemas, the shared `resumeToken` and `resumeMode` field schemas are exported from [`src/domain/shared/resume/inspection-resume-contract.ts`](../../src/domain/shared/resume/inspection-resume-contract.ts) as reusable builder functions.
+To prevent description drift across the six resume-capable endpoint schemas, the shared `resumeToken` and `resumeMode` field schemas are exported from [`src/domain/shared/resume/inspection-resume-contract.ts`](../../../src/domain/shared/resume/inspection-resume-contract.ts) as reusable builder functions.
 
 ### `InspectionResumeTokenFieldSchema(familyLabel)`
 
@@ -207,11 +207,11 @@ These endpoints support both `resumeMode = 'next-chunk'` and `resumeMode = 'comp
 
 | Endpoint | Schema file | Query field governed by this contract |
 |---|---|---|
-| `list_directory_entries` | [`src/domain/inspection/list-directory-entries/schema.ts`](../../src/domain/inspection/list-directory-entries/schema.ts) | `roots` (array, `.default([])` is correct — empty array = absent) |
-| `find_paths_by_name` | [`src/domain/inspection/find-paths-by-name/schema.ts`](../../src/domain/inspection/find-paths-by-name/schema.ts) | `nameContains` (string, no default — `undefined` = absent) |
-| `find_files_by_glob` | [`src/domain/inspection/find-files-by-glob/schema.ts`](../../src/domain/inspection/find-files-by-glob/schema.ts) | `glob` (string, no default — `undefined` = absent) |
-| `search_file_contents_by_regex` | [`src/domain/inspection/search/search-file-contents-by-regex/schema.ts`](../../src/domain/inspection/search/search-file-contents-by-regex/schema.ts) | `regex` (string, no default — `undefined` = absent) |
-| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search/search-file-contents-by-fixed-string/schema.ts`](../../src/domain/inspection/search/search-file-contents-by-fixed-string/schema.ts) | `fixedString` (string, no default — `undefined` = absent) |
+| `list_directory_entries` | [`src/domain/inspection/list-directory-entries/schema.ts`](../../../src/domain/inspection/list-directory-entries/schema.ts) | `roots` (array, `.default([])` is correct — empty array = absent) |
+| `find_paths_by_name` | [`src/domain/inspection/find-paths-by-name/schema.ts`](../../../src/domain/inspection/find-paths-by-name/schema.ts) | `nameContains` (string, no default — `undefined` = absent) |
+| `find_files_by_glob` | [`src/domain/inspection/find-files-by-glob/schema.ts`](../../../src/domain/inspection/find-files-by-glob/schema.ts) | `glob` (string, no default — `undefined` = absent) |
+| `search_file_contents_by_regex` | [`src/domain/inspection/search/search-file-contents-by-regex/schema.ts`](../../../src/domain/inspection/search/search-file-contents-by-regex/schema.ts) | `regex` (string, no default — `undefined` = absent) |
+| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search/search-file-contents-by-fixed-string/schema.ts`](../../../src/domain/inspection/search/search-file-contents-by-fixed-string/schema.ts) | `fixedString` (string, no default — `undefined` = absent) |
 
 ### Completion-Backed-Only Family
 
@@ -219,9 +219,9 @@ This endpoint supports only `resumeMode = 'complete-result'`.
 
 | Endpoint | Schema file | Query field governed by this contract |
 |---|---|---|
-| `count_lines` | [`src/domain/inspection/count-lines/schema.ts`](../../src/domain/inspection/count-lines/schema.ts) | `regex` (string, no default — `undefined` = absent, activates pattern-aware lane) |
+| `count_lines` | [`src/domain/inspection/count-lines/schema.ts`](../../../src/domain/inspection/count-lines/schema.ts) | `regex` (string, no default — `undefined` = absent, activates pattern-aware lane) |
 
-**Note:** `count_lines.regex` was the first field migrated from `.default("")` to `.optional()` (without default). The fix and its rationale are documented in [`conventions/content-classification/schema-optionality-contract.md`](../content-classification/schema-optionality-contract.md). All other string query fields in this table must follow the same pattern.
+**Note:** `count_lines.regex` was the first field migrated from `.default("")` to `.optional()` (without default). The fix and its rationale are documented in [`docs/conventions/content-classification/schema-optionality-contract.md`](../content-classification/schema-optionality-contract.md). All other string query fields in this table must follow the same pattern.
 
 ---
 

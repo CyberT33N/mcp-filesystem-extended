@@ -10,7 +10,7 @@ This file is the endpoint-local single source of truth for `diff_files` conventi
 
 The workspace-level `CONVENTIONS.md` is a TOC surface. It should re-reference this local file instead of duplicating endpoint-specific detail.
 
-This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md).
+This endpoint also follows the global public-limit-disclosure policy in [`public-limit-disclosure-governance.md`](../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md).
 
 ---
 

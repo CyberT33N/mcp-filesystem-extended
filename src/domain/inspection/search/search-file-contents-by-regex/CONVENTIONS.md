@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `search_file_contents_by_regex`.
 
-Shared search-family rules now remain owned first by the family-level [`inspection/search` conventions](../CONVENTIONS.md), and then by the workspace-level conventions index plus the shared guardrail, content-classification, search-platform, and resume-architecture slices, especially [`public-limit-disclosure-governance.md`](../../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the regex content-search surface.
+Shared search-family rules now remain owned first by the family-level [`inspection/search` conventions](../CONVENTIONS.md), and then by the workspace-level conventions index plus the shared guardrail, content-classification, search-platform, and resume-architecture slices, especially [`public-limit-disclosure-governance.md`](../../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the regex content-search surface.
 
 ---
 

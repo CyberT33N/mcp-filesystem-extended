@@ -14,7 +14,7 @@ It is a documentation SSOT for variable purpose and ownership.
 
 ## Shared Search Execution Policy Variables
 
-Source: [`src/domain/shared/search/search-execution-policy.ts`](../../src/domain/shared/search/search-execution-policy.ts)
+Source: [`src/domain/shared/search/search-execution-policy.ts`](../../../src/domain/shared/search/search-execution-policy.ts)
 
 | Variable / field | Current role | Architectural ownership |
 |---|---|---|
@@ -40,7 +40,7 @@ Source: [`src/domain/shared/search/search-execution-policy.ts`](../../src/domain
 
 ## Shared Guardrail Variables
 
-Source: [`src/domain/shared/guardrails/tool-guardrail-limits.ts`](../../src/domain/shared/guardrails/tool-guardrail-limits.ts)
+Source: [`src/domain/shared/guardrails/tool-guardrail-limits.ts`](../../../src/domain/shared/guardrails/tool-guardrail-limits.ts)
 
 | Variable | Current role | Notes |
 |---|---|---|
@@ -61,7 +61,7 @@ Source: [`src/domain/shared/guardrails/tool-guardrail-limits.ts`](../../src/doma
 
 ## Resume and Structured Authority Variables
 
-Source: [`src/domain/shared/resume/inspection-resume-contract.ts`](../../src/domain/shared/resume/inspection-resume-contract.ts)
+Source: [`src/domain/shared/resume/inspection-resume-contract.ts`](../../../src/domain/shared/resume/inspection-resume-contract.ts)
 
 | Variable / field | Role |
 |---|---|

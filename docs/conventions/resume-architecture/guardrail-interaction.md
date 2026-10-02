@@ -1,8 +1,8 @@
 # Guardrail–Resume Interaction
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.  
-> **Guardrail layers:** [`conventions/guardrails/overview.md`](../guardrails/overview.md) for all guardrail definitions and limits.  
-> **Workflow flows:** [`conventions/resume-architecture/workflow.md`](./workflow.md) for step-by-step execution paths.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants.  
+> **Guardrail layers:** [`docs/conventions/guardrails/overview.md`](../guardrails/overview.md) for all guardrail definitions and limits.  
+> **Workflow flows:** [`docs/conventions/resume-architecture/workflow.md`](./workflow.md) for step-by-step execution paths.
 
 ---
 
@@ -50,10 +50,10 @@ All six resume-capable inspection endpoints whose handler calls `assertActualTex
 
 | Handler | File | Family cap constant | Cap applies in |
 |---|---|---|---|
-| `list_directory_entries` | [`src/domain/inspection/list-directory-entries/handler.ts`](../../src/domain/inspection/list-directory-entries/handler.ts) | `DISCOVERY_RESPONSE_CAP_CHARS` | inline, next-chunk only |
-| `find_files_by_glob` | [`src/domain/inspection/find-files-by-glob/handler.ts`](../../src/domain/inspection/find-files-by-glob/handler.ts) | `DISCOVERY_RESPONSE_CAP_CHARS` | inline, next-chunk only |
-| `find_paths_by_name` | [`src/domain/inspection/find-paths-by-name/handler.ts`](../../src/domain/inspection/find-paths-by-name/handler.ts) | `DISCOVERY_RESPONSE_CAP_CHARS` | inline, next-chunk only |
-| `count_lines` (final output) | [`src/domain/inspection/count-lines/handler.ts`](../../src/domain/inspection/count-lines/handler.ts) | `DISCOVERY_RESPONSE_CAP_CHARS` | inline final output only |
+| `list_directory_entries` | [`src/domain/inspection/list-directory-entries/handler.ts`](../../../src/domain/inspection/list-directory-entries/handler.ts) | `DISCOVERY_RESPONSE_CAP_CHARS` | inline, next-chunk only |
+| `find_files_by_glob` | [`src/domain/inspection/find-files-by-glob/handler.ts`](../../../src/domain/inspection/find-files-by-glob/handler.ts) | `DISCOVERY_RESPONSE_CAP_CHARS` | inline, next-chunk only |
+| `find_paths_by_name` | [`src/domain/inspection/find-paths-by-name/handler.ts`](../../../src/domain/inspection/find-paths-by-name/handler.ts) | `DISCOVERY_RESPONSE_CAP_CHARS` | inline, next-chunk only |
+| `count_lines` (final output) | [`src/domain/inspection/count-lines/handler.ts`](../../../src/domain/inspection/count-lines/handler.ts) | `DISCOVERY_RESPONSE_CAP_CHARS` | inline final output only |
 
 **Note on search endpoints:** `search_file_contents_by_regex` and `search_file_contents_by_fixed_string` delegate response-budget enforcement to `assertFormattedRegexResponseBudget` / `assertFormattedFixedStringResponseBudget` in their result modules. In `complete-result` mode, the text output for these families is a compact progress summary (not the full match payload), so the cap typically does not fire in practice. The rule still applies architecturally and should be addressed if the output format changes to include full match payloads in `complete-result` mode.
 

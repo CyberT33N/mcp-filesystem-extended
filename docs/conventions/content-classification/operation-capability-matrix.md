@@ -1,6 +1,6 @@
 # Content Inspection Operation Capability Matrix
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants.
 > **Overview:** See [`overview.md`](./overview.md) for the shared classification architecture and sampling model.
 > **Related:** See [`guardrails/overview.md`](../guardrails/overview.md) for the guardrail layers that consume inspection outcomes.
 
@@ -31,11 +31,11 @@ The following endpoint families inspect file content and therefore participate i
 
 | Endpoint | Current code surface |
 |---|---|
-| `read_file_content` | [`src/domain/inspection/read-file-content/handler.ts`](../../src/domain/inspection/read-file-content/handler.ts) |
-| `read_files_with_line_numbers` | [`src/domain/inspection/read-files-with-line-numbers/handler.ts`](../../src/domain/inspection/read-files-with-line-numbers/handler.ts) |
-| `search_file_contents_by_regex` | [`src/domain/inspection/search/search-file-contents-by-regex/handler.ts`](../../src/domain/inspection/search/search-file-contents-by-regex/handler.ts) |
-| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts`](../../src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts) |
-| `count_lines` | [`src/domain/inspection/count-lines/handler.ts`](../../src/domain/inspection/count-lines/handler.ts) |
+| `read_file_content` | [`src/domain/inspection/read-file-content/handler.ts`](../../../src/domain/inspection/read-file-content/handler.ts) |
+| `read_files_with_line_numbers` | [`src/domain/inspection/read-files-with-line-numbers/handler.ts`](../../../src/domain/inspection/read-files-with-line-numbers/handler.ts) |
+| `search_file_contents_by_regex` | [`src/domain/inspection/search/search-file-contents-by-regex/handler.ts`](../../../src/domain/inspection/search/search-file-contents-by-regex/handler.ts) |
+| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts`](../../../src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts) |
+| `count_lines` | [`src/domain/inspection/count-lines/handler.ts`](../../../src/domain/inspection/count-lines/handler.ts) |
 
 ### Path-Discovery Endpoints
 
@@ -43,7 +43,7 @@ The following endpoint families do **not** inspect file content and therefore do
 
 | Endpoint | Current code surface | Why excluded |
 |---|---|---|
-| `find_files_by_glob` | [`src/domain/inspection/find-files-by-glob/handler.ts`](../../src/domain/inspection/find-files-by-glob/handler.ts) | Matches path names only |
+| `find_files_by_glob` | [`src/domain/inspection/find-files-by-glob/handler.ts`](../../../src/domain/inspection/find-files-by-glob/handler.ts) | Matches path names only |
 | name-discovery and directory-listing families | discovery surfaces in `src/domain/inspection/*` | Enumerate paths or metadata only |
 
 Path-discovery endpoints still depend on traversal and response guardrails, but they do not consume content-state capability decisions.
@@ -104,7 +104,7 @@ When a file reaches the large-surface threshold, the classifier must inspect:
 - `middle`
 - `tail`
 
-using the shared window constants from [`tool-guardrail-limits.ts`](../../src/domain/shared/guardrails/tool-guardrail-limits.ts).
+using the shared window constants from [`tool-guardrail-limits.ts`](../../../src/domain/shared/guardrails/tool-guardrail-limits.ts).
 
 ### Architectural Invariant
 

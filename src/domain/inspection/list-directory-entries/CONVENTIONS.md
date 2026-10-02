@@ -4,7 +4,7 @@
 
 This document is the endpoint-local single source of truth for the non-obvious conventions, guardrails, and architectural boundaries of `list_directory_entries`.
 
-Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail and resume architecture documents, especially [`public-limit-disclosure-governance.md`](../../../../conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the structured directory-listing surface.
+Shared cross-family rules remain owned by the workspace-level conventions index and the shared guardrail and resume architecture documents, especially [`public-limit-disclosure-governance.md`](../../../../docs/conventions/guardrails/public-limit-disclosure-governance.md). This file does not duplicate those broader rules. It explains how they apply specifically to the structured directory-listing surface.
 
 ---
 

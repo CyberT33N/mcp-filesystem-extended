@@ -1,8 +1,8 @@
 # Content Classification Architecture Overview
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.  
-> **Related:** [`conventions/content-classification/schema-optionality-contract.md`](./schema-optionality-contract.md) for the schema-level optionality rule that prevents sentinel-default bugs.  
-> **Related:** [`conventions/guardrails/overview.md`](../guardrails/overview.md) for guardrail layers that consume classifier output.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants.  
+> **Related:** [`docs/conventions/content-classification/schema-optionality-contract.md`](./schema-optionality-contract.md) for the schema-level optionality rule that prevents sentinel-default bugs.  
+> **Related:** [`docs/conventions/guardrails/overview.md`](../guardrails/overview.md) for guardrail layers that consume classifier output.
 
 ---
 
@@ -24,7 +24,7 @@ The classifier is **not** the same thing as the endpoint policy. It produces a s
 
 ## Classification States
 
-The shared taxonomy belongs in the domain layer and is represented by the shared classifier surfaces in [`inspection-content-state.ts`](../../src/domain/shared/search/inspection-content-state.ts) and its follow-up policy surfaces.
+The shared taxonomy belongs in the domain layer and is represented by the shared classifier surfaces in [`inspection-content-state.ts`](../../../src/domain/shared/search/inspection-content-state.ts) and its follow-up policy surfaces.
 
 The target architecture uses the following states:
 
@@ -174,11 +174,11 @@ These endpoint families must all consume the same shared classification and capa
 
 | Endpoint | Current code surface |
 |---|---|
-| `read_file_content` | [`src/domain/inspection/read-file-content/handler.ts`](../../src/domain/inspection/read-file-content/handler.ts) |
-| `read_files_with_line_numbers` | [`src/domain/inspection/read-files-with-line-numbers/handler.ts`](../../src/domain/inspection/read-files-with-line-numbers/handler.ts) |
-| `search_file_contents_by_regex` | [`src/domain/inspection/search/search-file-contents-by-regex/handler.ts`](../../src/domain/inspection/search/search-file-contents-by-regex/handler.ts) |
-| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts`](../../src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts) |
-| `count_lines` | [`src/domain/inspection/count-lines/handler.ts`](../../src/domain/inspection/count-lines/handler.ts) |
+| `read_file_content` | [`src/domain/inspection/read-file-content/handler.ts`](../../../src/domain/inspection/read-file-content/handler.ts) |
+| `read_files_with_line_numbers` | [`src/domain/inspection/read-files-with-line-numbers/handler.ts`](../../../src/domain/inspection/read-files-with-line-numbers/handler.ts) |
+| `search_file_contents_by_regex` | [`src/domain/inspection/search/search-file-contents-by-regex/handler.ts`](../../../src/domain/inspection/search/search-file-contents-by-regex/handler.ts) |
+| `search_file_contents_by_fixed_string` | [`src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts`](../../../src/domain/inspection/search/search-file-contents-by-fixed-string/fixed-string-search-support.ts) |
+| `count_lines` | [`src/domain/inspection/count-lines/handler.ts`](../../../src/domain/inspection/count-lines/handler.ts) |
 
 ### Path-Discovery Endpoints
 
@@ -186,7 +186,7 @@ These endpoint families do not inspect file content and therefore stay outside t
 
 | Endpoint | Current code surface |
 |---|---|
-| `find_files_by_glob` | [`src/domain/inspection/find-files-by-glob/handler.ts`](../../src/domain/inspection/find-files-by-glob/handler.ts) |
+| `find_files_by_glob` | [`src/domain/inspection/find-files-by-glob/handler.ts`](../../../src/domain/inspection/find-files-by-glob/handler.ts) |
 
 Path-discovery endpoints still consume traversal guardrails, but not text/binary/hybrid classification.
 

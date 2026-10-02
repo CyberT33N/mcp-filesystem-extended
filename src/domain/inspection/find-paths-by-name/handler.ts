@@ -710,7 +710,7 @@ export function finalizeFindPathsByNameTextOutput(
  * - In `complete-result` mode only the global response fuse (`GLOBAL_RESPONSE_HARD_CAP_CHARS`,
  *   600,000 chars) applies, because the caller has explicitly contracted for a complete result.
  *
- * @see {@link conventions/resume-architecture/guardrail-interaction.md} for the mode-aware cap rule.
+ * @see {@link docs/conventions/resume-architecture/guardrail-interaction.md} for the mode-aware cap rule.
  *
  * @param resumeToken - Opaque server-owned session handle from a prior preview-first response. Absent on base requests.
  * @param resumeMode - Delivery intent for resume requests. `'next-chunk'` or `'complete-result'`.

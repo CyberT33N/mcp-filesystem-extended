@@ -468,7 +468,7 @@ export function formatSearchRegexContinuationAwareTextOutput(
 
   // Always emit the full match data first — content.text must be the complete primary information
   // carrier regardless of delivery mode. Text-only consumers must never depend on structuredContent
-  // to obtain result data. See conventions/mcp-response-contract/structured-content-contract.md.
+  // to obtain result data. See docs/conventions/mcp-response-contract/structured-content-contract.md.
   const emptyRootResult: SearchRegexPathResult = {
     root: "",
     matches: [],
@@ -566,7 +566,7 @@ export function assertFormattedRegexResponseBudget(
   // In complete-result mode the caller has explicitly contracted for a full server-owned completion
   // attempt via the resume-session protocol. Applying the family cap in this mode would block a
   // valid completion response. The global fuse at GLOBAL_RESPONSE_HARD_CAP_CHARS is the only
-  // correct ceiling for complete-result responses. See conventions/guardrails/overview.md Layer 5.
+  // correct ceiling for complete-result responses. See docs/conventions/guardrails/overview.md Layer 5.
   const isCompleteResultMode = requestedResumeMode === INSPECTION_RESUME_MODES.COMPLETE_RESULT;
   const effectiveCap = isCompleteResultMode
     ? GLOBAL_RESPONSE_HARD_CAP_CHARS

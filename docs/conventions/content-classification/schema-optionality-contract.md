@@ -1,9 +1,9 @@
 # Schema Optionality Contract for Pattern and Query Fields
 
-> **Context:** See [`CONVENTIONS.md`](../../CONVENTIONS.md) for the full conventions index and core invariants.
-> **Overview:** [`conventions/content-classification/overview.md`](./overview.md) for the full classifier architecture.
-> **Related:** [`conventions/guardrails/overview.md`](../guardrails/overview.md) for guardrail layers.
-> **Resume endpoint schemas:** [`conventions/resume-architecture/endpoint-schema-contract.md`](../resume-architecture/endpoint-schema-contract.md) for the full resume-endpoint flat-schema pattern, factory functions, and complete affected-endpoint list.
+> **Context:** See [`CONVENTIONS.md`](../../../CONVENTIONS.md) for the full conventions index and core invariants.
+> **Overview:** [`docs/conventions/content-classification/overview.md`](./overview.md) for the full classifier architecture.
+> **Related:** [`docs/conventions/guardrails/overview.md`](../guardrails/overview.md) for guardrail layers.
+> **Resume endpoint schemas:** [`docs/conventions/resume-architecture/endpoint-schema-contract.md`](../resume-architecture/endpoint-schema-contract.md) for the full resume-endpoint flat-schema pattern, factory functions, and complete affected-endpoint list.
 
 ---
 
@@ -29,7 +29,7 @@ The result is that the domain layer must implement sentinel-value checks (`if (p
 
 ### The Downstream Failure Mode
 
-The content-classification policy in [`resolveCountQueryPolicy()`](../../src/domain/shared/search/count-query-policy.ts) checks:
+The content-classification policy in [`resolveCountQueryPolicy()`](../../../src/domain/shared/search/count-query-policy.ts) checks:
 
 ```ts
 if (input.pattern === undefined) {
@@ -129,6 +129,6 @@ If the answer to (1) or (2) is yes, or (3) is yes: use `.optional()` without a d
 
 | Artifact | File |
 |---|---|
-| `CountLinesArgsSchema` | [`src/domain/inspection/count-lines/schema.ts`](../../src/domain/inspection/count-lines/schema.ts) |
-| `resolveCountQueryPolicy()` | [`src/domain/shared/search/count-query-policy.ts`](../../src/domain/shared/search/count-query-policy.ts) |
-| `classifyInspectionContentState()` | [`src/domain/shared/search/inspection-content-state.ts`](../../src/domain/shared/search/inspection-content-state.ts) |
+| `CountLinesArgsSchema` | [`src/domain/inspection/count-lines/schema.ts`](../../../src/domain/inspection/count-lines/schema.ts) |
+| `resolveCountQueryPolicy()` | [`src/domain/shared/search/count-query-policy.ts`](../../../src/domain/shared/search/count-query-policy.ts) |
+| `classifyInspectionContentState()` | [`src/domain/shared/search/inspection-content-state.ts`](../../../src/domain/shared/search/inspection-content-state.ts) |
