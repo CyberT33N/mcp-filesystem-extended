@@ -41,6 +41,7 @@ Shared ownership boundaries that remain true across the workspace:
 | Content classification | [`conventions/content-classification/overview.md`](docs/conventions/content-classification/overview.md) | Shared text/binary/hybrid eligibility and sampling contract |
 | Search platform | [`conventions/search-platform/overview.md`](docs/conventions/search-platform/overview.md) | Explicit-file versus recursive search lanes and search-family governance |
 | Read-surface split | [`CONVENTIONS.md`](CONVENTIONS.md) plus endpoint-local read descriptions | Public split between `read_files_with_line_numbers` and `read_file_content`, shared internal read-core SSOT |
+| Tool boundary governance | [`conventions/tool-boundary-governance/overview.md`](docs/conventions/tool-boundary-governance/overview.md) | Deliberate non-ownership of line-ending and formatting normalization; the byte-faithful mutation boundary |
 
 ---
 

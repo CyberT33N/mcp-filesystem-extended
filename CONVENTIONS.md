@@ -24,6 +24,7 @@ This document is the entry point for the architecture conventions of this projec
 | [Search Platform Endpoint Lane Matrix](docs/conventions/search-platform/endpoint-family-lane-matrix.md) | Complete affected endpoint matrix, lane capabilities, resume modes, refusal surfaces, and supported large-file behaviors |
 | [Search Platform Preflight and Hardgap Governance](docs/conventions/search-platform/preflight-and-hardgap-governance.md) | Correct preflight ownership, recursive admission lanes, explicit-file search entry rules, and hardgap boundaries |
 | [Search Platform Threshold and Variable Registry](docs/conventions/search-platform/threshold-and-variable-registry.md) | Canonical search-platform variables, family thresholds, hardgaps, sync caps, response caps, and their intended ownership |
+| [Tool Boundary Governance](docs/conventions/tool-boundary-governance/overview.md) | Deliberate server non-ownership of content normalization and formatting: no line-ending endpoints, byte-faithful mutation, and the declaration, toolchain, and CI responsibility split |
 | [Inspection Search Family Conventions](src/domain/inspection/search/CONVENTIONS.md) | Search-family topology, preview-threshold philosophy, regex versus fixed-string differentiation, and the too-eager-preview problem |
 
 ---
